@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import logoNormando from '../logo.png'
 
 const STATUS_MAP = {
   'previsto':     { cls: 'previsto',   label: 'Previsto' },
@@ -118,7 +119,13 @@ export default function PublicacoesPage() {
     <div className="home-page">
       <header className="home-header">
         <button className="btn-ghost" onClick={() => nav('/')}>← Catálogo</button>
-        <h1 className="home-logo">PUBLICAÇÕES</h1>
+        <div className="home-brand">
+          <img className="home-logo-img" src={logoNormando} alt="" />
+          <div className="home-brand-text">
+            <h1 className="home-logo">Normando</h1>
+            <span>Publicações</span>
+          </div>
+        </div>
         <button className="btn-primary" onClick={abrirModal}>+ Nova publicação</button>
       </header>
 

@@ -1,12 +1,67 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TIPOS_NORMA } from '../constants/normas.js'
+import logoNormando from '../logo.png'
 
 const STATUS_LABELS = {
   rascunho:   { label: 'Rascunho',   cor: '#f59e0b' },
   revisao:    { label: 'Em revisão', cor: '#3b82f6' },
   finalizado: { label: 'Finalizado', cor: '#10b981' },
 }
+
+const AJUDA_TOPICOS = [
+  {
+    titulo: 'Como atualizar uma norma',
+    itens: [
+      'Abra a norma no catálogo. O editor inicia em modo de leitura para evitar alterações acidentais.',
+      'Clique em Atualizar norma para abrir o painel de atualização.',
+      'No painel, escolha se a nova versão virá de arquivo externo ou de uma norma já cadastrada no catálogo.',
+      'Quando o texto novo estiver carregado, confira as opções de comparação antes de confirmar a substituição.',
+      'Use Ignorar alterações de nota quando quiser evitar que mudanças apenas em notas sejam computadas como alteração do parágrafo.',
+      'Depois da confirmação, salve a norma para gravar a versão atualizada no banco.',
+    ],
+    botoes: ['Atualizar norma', 'Arquivo', 'Do catálogo', 'Ignorar alterações de nota', 'Confirmar atualização', 'Salvar'],
+  },
+  {
+    titulo: 'Como organizar uma nova publicação',
+    itens: [
+      'Entre em Publicações, crie uma publicação e preencha os dados principais.',
+      'Crie seções, adicione normas existentes ou cadastre uma nova norma diretamente no painel de adição.',
+      'Ordene as normas por arrastar e soltar e defina, em Exportação, se cada norma será ignorada, atualização ou completa.',
+    ],
+  },
+  {
+    titulo: 'Função dos botões do editor de normas',
+    itens: [
+      'Buscar abre o painel de localização, substituição, regex, aplicação de estilo e buscas salvas.',
+      'O buscador de artigo leva direto ao dispositivo informado, por exemplo Art. 15 ou 15.',
+      'Padronização abre verificações de palavras compostas, siglas, acentuação e itálicos, com navegação pelas ocorrências.',
+      'Exibir caracteres ocultos alterna marcas visuais de espaços, quebras e outros caracteres de controle.',
+      'Indicador de estilo mostra, ao lado da página, o estilo aplicado a cada parágrafo.',
+      'Ver notas abre o navegador de notas legislativas; + Nota de rodapé insere uma nota na posição do cursor.',
+      'Exportar gera saídas da norma atual; Salvar grava as alterações no banco.',
+      'Zoom aumenta ou reduz a página apenas na visualização do editor.',
+    ],
+    botoes: ['Buscar', 'Artigo', 'Padronização', 'Exibir caracteres ocultos', 'Indicador de estilo', 'Ver notas', '+ Nota de rodapé', 'Exportar', 'Salvar', 'Zoom'],
+  },
+  {
+    titulo: 'Como exportar uma norma',
+    itens: [
+      'Abra a norma no editor e use Exportar.',
+      'Escolha o formato desejado, como XML, Word ou HTML, conforme o fluxo de diagramação ou revisão.',
+      'Também é possível exportar apenas a seleção ativa quando houver texto selecionado no editor.',
+    ],
+  },
+  {
+    titulo: 'Como exportar uma publicação completa',
+    itens: [
+      'Abra a publicação, confira seções, ordem das normas e o campo Exportação de cada item.',
+      'Clique em Exportar e escolha Word ou InDesign.',
+      'Para InDesign, o sistema cria pastas por seção e exporta XML completo, XML de atualização ou arquivos vazios marcados como PULAR.',
+      'Para Word, as normas finalizadas são exportadas completas; itens marcados como Ignorar não entram na saída.',
+    ],
+  },
+]
 
 function normalizarBusca(valor) {
   return String(valor || '')
@@ -36,6 +91,7 @@ export default function Home() {
   const [somenteVm, setSomenteVm] = useState(false)
   const [visao,   setVisao]   = useState('cards')
   const [loading, setLoading] = useState(true)
+  const [ajudaAberta, setAjudaAberta] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -76,8 +132,14 @@ export default function Home() {
   return (
     <div className="home-page">
       <header className="home-header">
-        <h1 className="home-logo">LEGISLATOR</h1>
+        <div className="home-brand">
+          <img className="home-logo-img" src={logoNormando} alt="" />
+          <h1 className="home-logo">Normando</h1>
+        </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn-ghost" onClick={() => setAjudaAberta(true)}>
+            Ajuda
+          </button>
           <button className="btn-ghost" onClick={() => nav('/configuracoes')} title="Preferências do aplicativo">
             Configurações
           </button>
@@ -240,6 +302,32 @@ export default function Home() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {ajudaAberta && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setAjudaAberta(false) }}>
+          <div className="modal-box ajuda-modal" onMouseDown={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Ajuda do Normando</h3>
+              <button className="btn-ghost modal-fechar" onClick={() => setAjudaAberta(false)}>×</button>
+            </div>
+            <div className="ajuda-conteudo">
+              {AJUDA_TOPICOS.map(topico => (
+                <section key={topico.titulo} className="ajuda-topico">
+                  <h4>{topico.titulo}</h4>
+                  {topico.botoes && (
+                    <div className="ajuda-botoes" aria-label={`Botões relacionados a ${topico.titulo}`}>
+                      {topico.botoes.map(botao => <span key={botao} className="ajuda-botao">{botao}</span>)}
+                    </div>
+                  )}
+                  <ul>
+                    {topico.itens.map(item => <li key={item}>{item}</li>)}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>
