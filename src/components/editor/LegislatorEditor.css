@@ -1,0 +1,584 @@
+.legislator-editor {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  background: #e8e6e1;
+  box-shadow: 5px 5px 5px #d9d9d9;
+  position: relative;
+}
+
+.legislator-editor.style-indicators-active .legislator-editor-inner {
+  margin-left: max(150px, calc((100% - 820px) / 2));
+}
+
+.style-indicators-layer {
+  position: absolute;
+  inset: 0;
+  min-height: 100%;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.style-indicators-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.style-indicators-lines line {
+  stroke: #252810;
+  stroke-width: 0.5;
+  stroke-dasharray: 4 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.style-indicator-label {
+  position: absolute;
+  transform: translateY(-50%);
+  width: 104px;
+  padding: 2px 6px;
+  border: 1px solid rgb(113 126 74 / 35%);
+  border-radius: 4px;
+  background: rgb(249 249 249 / 92%);
+  color: #858467;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: right;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.legislator-editor-inner {
+  position: relative;
+  z-index: 1;
+  width: min(820px, 100%);
+  max-width: 820px;
+  min-height: 100%;
+  margin: 0 auto;
+  outline: none;
+  padding: 60px 80px;
+  background: #fbfaef;
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 12pt;
+  line-height: 1.35;
+  color: #111;
+  zoom: var(--editor-zoom, 1);
+}
+
+/* ── Seleção de parágrafo focado ─────────────────────────── */
+.legislator-editor-inner p:focus-within {
+  background: #fafae0;
+  border-radius: 2px;
+}
+
+/* ── Seleção de texto: mantém destaque azul mesmo sem foco ── */
+/* (necessário para o painel Localizar/Substituir, que tira o  */
+/*  foco do editor quando o usuário interage com os campos)    */
+.legislator-editor-readonly .legislator-editor-inner {
+  cursor: default;
+}
+
+.legislator-editor-inner [data-alterado="modificado"] {
+  background: rgba(167, 200, 55, 0.18);
+  box-shadow: inset 3px 0 0 rgba(117, 145, 35, 0.7);
+}
+
+.legislator-editor-inner [data-alterado="modificado"][data-diff-type="modified"] {
+  background: rgba(249, 115, 22, 0.18);
+  box-shadow: inset 3px 0 0 rgba(217, 119, 6, 0.78);
+}
+
+.legislator-editor-inner [data-alterado="modificado"][data-diff-type="added"] {
+  background: rgba(34, 197, 94, 0.18);
+  box-shadow: inset 3px 0 0 rgba(22, 163, 74, 0.78);
+}
+
+.legislator-editor-inner [data-alterado="remocaoApos"] {
+  background: rgba(201, 195, 127, 0.22);
+  box-shadow: inset 3px 0 0 rgba(151, 139, 54, 0.7);
+}
+
+.legislator-editor-inner::selection,
+.legislator-editor-inner *::selection {
+  background: rgba(59, 130, 246, 0.35);
+}
+.legislator-editor-inner:not(:focus-within) *::selection {
+  background: rgba(59, 130, 246, 0.25);
+}
+
+/* ══════════════════════════════════════════════════════════ */
+/* NÍVEL 1 — Epígrafe                                        */
+/* ══════════════════════════════════════════════════════════ */
+.leg-epigrafe {
+  font-size: 18pt;
+  font-weight: bold;
+  color: #444;
+  text-align: center;
+  text-transform: uppercase;
+  margin: 18pt 0 4pt;
+}
+
+.leg-epigrafe-apelido {
+  font-size: 14pt;
+  font-style: normal;
+  font-weight: normal;
+  text-align: center;
+  margin: 0 0 4pt;
+  color:#666;
+}
+
+.leg-nota-titulo {
+  font-size: 11pt;
+  color: #1d6fd1;
+  text-align: center;
+  margin: 0 0 8pt;
+}
+
+.leg-ementa {
+  font-size: 11pt;
+  font-style: italic;
+  text-align: justify;
+  margin: 16pt 8pt 16pt 200pt;
+}
+
+.leg-paragrafo-abertura {
+  text-align: justify;
+  margin: 8pt 0 0;
+  text-indent: 0;
+}
+
+.leg-paragrafo-faco-saber {
+  text-align: justify;
+  margin: 8pt 0 0;
+  text-indent: 0;
+}
+
+.leg-abertura-capitulo {
+  font-size: 20pt;
+  /* font-style: italic; */
+  text-align: center;
+  margin: 30pt 0 8pt;
+  text-indent: 0;
+}
+
+/* ══════════════════════════════════════════════════════════ */
+/* NÍVEL 2 — Parte / Livro / Título / Capítulo               */
+/* ══════════════════════════════════════════════════════════ */
+.leg-parte-livro-tit-cap {
+  font-size: 12pt;
+  font-weight: normal;
+  text-align: center;
+  text-transform: uppercase;
+  margin: 14pt 0 4pt;
+  letter-spacing: 0.03em;
+}
+.leg-parte-livro-tit-cap strong,
+.leg-parte-livro-tit-cap b,
+.leg-parte-livro-tit-cap em,
+.leg-parte-livro-tit-cap i {
+  font-weight: normal;
+  font-style: normal;
+}
+
+/* ══════════════════════════════════════════════════════════ */
+/* NÍVEL 3 — Seção / Subseção                                */
+/* ══════════════════════════════════════════════════════════ */
+.leg-secao-subsecao {
+  font-size: 11.5pt;
+  font-weight: normal;
+  font-style: normal;
+  text-align: center;
+  margin: 8pt 0 4pt;
+  font-weight:600;
+}
+.leg-secao-subsecao strong,
+.leg-secao-subsecao b,
+.leg-secao-subsecao em,
+.leg-secao-subsecao i {
+  font-weight: normal;
+  font-style: normal;
+}
+
+/* ══════════════════════════════════════════════════════════ */
+/* Articulação                                               */
+/* ══════════════════════════════════════════════════════════ */
+.leg-artigo {
+  text-align: justify;
+  text-indent: 0;
+  margin: 6pt 0 0;
+}
+
+.leg-artigo-titulo {
+  font-weight: bold;
+  text-align: center;
+  margin: 10pt 0 0;
+}
+
+.leg-corpo-tratado {
+  text-align: justify;
+  text-indent: 0;
+  margin: 4pt 0 0;
+}
+
+.leg-paragrafo-lei {
+  text-align: justify;
+  text-indent: 1.5cm;
+  margin: 3pt 0 0;
+}
+
+.leg-nome-juridico {
+    text-align: left;
+    font-style: normal;
+    margin: 8pt 0 2pt;
+    font-weight: 550;
+    color: #777;
+}
+
+.leg-inciso {
+  text-align: justify;
+  margin: 2pt 0 0 1.5cm;
+}
+
+.leg-alinea {
+  text-align: justify;
+  margin: 2pt 0 0 3cm;
+}
+
+.leg-item {
+  text-align: justify;
+  margin: 2pt 0 0 4.5cm;
+}
+
+.leg-citacao {
+  text-align: justify;
+  margin: 4pt 1.5cm;
+  font-size: 10pt;
+}
+
+/* ══════════════════════════════════════════════════════════ */
+/* Assinatura                                                */
+/* ══════════════════════════════════════════════════════════ */
+.leg-data,
+.leg-assinatura-data {
+  text-align: center;
+  font-style: normal;
+  margin: 14pt 0 0;
+}
+
+.leg-assinatura,
+.leg-assinatura-nome {
+  text-align: center;
+  font-style: normal;
+  margin: 2pt 0 0;
+}
+
+/* ══════════════════════════════════════════════════════════ */
+/* Marks                                                     */
+/* ══════════════════════════════════════════════════════════ */
+.leg-nota {
+  font-size: 0.9em;
+  color: #1d6fd1;
+}
+
+.leg-nota-sobrescrito {
+  font-size: 0.72em;
+  color: #1d6fd1;
+  line-height: 0;
+  vertical-align: super;
+}
+
+.leg-nota-rodape {
+  position: relative;
+  display: inline-block;
+  width: auto;
+  max-width: none;
+  min-width: 0;
+  overflow: visible;
+  color: inherit;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: 0 !important;
+  line-height: 0;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  vertical-align: super;
+  text-indent: 0 !important;
+  margin: 0;
+  padding: 0 !important;
+}
+
+.leg-nota-rodape-content {
+  position: absolute !important;
+  left: 0;
+  top: 0;
+  width: 0 !important;
+  max-width: 0 !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  color: transparent !important;
+  background: transparent !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.leg-nota-rodape-marker {
+  display: inline-block;
+  padding: 0 2px;
+  border-radius: 3px;
+  background: rgba(201, 195, 127, 0.22);
+  color: #5f5a22;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: baseline;
+  pointer-events: none;
+}
+
+.leg-nota-rodape:hover .leg-nota-rodape-marker {
+  background: rgba(201, 195, 127, 0.36);
+  color: #433f12;
+}
+
+.leg-paragrafo-lei .leg-nota-rodape,
+.leg-paragrafo-lei .leg-nota-rodape-marker,
+.leg-paragrafo-lei .leg-nota-rodape-content {
+  text-indent: 0 !important;
+}
+
+.leg-nota-rodape-conector {
+  display: inline-block;
+  color: #5f5a22;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: super;
+ }
+
+.leg-italico-light {
+  font-style: italic;
+  color: #555;
+}
+
+.leg-bold-artigo {
+  font-weight: 700;
+}
+
+.leg-regular,
+.leg-regular * {
+  font-style: normal !important;
+}
+
+.nota-rodape-view-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(20, 20, 16, 0.28);
+}
+
+.nota-rodape-view-modal {
+  width: min(520px, 92vw);
+  max-height: min(70vh, 560px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #fffef8;
+  border: 1px solid #ded8a8;
+  box-shadow: 0 18px 60px rgba(20, 20, 16, 0.25);
+}
+
+.nota-rodape-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid #ebe6bf;
+  background: #fbf7df;
+}
+
+.nota-rodape-view-header h3 {
+  margin: 0;
+  color: #433f12;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.nota-rodape-view-fechar {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.nota-rodape-view-texto {
+  overflow: auto;
+  padding: 16px;
+  color: #1f1f1b;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.nota-rodape-view-textarea {
+  min-height: 180px;
+  max-height: 50vh;
+  resize: vertical;
+  margin: 14px;
+  padding: 12px;
+  border: 1px solid #d8d5ce;
+  border-radius: 6px;
+  outline: none;
+  color: #1f1f1b;
+  background: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.nota-rodape-view-textarea:focus {
+  border-color: #a7c837;
+  box-shadow: 0 0 0 3px rgba(167, 200, 55, 0.18);
+}
+
+.nota-rodape-view-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid #ebe6bf;
+  background: #fffef8;
+}
+
+/* ══════════════════════════════════════════════════════════ */
+/* Estado vazio                                              */
+/* ══════════════════════════════════════════════════════════ */
+.legislator-editor-inner p.is-editor-empty:first-child::before {
+  content: 'Cole o conteúdo aqui ou use o botão Processar texto…';
+  color: #aaa;
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+
+/* ══════════════════════════════════════════════════════════ */
+/* Tabelas                                                   */
+/* ══════════════════════════════════════════════════════════ */
+.legislator-editor-inner table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8pt 0 12pt;
+  font-size: 10pt;
+}
+
+.legislator-editor-inner th,
+.legislator-editor-inner td {
+  border: 1px solid #888;
+  padding: 3pt 6pt;
+  vertical-align: top;
+  text-align: left;
+}
+
+.legislator-editor-inner th {
+  background: #f0f0ea;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* Parágrafo dentro de célula — sem indentação extra */
+.legislator-editor-inner td p,
+.legislator-editor-inner th p {
+  margin: 0;
+  text-indent: 0 !important;
+}
+
+/* Célula selecionada */
+.legislator-editor-inner .selectedCell {
+  background: #dbeafe;
+}
+
+/* Grip de seleção de coluna */
+.legislator-editor-inner .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0; bottom: 0;
+  width: 4px;
+  background: #93c5fd;
+  pointer-events: none;
+}
+
+/* ══════════════════════════════════════════════════════════ */
+/* Caracteres ocultos                                        */
+/* ══════════════════════════════════════════════════════════ */
+
+/* Símbolo ¶ no final de cada parágrafo de lei */
+.show-hidden-chars p[data-tipo]::after {
+  content: '¶';
+  color: #f97316;
+  opacity: 0.55;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 0.85em;
+  margin-left: 3px;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Espaço normal · (ponto médio via background SVG) */
+.show-hidden-chars .hc-space {
+  background-image: radial-gradient(circle, #f97316 1.5px, transparent 1.5px);
+  background-repeat: no-repeat;
+  background-position: center 55%;
+  background-size: 100% 100%;
+}
+
+/* Espaço não-separável: exibe "^" via ::before sem position:relative */
+.show-hidden-chars .hc-nbsp::before {
+  content: '^';
+  color: #f97316;
+  font-size: 0.65em;
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  vertical-align: 0.05em;
+  margin-right: -0.55em;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Tabulação → */
+.show-hidden-chars .hc-tab::before {
+  content: '→';
+  color: #f97316;
+  opacity: 0.6;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Quebra de linha ↵ (widget inserido antes do <br>) */
+.show-hidden-chars .hc-break::before {
+  content: '↵';
+  color: #f97316;
+  opacity: 0.6;
+  font-style: normal;
+  pointer-events: none;
+  user-select: none;
+}

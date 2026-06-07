@@ -1,0 +1,46 @@
+{
+  "name": "legislator",
+  "version": "1.0.0",
+  "description": "Preparação de textos legislativos para Adobe InDesign",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "package": "npm run build && electron-builder",
+    "server": "node server/index.js",
+    "server:setup": "npm run build && node server/index.js"
+  },
+  "dependencies": {
+    "@tiptap/extension-link": "^2.27.2",
+    "@tiptap/extension-subscript": "^2.27.2",
+    "@tiptap/extension-superscript": "^2.27.2",
+    "@tiptap/extension-table": "^2.27.2",
+    "@tiptap/extension-table-cell": "^2.27.2",
+    "@tiptap/extension-table-header": "^2.27.2",
+    "@tiptap/extension-table-row": "^2.27.2",
+    "dictionary-pt": "^4.0.0",
+    "docx": "^8.5.0",
+    "express": "^4.18.0",
+    "mammoth": "^1.12.0",
+    "nspell": "^2.1.5",
+    "sql.js": "^1.12.0"
+  },
+  "devDependencies": {
+    "@electron-toolkit/utils": "^3.0.0",
+    "@tiptap/core": "^2.3.0",
+    "@tiptap/extension-placeholder": "^2.3.0",
+    "@tiptap/react": "^2.3.0",
+    "@tiptap/starter-kit": "^2.3.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "adm-zip": "^0.5.17",
+    "diff": "^5.2.0",
+    "electron": "^29.1.0",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.3",
+    "vite": "^5.1.5"
+  }
+}
