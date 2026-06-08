@@ -202,6 +202,7 @@ function removeAspasCaputInNota(content) {
 
 // Palavras que devem receber itálico quando já estão dentro de nota.
 const RE_KW_NOTA_ITALIC = /DOU|Caput/g
+const RE_ASPAS_NOTA_ITALIC = /["“”«»‘’]([^"“”«»‘’]{1,120})["“”«»‘’]/g
 const RE_ADIN_NOTA = /\bADIN\b/g
 const RE_NOS_SOBRESCRITO = /\bn[\u00ba\u00b0]s\b/g
 
@@ -258,10 +259,59 @@ function normalizarNosSobrescrito(content) {
   return { content: count ? result : content, count }
 }
 
+function semItalicEmNotaMarks(marks) {
+  if (!hasMark(marks, 'nota')) return marks ?? []
+  return (marks ?? []).filter(mark => mark.type !== 'italic')
+}
+
+function normalizarItalicoEmNota(content) {
+  if (!content?.length) return content
+  let changed = false
+  const novoContent = content.map(node => {
+    if (node.type !== 'text' || !hasMark(node.marks, 'nota')) return node
+    const marks = semItalicEmNotaMarks(node.marks)
+    if (marks.length === (node.marks ?? []).length) return node
+    changed = true
+    return marks.length ? { ...node, marks } : { type: 'text', text: node.text }
+  })
+  return changed ? novoContent : content
+}
+
+function addItalicMatchesInNotaNode(node, regex) {
+  const marks = node.marks ?? []
+  if (!hasMark(marks, 'nota')) return { nodes: [node], changed: false }
+
+  regex.lastIndex = 0
+  const result = []
+  let lastIndex = 0
+  let match
+  let changed = false
+
+  while ((match = regex.exec(node.text)) !== null) {
+    const inicio = match.index + (match[1] !== undefined ? match[0].indexOf(match[1]) : 0)
+    const fim = inicio + (match[1] !== undefined ? match[1].length : match[0].length)
+    if (fim <= inicio) continue
+
+    changed = true
+    if (inicio > lastIndex) {
+      result.push({ ...node, text: node.text.slice(lastIndex, inicio), marks })
+    }
+    result.push({ ...node, text: node.text.slice(inicio, fim), marks: addMark(marks, 'italic') })
+    lastIndex = fim
+  }
+
+  if (!changed) return { nodes: [node], changed: false }
+  if (lastIndex < node.text.length) {
+    result.push({ ...node, text: node.text.slice(lastIndex), marks })
+  }
+
+  return { nodes: result, changed: true }
+}
+
 /**
  * Percorre os nós inline de uma linha e, nos nós que já têm a marca
- * `nota` (sem itálico), localiza as palavras-chave e adiciona `italic`
- * apenas nesses trechos, dividindo o nó conforme necessário.
+ * `nota`, remove itálico herdado do Word e aplica `italic` apenas em
+ * palavras-chave e termos entre aspas.
  */
 function addItalicToKeywordsInNota(content) {
   if (!content?.length) return content
@@ -271,35 +321,21 @@ function addItalicToKeywordsInNota(content) {
   for (const node of content) {
     if (node.type !== 'text') { result.push(node); continue }
 
-    const marks    = node.marks ?? []
-    const hasNota  = marks.some(m => m.type === 'nota')
-    const hasItali = marks.some(m => m.type === 'italic')
-
-    // Só processa nós com nota e sem itálico
-    if (!hasNota || hasItali) { result.push(node); continue }
-
-    const marksComItalic = [...marks, { type: 'italic' }]
-    RE_KW_NOTA_ITALIC.lastIndex = 0
-    let lastIndex = 0
-    let match
-    let found = false
-
-    while ((match = RE_KW_NOTA_ITALIC.exec(node.text)) !== null) {
-      found = true
-      changed = true
-      if (match.index > lastIndex) {
-        result.push({ ...node, text: node.text.slice(lastIndex, match.index) })
-      }
-      result.push({ ...node, text: match[0], marks: marksComItalic })
-      lastIndex = RE_KW_NOTA_ITALIC.lastIndex
+    if (!hasMark(node.marks, 'nota')) {
+      result.push(node)
+      continue
     }
 
-    if (!found) {
-      result.push(node)
-    } else {
-      if (lastIndex < node.text.length) {
-        result.push({ ...node, text: node.text.slice(lastIndex) })
-      }
+    const aspas = addItalicMatchesInNotaNode(node, RE_ASPAS_NOTA_ITALIC)
+    const partes = []
+    for (const parte of aspas.nodes) {
+      const keywords = addItalicMatchesInNotaNode(parte, RE_KW_NOTA_ITALIC)
+      partes.push(...keywords.nodes)
+      if (keywords.changed) changed = true
+    }
+    result.push(...partes)
+    if (aspas.changed || !sameInlineContent(partes, [node])) {
+      changed = true
     }
   }
 
@@ -435,12 +471,14 @@ export function aplicarMarcas(linhas, { estiloVadeMecum = false, somenteEstiloVa
       const ecNormalizada = substituirTextoEmNota(adinNormalizado.content, RE_EMENDA_CONSTITUCIONAL_NOTA, 'EC')
       countAdinNota += adinNormalizado.count
       countEcNota += ecNormalizada.count
-      const semAspas   = removeAspasCaputInNota(ecNormalizada.content)
+      const semItalicoNota = normalizarItalicoEmNota(ecNormalizada.content)
+      const semAspas   = removeAspasCaputInNota(semItalicoNota)
       const novoContent = addItalicToKeywordsInNota(semAspas)
       if (
         !sameInlineContent(novoContent, baseContent) ||
         adinNormalizado.content !== contentComNota ||
-        ecNormalizada.content !== adinNormalizado.content
+        ecNormalizada.content !== adinNormalizado.content ||
+        semItalicoNota !== ecNormalizada.content
       ) {
         result = { ...result, content: novoContent }
         if (novoContent !== semAspas) countNotaItalic++
@@ -477,7 +515,7 @@ export function aplicarMarcas(linhas, { estiloVadeMecum = false, somenteEstiloVa
   if (countNotaItalic) {
     log.push(
       `${countNotaItalic} linha${countNotaItalic !== 1 ? 's' : ''} com ` +
-      `"DOU"/"Caput" marcado${countNotaItalic !== 1 ? 's' : ''} como nota itálico`
+      `"DOU"/"Caput"/termos entre aspas marcado${countNotaItalic !== 1 ? 's' : ''} como nota itálico`
     )
   }
 
