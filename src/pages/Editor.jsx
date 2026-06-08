@@ -14,6 +14,7 @@ import { xmlParaTiptap }     from '../services/importarXml.js'
 import { analisarClassesHtmlInDesign, htmlInDesignParaTiptap } from '../services/importarHtmlInDesign.js'
 import { estiloAtivoNoTipo, estilosParagrafoConfigurados } from '../services/preferenciasEstilo.js'
 import { limparHtmlInternet } from '../services/limpeza/00_parseHtml.js'
+import { detectarExcecoes } from '../services/limpeza/06_detectarExcecoes.js'
 import { TIPOS_NORMA }      from '../constants/normas.js'
 
 const DOC_VAZIO = '{"type":"doc","content":[]}'
@@ -68,6 +69,18 @@ function deveIgnorarItalico(texto) {
   if (/^[A-Za-zÀ-ÿ]\)$/.test(normalizado)) return true
   const palavras = normalizado.match(/[A-Za-zÀ-ÿ]{2,}(?:-[A-Za-zÀ-ÿ]{2,})*/g) || []
   return palavras.length > 0 && palavras.every(palavra => ignorados.includes(palavra))
+}
+
+function normalizarNumeroArtigoBusca(valor) {
+  const texto = String(valor || '')
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/^arts?\.?/i, '')
+    .replace(/^artigos?/i, '')
+    .replace(/[ºª°]/g, '')
+    .toUpperCase()
+  const match = texto.match(/^((?:\d{1,3}(?:\.\d{3})+|\d+)(?:-[A-Z])?)$/)
+  return match ? match[1].replace(/\./g, '') : ''
 }
 
 function coletarOcorrenciasItalico(editor) {
@@ -167,6 +180,56 @@ const EXPORTABLE_BLOCK_TYPES = new Set([
   'paragraph',
   'table',
 ])
+
+const NODE_TO_STYLE_EXCECOES = {
+  epigrafe: 'epigrafe',
+  epigrafeApelido: 'epigrafe-apelido',
+  notaTitulo: 'nota-titulo',
+  ementa: 'ementa',
+  paragrafAbertura: 'paragrafo-abertura',
+  paragrafFacoSaber: 'texto-lei-faco-saber',
+  aberturaCapitulo: 'abertura-capitulo',
+  partelivroTitCap: 'parte-livro-tit-cap',
+  secaoSubsecao: 'secao-subsecao',
+  artigo: 'artigo',
+  artigoTitulo: 'artigo-titulo',
+  corpoTratado: 'corpo-tratado',
+  paragrafLei: 'paragrafo',
+  nomeJuridico: 'nome-juridico',
+  inciso: 'inciso',
+  alinea: 'alinea',
+  item: 'item',
+  citacao: 'citacao',
+  data: 'data',
+  assinatura: 'assinatura',
+  assinaturaData: 'data',
+  assinaturaNome: 'assinatura',
+}
+
+function textoInlineExcecoes(content) {
+  return (content ?? []).map(node => {
+    if (node.type === 'text') return node.text ?? ''
+    if (node.type === 'hardBreak') return ' '
+    return ''
+  }).join('')
+}
+
+function tiptapDocParaLinhasExcecoes(doc) {
+  return (doc?.content ?? [])
+    .filter(node => node.type !== 'table')
+    .map(node => {
+      const text = textoInlineExcecoes(node.content)
+      let style = NODE_TO_STYLE_EXCECOES[node.type] ?? 'texto-lei'
+      if (node.type === 'paragrafLei' && !/^§|^Parágrafo único/i.test(text)) {
+        style = 'texto-lei'
+      }
+      return {
+        style,
+        text,
+        content: node.content ? node.content.map(item => ({ ...item })) : [],
+      }
+    })
+}
 
 // ── Diff de palavras para exibição inline no painel ───────────────
 // Retorna array de { type: 'equal'|'added'|'removed', text: string }
@@ -523,6 +586,7 @@ export default function Editor() {
   const [modoEdicaoManual, setModoEdicaoManual] = useState(false)
   const [buscaAberta,      setBuscaAberta]      = useState(false)
   const [notasAberto,      setNotasAberto]      = useState(false)
+  const [excecoesAberto,   setExcecoesAberto]   = useState(false)
   const [modalPadronizacao, setModalPadronizacao] = useState(false)
   const [abaPadronizacao, setAbaPadronizacao] = useState('palavras')
   const [gruposPadronizacaoAbertos, setGruposPadronizacaoAbertos] = useState({})
@@ -550,6 +614,7 @@ export default function Editor() {
     ementa: '',
     dados_publicacao: '',
     data_ultima_alteracao: '',
+    atualizacao_pendente: false,
     vigencia: 'Vigente',
     link_acesso: '',
     anexo: '',
@@ -712,10 +777,9 @@ export default function Editor() {
   // ── Ir para artigo ────────────────────────────────────────────
   function irParaArtigo() {
     if (!editor || !irArtigoInput.trim()) return
-    // Aceita "5", "5º", "10-A", "10º-A" — usa só a parte numérica + sufixo letra
-    const norm = irArtigoInput.trim().replace(/[ºª°]/g, '').toUpperCase()
-    const numRe = /^(\d+)(-[A-Z])?$/
-    if (!numRe.test(norm)) { setIrArtigoErro(true); return }
+    // Aceita "5", "10-A", "1001", "1.001" e variações com símbolo ordinal.
+    const norm = normalizarNumeroArtigoBusca(irArtigoInput)
+    if (!norm) { setIrArtigoErro(true); return }
 
     let found = false
     editor.state.doc.forEach((node, offset) => {
@@ -724,12 +788,13 @@ export default function Editor() {
       if (tipo !== 'artigo' && tipo !== 'artigoTitulo') return
 
       const texto = node.textContent || ''
-      // Casa tanto "Art. 5º" quanto "Artigo 5" (artigoTitulo)
-      const m = texto.match(/^Arts?\.\s*(\d+[ºª°]?(?:-[A-Za-z])?)/)
-             || texto.match(/^Artigos?\s+(\d+[ºª°]?(?:-[A-Za-z])?)/i)
+      // Casa tanto "Art. 5º" quanto "Art. 1.001" e "Artigo 5" (artigoTitulo).
+      const numeroArtigoRe = /((?:\d{1,3}(?:\.\d{3})+|\d+)[ºª°]?(?:-[A-Za-z])?)/
+      const m = texto.match(new RegExp('^Arts?\\.\\s*' + numeroArtigoRe.source))
+             || texto.match(new RegExp('^Artigos?\\s+' + numeroArtigoRe.source, 'i'))
       if (!m) return
 
-      const artigoNorm = m[1].replace(/[ºª°]/g, '').toUpperCase()
+      const artigoNorm = normalizarNumeroArtigoBusca(m[1])
       if (artigoNorm !== norm) return
 
       found = true
@@ -759,6 +824,27 @@ export default function Editor() {
       texto: '',
     })
     setModalNotaRodape(true)
+  }
+
+  function receberExcecoesDetectadas(lista = []) {
+    const normalizadas = Array.isArray(lista) ? lista : []
+    setExcecoes(normalizadas)
+    const temPendentes = normalizadas.some(exc => !exc.resolvida)
+    setExcecoesAberto(temPendentes)
+    if (temPendentes) setNotasAberto(false)
+    return temPendentes
+  }
+
+  function rodarExcecoesDoTopo() {
+    if (!editor) return
+    const resultado = detectarExcecoes(tiptapDocParaLinhasExcecoes(editor.getJSON()))
+    const temPendentes = receberExcecoesDetectadas(resultado.excecoes)
+    if (!temPendentes) alert('Nenhuma exceção encontrada.')
+  }
+
+  function limparExcecoesDetectadas() {
+    setExcecoes([])
+    setExcecoesAberto(false)
   }
 
   function inserirNotaRodape(e) {
@@ -863,7 +949,7 @@ export default function Editor() {
     editor?.commands.setContent(doc, false)
     setInputHtml('')
     setNomeArq(nomeArquivo)
-    setExcecoes([])
+    limparExcecoesDetectadas()
     setFase('editar')
     setAbaEsq('sumario')
     setModificado(true)
@@ -918,7 +1004,7 @@ export default function Editor() {
         editor?.commands.setContent(doc, false)
         setInputHtml('')
         setNomeArq(file.name)
-        setExcecoes([])
+        limparExcecoesDetectadas()
         setFase('editar')
         setAbaEsq('rotinas')
         setModificado(true)
@@ -940,7 +1026,7 @@ export default function Editor() {
         const { value: html } = await mammoth.convertToHtml({ arrayBuffer })
         setInputHtml(html)
         setNomeArq(file.name)
-        setExcecoes([])
+        limparExcecoesDetectadas()
         setFase('editar')
         setAbaEsq('rotinas')
         setAutoExecutarRotinas(valor => valor + 1)
@@ -984,7 +1070,7 @@ export default function Editor() {
 
     setInputHtml(limpo)
     setNomeArq('Texto colado da internet')
-    setExcecoes([])
+    limparExcecoesDetectadas()
     setFase('editar')
     setAbaEsq('rotinas')
     setModalColarTexto(false)
@@ -1022,6 +1108,7 @@ export default function Editor() {
       ementa:   norma.ementa   ?? '',
       dados_publicacao: norma.dados_publicacao ?? '',
       data_ultima_alteracao: norma.data_ultima_alteracao ?? '',
+      atualizacao_pendente: Boolean(norma.atualizacao_pendente),
       vigencia: norma.vigencia ?? 'Vigente',
       link_acesso: norma.link_acesso ?? '',
       anexo: norma.anexo ?? '',
@@ -1064,6 +1151,12 @@ export default function Editor() {
     return sufixo ? `${base}-${sufixo}` : base
   }
 
+  function exportacaoBloqueadaPorAtualizacaoPendente() {
+    if (!norma?.atualizacao_pendente) return false
+    alert('Esta norma está com Atualização pendente. A exportação fica bloqueada até essa marcação ser removida nos dados da norma.')
+    return true
+  }
+
   function docJsonDaSelecao() {
     if (!editor) return null
     const { state } = editor
@@ -1096,62 +1189,75 @@ export default function Editor() {
   }
 
   async function handleExportar(formato) {
-    if (formato === 'xml-completo') {
-      if (!editor) return
-      baixarXml(editor.getJSON(), { tipo: norma.tipo, epigrafe: norma.epigrafe }, nomeBaseNorma(), {
-        modo: 'completo',
-        incluirAlterado: false,
-      })
-      return
-    }
-    if (formato === 'xml-legacy') {
-      if (!editor) return
-      const doc = aplicarFlagsNoJSON(editor.getJSON(), nodesAlteradosRef.current)
-      baixarXml(doc, { tipo: norma.tipo, epigrafe: norma.epigrafe }, nomeBaseNorma('legacy'), {
-        modo: 'legacy',
-        incluirAlterado: true,
-      })
-      return
-    }
-    if (formato === 'xml-atualizacao') {
-      if (!editor) return
-      const doc = aplicarFlagsNoJSON(editor.getJSON(), nodesAlteradosRef.current)
-      if (!contarNosAlterados(doc, nodesAlteradosRef.current)) {
-        alert('Nao ha paragrafos marcados como alterados para exportar a atualizacao.')
+    try {
+      if (exportacaoBloqueadaPorAtualizacaoPendente()) return
+
+      if (formato === 'xml-completo') {
+        if (!editor) return
+        baixarXml(editor.getJSON(), { tipo: norma.tipo, epigrafe: norma.epigrafe }, nomeBaseNorma(), {
+          modo: 'completo',
+          incluirAlterado: false,
+        })
         return
       }
-      baixarXml(doc, { tipo: norma.tipo, epigrafe: norma.epigrafe }, nomeBaseNorma('atualizacao'), {
-        modo: 'atualizacao',
-        alteracoes: nodesAlteradosRef.current,
-        diffs,
-      })
-      return
+      if (formato === 'xml-legacy') {
+        if (!editor) return
+        const doc = aplicarFlagsNoJSON(editor.getJSON(), nodesAlteradosRef.current)
+        baixarXml(doc, { tipo: norma.tipo, epigrafe: norma.epigrafe }, nomeBaseNorma('legacy'), {
+          modo: 'legacy',
+          incluirAlterado: true,
+        })
+        return
+      }
+      if (formato === 'xml-atualizacao') {
+        if (!editor) return
+        const doc = aplicarFlagsNoJSON(editor.getJSON(), nodesAlteradosRef.current)
+        if (!contarNosAlterados(doc, nodesAlteradosRef.current)) {
+          alert('Nao ha paragrafos marcados como alterados para exportar a atualizacao.')
+          return
+        }
+        baixarXml(doc, { tipo: norma.tipo, epigrafe: norma.epigrafe }, nomeBaseNorma('atualizacao'), {
+          modo: 'atualizacao',
+          alteracoes: nodesAlteradosRef.current,
+          diffs,
+        })
+        return
+      }
+      await handleSalvar()
+      if (formato === 'docx') await window.legislator.exportar.docx(parseInt(id))
+      if (formato === 'html') await window.legislator.exportar.html(parseInt(id))
+    } catch (err) {
+      alert(err?.message || 'Não foi possível exportar a norma.')
     }
-    await handleSalvar()
-    if (formato === 'docx') await window.legislator.exportar.docx(parseInt(id))
-    if (formato === 'html') await window.legislator.exportar.html(parseInt(id))
   }
 
   async function handleExportarSelecao(formato) {
-    const doc = docJsonDaSelecao()
-    if (!doc) {
-      alert('Selecione um trecho da norma antes de exportar a seleção.')
-      return
-    }
+    try {
+      if (exportacaoBloqueadaPorAtualizacaoPendente()) return
 
-    const nomeBase = nomeBaseNorma('selecao')
-    const payload = {
-      epigrafe: norma.epigrafe,
-      nomeBase,
-      conteudo_doc: JSON.stringify(doc),
-    }
+      const doc = docJsonDaSelecao()
+      if (!doc) {
+        alert('Selecione um trecho da norma antes de exportar a seleção.')
+        return
+      }
 
-    if (formato === 'xml') {
-      baixarXml(doc, { tipo: norma.tipo, epigrafe: norma.epigrafe }, nomeBase)
-      return
+      const nomeBase = nomeBaseNorma('selecao')
+      const payload = {
+        norma_id: parseInt(id),
+        epigrafe: norma.epigrafe,
+        nomeBase,
+        conteudo_doc: JSON.stringify(doc),
+      }
+
+      if (formato === 'xml') {
+        baixarXml(doc, { tipo: norma.tipo, epigrafe: norma.epigrafe }, nomeBase)
+        return
+      }
+      if (formato === 'docx') await window.legislator.exportar.docxSelecao(payload)
+      if (formato === 'html') await window.legislator.exportar.htmlSelecao(payload)
+    } catch (err) {
+      alert(err?.message || 'Não foi possível exportar a seleção.')
     }
-    if (formato === 'docx') await window.legislator.exportar.docxSelecao(payload)
-    if (formato === 'html') await window.legislator.exportar.htmlSelecao(payload)
   }
 
   // ── Revisão: iniciar ──────────────────────────────────────────
@@ -1560,7 +1666,7 @@ export default function Editor() {
               >¶→</button>
               <button
                 className={`btn-ghost btn-notas${notasAberto ? ' ativa' : ''}`}
-                onClick={() => setNotasAberto(v => !v)}
+                onClick={() => { setNotasAberto(v => !v); setExcecoesAberto(false) }}
                 title="Navegador de notas"
               >Ver notas</button>
               <button
@@ -1569,6 +1675,11 @@ export default function Editor() {
                 disabled={!modoEdicaoManual}
                 title="Inserir nota de rodape"
               >+ Nota de rodapé</button>
+              <button
+                className={`btn-ghost btn-excecoes${excecoesAberto ? ' ativa' : ''}`}
+                onClick={rodarExcecoesDoTopo}
+                title="Executar rotina de exceções e navegar pelos resultados"
+              >Exceções</button>
             </>}
             {emRevisao && (
               <span className="revisao-modo-label">🔍 Modo revisão</span>
@@ -1873,7 +1984,7 @@ export default function Editor() {
                     tipoNorma={norma?.tipo}
                     tags={norma?.tags ?? []}
                     autoExecutarKey={autoExecutarRotinas}
-                    onExcecoes={setExcecoes}
+                    onExcecoes={receberExcecoesDetectadas}
                     onModificado={() => setModificado(true)}
                   />
                 </div>
@@ -1900,6 +2011,18 @@ export default function Editor() {
                 onFechar={() => setNotasAberto(false)}
               />
             )}
+            {!emRevisao && (
+              <PainelExcecoes
+                excecoes={excecoes}
+                editor={editor}
+                aberto={excecoesAberto}
+                onFechar={() => setExcecoesAberto(false)}
+                onResolver={idx =>
+                  setExcecoes(prev => prev.map((e, i) =>
+                    i === idx ? { ...e, resolvida: true } : e))
+                }
+              />
+            )}
             <LegislatorEditor
               docJson={docJson}
               onEditorReady={setEditor}
@@ -1917,14 +2040,6 @@ export default function Editor() {
           {!emRevisao && (
             <div className="editor-direita">
               <PainelEstilos editor={editor} editable={modoEdicaoManual} tipoNorma={norma?.tipo} />
-              <PainelExcecoes
-                excecoes={excecoes}
-                editor={editor}
-                onResolver={idx =>
-                  setExcecoes(prev => prev.map((e, i) =>
-                    i === idx ? { ...e, resolvida: true } : e))
-                }
-              />
             </div>
           )}
 
@@ -2221,6 +2336,17 @@ export default function Editor() {
                       value={editForm.data_ultima_alteracao}
                       onChange={e => setEditForm(f => ({ ...f, data_ultima_alteracao: e.target.value }))}
                     />
+                  </div>
+                  <div className="campo campo-check">
+                    <label className={`home-check pendente-check${editForm.atualizacao_pendente ? ' ativo' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(editForm.atualizacao_pendente)}
+                        onChange={e => setEditForm(f => ({ ...f, atualizacao_pendente: e.target.checked }))}
+                      />
+                      {editForm.atualizacao_pendente && <span className="pendente-check-alerta" aria-hidden="true">⚠️</span>}
+                      <span>Atualização pendente</span>
+                    </label>
                   </div>
                   <div className="campo">
                     <label>Vigência</label>

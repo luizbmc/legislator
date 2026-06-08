@@ -13,7 +13,7 @@ function buscarPublicacaoCompleta(id) {
   for (const secao of secoes) {
     secao.normas = db.prepare(`
       SELECT pn.id AS pn_id, pn.norma_id, pn.ordem,
-             n.tipo, n.epigrafe, n.apelido
+             n.tipo, n.epigrafe, n.apelido, n.atualizacao_pendente
       FROM publicacao_normas pn
       JOIN normas n ON n.id = pn.norma_id
       WHERE pn.secao_id = ?
@@ -38,11 +38,38 @@ function safeDownloadName(text, fallback) {
   return encodeURIComponent(String(text || fallback || 'selecao').replace(/[/\\?%*:|"<>]/g, '-'))
 }
 
+function normaExportavel(norma, res) {
+  if (!norma?.atualizacao_pendente) return true
+  res.status(409).json({
+    error: `Exportação bloqueada: a norma "${norma.epigrafe || 'sem epígrafe'}" está com Atualização pendente.`,
+  })
+  return false
+}
+
+function publicacaoExportavel(pub, res) {
+  const pendentes = (pub?.secoes || [])
+    .flatMap(secao => secao.normas || [])
+    .filter(norma => Boolean(norma?.atualizacao_pendente))
+  if (!pendentes.length) return true
+  res.status(409).json({
+    error: `Exportação bloqueada: a publicação contém norma(s) com Atualização pendente: ${pendentes.map(n => n.epigrafe || 'Norma sem epígrafe').join('; ')}`,
+  })
+  return false
+}
+
+function payloadExportavel(payload = {}, res) {
+  const normaId = payload.norma_id || payload.id
+  if (!normaId) return true
+  const norma = db.prepare(`SELECT id, epigrafe, atualizacao_pendente FROM normas WHERE id = ?`).get(normaId)
+  return norma ? normaExportavel(norma, res) : true
+}
+
 // GET /norma/docx/:id
 router.get('/norma/docx/:id', async (req, res) => {
   try {
     const norma = db.prepare(`SELECT * FROM normas WHERE id = ?`).get(req.params.id)
     if (!norma) return res.status(404).json({ error: 'Norma não encontrada' })
+    if (!normaExportavel(norma, res)) return
 
     const { gerarDocx } = await import('../../electron/main/services/exportDocx.js')
     const buffer = await gerarDocx(norma)
@@ -61,6 +88,7 @@ router.get('/norma/html/:id', async (req, res) => {
   try {
     const norma = db.prepare(`SELECT * FROM normas WHERE id = ?`).get(req.params.id)
     if (!norma) return res.status(404).json({ error: 'Norma não encontrada' })
+    if (!normaExportavel(norma, res)) return
 
     const { gerarHtml } = await import('../../electron/main/services/exportHtml.js')
     const html = await gerarHtml(norma)
@@ -77,6 +105,7 @@ router.get('/norma/html/:id', async (req, res) => {
 // POST /norma/docx-selecao
 router.post('/norma/docx-selecao', async (req, res) => {
   try {
+    if (!payloadExportavel(req.body, res)) return
     const norma = selectionNormaPayload(req.body)
     const { gerarDocx } = await import('../../electron/main/services/exportDocx.js')
     const buffer = await gerarDocx(norma)
@@ -93,6 +122,7 @@ router.post('/norma/docx-selecao', async (req, res) => {
 // POST /norma/html-selecao
 router.post('/norma/html-selecao', async (req, res) => {
   try {
+    if (!payloadExportavel(req.body, res)) return
     const norma = selectionNormaPayload(req.body)
     const { gerarHtml } = await import('../../electron/main/services/exportHtml.js')
     const html = await gerarHtml(norma)
@@ -111,6 +141,7 @@ router.get('/publicacao/docx/:id', async (req, res) => {
   try {
     const pub = buscarPublicacaoCompleta(req.params.id)
     if (!pub) return res.status(404).json({ error: 'Publicação não encontrada' })
+    if (!publicacaoExportavel(pub, res)) return
 
     const { gerarDocxPublicacao } = await import('../../electron/main/services/exportDocx.js')
     const buffer = await gerarDocxPublicacao(pub, db)
@@ -129,6 +160,7 @@ router.get('/publicacao/html/:id', async (req, res) => {
   try {
     const pub = buscarPublicacaoCompleta(req.params.id)
     if (!pub) return res.status(404).json({ error: 'Publicação não encontrada' })
+    if (!publicacaoExportavel(pub, res)) return
 
     const { gerarHtmlPublicacao } = await import('../../electron/main/services/exportHtml.js')
     const html = await gerarHtmlPublicacao(pub, db)

@@ -21,7 +21,10 @@ if (!window.legislator) {
 
   async function download(path) {
     const res = await fetch(BASE + path)
-    if (!res.ok) throw new Error(`Erro ao exportar: ${res.statusText}`)
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }))
+      throw new Error(err.error || `Erro ao exportar: ${res.statusText}`)
+    }
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     const disposition = res.headers.get('Content-Disposition') || ''
@@ -42,7 +45,10 @@ if (!window.legislator) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-    if (!res.ok) throw new Error(`Erro ao exportar: ${res.statusText}`)
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }))
+      throw new Error(err.error || `Erro ao exportar: ${res.statusText}`)
+    }
     const blob = await res.blob()
     const url = URL.createObjectURL(blob)
     const disposition = res.headers.get('Content-Disposition') || ''

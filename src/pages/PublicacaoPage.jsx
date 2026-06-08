@@ -45,7 +45,7 @@ function statusNormaInfo(status) {
 }
 
 function exportacaoBloqueada(norma) {
-  return norma?.status !== 'finalizado'
+  return norma?.status !== 'finalizado' || Boolean(norma?.atualizacao_pendente)
 }
 
 function exportacaoEfetiva(norma) {
@@ -63,6 +63,20 @@ function normalizarTag(valor) {
 
 function normaTemTagVm(norma) {
   return (norma.tags || []).some(tag => normalizarTag(tag) === 'vm')
+}
+
+function AvisoAtualizacaoPendente({ norma }) {
+  if (!norma?.atualizacao_pendente) return null
+  return <span className="norma-pendente-icone" title="Atualização pendente">⚠️</span>
+}
+
+function primeiraNormaComAtualizacaoPendente(secoes = []) {
+  for (const secao of secoes) {
+    for (const norma of secao.normas || []) {
+      if (norma?.atualizacao_pendente) return norma
+    }
+  }
+  return null
 }
 
 export default function PublicacaoPage() {
@@ -306,7 +320,7 @@ export default function PublicacaoPage() {
   function adicionarNorma(norma) {
     setSecoes(s => s.map((sec, i) =>
       i === modalSecaoIdx
-        ? { ...sec, normas: [...sec.normas, { pn_id: Date.now(), norma_id: norma.id, tipo: norma.tipo, epigrafe: norma.epigrafe, apelido: norma.apelido, status: norma.status, exportacao: exportacaoEfetiva(norma) }] }
+        ? { ...sec, normas: [...sec.normas, { pn_id: Date.now(), norma_id: norma.id, tipo: norma.tipo, epigrafe: norma.epigrafe, apelido: norma.apelido, status: norma.status, atualizacao_pendente: norma.atualizacao_pendente, exportacao: exportacaoEfetiva(norma) }] }
         : sec
     ))
     marcarModificado()
@@ -345,21 +359,32 @@ export default function PublicacaoPage() {
   }
 
   async function exportar(tipo) {
-    if (modificado) {
-      if (!confirm('Há alterações não salvas. Salvar antes de exportar?')) return
-      await salvar()
-    }
-    if (tipo === 'word') {
-      const result = await window.legislator.publicacoes.exportarWord(parseInt(id))
-      if (result?.ok && result.gerados === 0) {
-        alert('Nenhuma norma foi exportada. Todas as normas estão configuradas como Ignorar.')
+    try {
+      if (modificado) {
+        if (!confirm('Há alterações não salvas. Salvar antes de exportar?')) return
+        await salvar()
       }
-    }
-    if (tipo === 'indesign') {
-      const result = await window.legislator.publicacoes.exportarInDesign(parseInt(id))
-      if (result?.semExportacao) {
-        alert('Todas as normas estão configuradas como Ignorar. Nada foi exportado.')
+
+      const pendente = primeiraNormaComAtualizacaoPendente(secoes)
+      if (pendente) {
+        alert(`A publicação contém norma com Atualização pendente:\n${pendente.epigrafe}\n\nRemova essa marcação nos dados da norma antes de exportar a publicação.`)
+        return
       }
+
+      if (tipo === 'word') {
+        const result = await window.legislator.publicacoes.exportarWord(parseInt(id))
+        if (result?.ok && result.gerados === 0) {
+          alert('Nenhuma norma foi exportada. Todas as normas estão configuradas como Ignorar.')
+        }
+      }
+      if (tipo === 'indesign') {
+        const result = await window.legislator.publicacoes.exportarInDesign(parseInt(id))
+        if (result?.semExportacao) {
+          alert('Todas as normas estão configuradas como Ignorar. Nada foi exportado.')
+        }
+      }
+    } catch (err) {
+      alert(err?.message || 'Não foi possível exportar a publicação.')
     }
   }
 
@@ -576,7 +601,7 @@ export default function PublicacaoPage() {
                       >
                         <span className="pub-norma-tipo">{n.tipo}</span>
                         <span className={`pub-norma-status pub-norma-status-${st.cls}`}>{st.label}</span>
-                        <span className="pub-norma-epigrafe">{n.epigrafe}</span>
+                        <span className="pub-norma-epigrafe"><AvisoAtualizacaoPendente norma={n} />{n.epigrafe}</span>
                         {n.apelido && <span className="pub-norma-apelido">{n.apelido}</span>}
                       </div>
                       <div className="pub-norma-exportacao">
@@ -584,7 +609,7 @@ export default function PublicacaoPage() {
                           value={exportacao}
                           disabled={bloqueada}
                           onChange={e => alterarExportacaoNorma(si, ni, e.target.value)}
-                          title={bloqueada ? 'Disponível apenas para normas finalizadas' : 'Configurar exportação'}
+                          title={n.atualizacao_pendente ? 'Bloqueada por Atualização pendente' : bloqueada ? 'Disponível apenas para normas finalizadas' : 'Configurar exportação'}
                         >
                           {EXPORTACAO_OPCOES.map(op => (
                             <option key={op.valor} value={op.valor}>{op.label}</option>
@@ -668,7 +693,7 @@ export default function PublicacaoPage() {
                         >
                           <span className="pub-norma-tipo">{n.tipo}</span>
                           <span className={`pub-norma-status pub-norma-status-${st.cls}`}>{st.label}</span>
-                          <span className="pub-norma-epigrafe">{n.epigrafe}</span>
+                          <span className="pub-norma-epigrafe"><AvisoAtualizacaoPendente norma={n} />{n.epigrafe}</span>
                           {n.apelido && <span className="pub-norma-apelido">{n.apelido}</span>}
                         </button>
                       )

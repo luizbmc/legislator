@@ -57,6 +57,11 @@ function normaTemTagVm(norma) {
   return (norma.tags || []).some(tag => normalizarTag(tag) === 'vm')
 }
 
+function AvisoAtualizacaoPendente({ norma }) {
+  if (!norma?.atualizacao_pendente) return null
+  return <span className="norma-pendente-icone" title="Atualização pendente">⚠️</span>
+}
+
 export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags = [], onIniciarRevisao, onFechar, onEditarManual }) {
   const [fonte,       setFonte]       = useState('docx')      // 'docx' | 'catalogo'
   const [passo,       setPasso]       = useState('upload')
@@ -404,7 +409,7 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
                   disabled={processando}
                 >
                   <span className="modal-cat-tipo">{n.tipo}</span>
-                  <span className="modal-cat-epigrafe">{n.epigrafe}</span>
+                  <span className="modal-cat-epigrafe"><AvisoAtualizacaoPendente norma={n} />{n.epigrafe}</span>
                   {n.apelido && <span className="modal-cat-apelido">{n.apelido}</span>}
                   {n.ementa  && <span className="modal-cat-ementa">{n.ementa}</span>}
                 </button>

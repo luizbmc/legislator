@@ -16,11 +16,25 @@ function selectionNormaPayload(payload = {}) {
   }
 }
 
+function assertNormaExportavel(norma) {
+  if (norma?.atualizacao_pendente) {
+    throw new Error(`Exportação bloqueada: a norma "${norma.epigrafe || 'sem epígrafe'}" está com Atualização pendente.`)
+  }
+}
+
+function assertPayloadExportavel(db, payload = {}) {
+  const normaId = payload.norma_id || payload.id
+  if (!normaId) return
+  const norma = db.prepare('SELECT id, epigrafe, atualizacao_pendente FROM normas WHERE id = ?').get(normaId)
+  if (norma) assertNormaExportavel(norma)
+}
+
 export function registerExportarHandlers() {
   ipcMain.handle('exportar:docx', async (event, id) => {
     const db = getDb()
     const norma = db.prepare('SELECT * FROM normas WHERE id = ?').get(id)
     if (!norma) throw new Error('Norma não encontrada')
+    assertNormaExportavel(norma)
 
     const { filePath } = await dialog.showSaveDialog({
       title: 'Exportar DOCX',
@@ -40,6 +54,7 @@ export function registerExportarHandlers() {
     const db = getDb()
     const norma = db.prepare('SELECT * FROM normas WHERE id = ?').get(id)
     if (!norma) throw new Error('Norma não encontrada')
+    assertNormaExportavel(norma)
 
     const { filePath } = await dialog.showSaveDialog({
       title: 'Exportar HTML',
@@ -55,6 +70,7 @@ export function registerExportarHandlers() {
   })
 
   ipcMain.handle('exportar:docx-selecao', async (event, payload) => {
+    assertPayloadExportavel(getDb(), payload)
     const norma = selectionNormaPayload(payload)
 
     const { filePath } = await dialog.showSaveDialog({
@@ -71,6 +87,7 @@ export function registerExportarHandlers() {
   })
 
   ipcMain.handle('exportar:html-selecao', async (event, payload) => {
+    assertPayloadExportavel(getDb(), payload)
     const norma = selectionNormaPayload(payload)
 
     const { filePath } = await dialog.showSaveDialog({

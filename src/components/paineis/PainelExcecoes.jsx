@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react'
+
 function irParaExcecao(editor, exc) {
   if (!editor) return
   // Busca o nó cujo texto começa com o trecho da exceção
@@ -18,27 +20,40 @@ function irParaExcecao(editor, exc) {
   })
 }
 
-export default function PainelExcecoes({ excecoes = [], onResolver, editor }) {
+export default function PainelExcecoes({ excecoes = [], onResolver, editor, aberto = true, onFechar }) {
   const pendentes = excecoes.filter(e => !e.resolvida)
+  const [ativa, setAtiva] = useState(-1)
+
+  useEffect(() => {
+    if (!aberto) setAtiva(-1)
+  }, [aberto])
+
+  if (!aberto) return null
+
+  function selecionarExcecao(exc, idx) {
+    setAtiva(idx)
+    irParaExcecao(editor, exc)
+  }
 
   return (
-    <div className="painel painel-excecoes">
-      <div className="painel-titulo">
-        Exceções
-        {pendentes.length > 0 && (
-          <span className="excecoes-badge">{pendentes.length}</span>
-        )}
+    <div className="notas-painel excecoes-painel" role="dialog" aria-label="Navegador de exceções">
+      <div className="notas-topo">
+        <div>
+          <span className="notas-titulo">Exceções</span>
+          <span className="notas-contador excecoes-contador">{pendentes.length}</span>
+        </div>
+        {onFechar && <button className="btn-ghost notas-fechar" onClick={onFechar} title="Fechar">x</button>}
       </div>
 
       {pendentes.length === 0 ? (
-        <p className="painel-vazio">✓ Sem exceções pendentes</p>
+        <p className="notas-vazio">✓ Sem exceções pendentes</p>
       ) : (
-        <ul className="excecoes-lista">
+        <ul className="notas-lista excecoes-lista">
           {excecoes.map((exc, i) => exc.resolvida ? null : (
             <li key={i} className="excecao-item">
               <div
-                className="excecao-corpo"
-                onClick={() => irParaExcecao(editor, exc)}
+                className={`excecao-corpo${i === ativa ? ' ativa' : ''}`}
+                onClick={() => selecionarExcecao(exc, i)}
                 title="Ir para este trecho"
                 style={{ cursor: editor ? 'pointer' : 'default' }}
               >

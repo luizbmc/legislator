@@ -229,6 +229,9 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   font: inherit; font-size: 13px; background: var(--surface);
   color: var(--text);
 }
+.home-tag-select {
+  min-width: 140px;
+}
 
 .home-check {
   display: inline-flex;
@@ -252,10 +255,28 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   background: var(--accent);
   border-color: var(--accent);
 }
+.home-check.pendente-check.ativo {
+  color: #fff;
+  background: #dc2626;
+  border-color: #b91c1c;
+}
+.home-check.pendente-check.ativo:hover {
+  color: #fff;
+  background: #b91c1c;
+  border-color: #991b1b;
+}
 .home-check input {
   width: 14px;
   height: 14px;
   accent-color: var(--accent);
+}
+.home-check.pendente-check input {
+  accent-color: #dc2626;
+}
+.pendente-check-alerta {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
 }
 
 .view-toggle {
@@ -382,6 +403,12 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 .norma-epigrafe {
   font-weight: 600; font-size: 14px; line-height: 1.4;
   margin-bottom: 4px;
+}
+.norma-pendente-icone {
+  display: inline-block;
+  margin-right: 5px;
+  line-height: 1;
+  vertical-align: -1px;
 }
 .norma-apelido { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
 .norma-ementa {
@@ -653,6 +680,13 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   outline: 2px solid var(--accent); border-color: transparent;
 }
 .campo textarea { resize: vertical; }
+.campo-check {
+  justify-content: flex-end;
+}
+.campo-check .home-check {
+  width: fit-content;
+  margin-bottom: 0;
+}
 
 .form-secao {
   margin: 8px 0 18px;
@@ -1801,6 +1835,20 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   font-size: 12px;
   font-weight: 700;
 }
+.btn-excecoes {
+  min-width: 70px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--warn);
+}
+.btn-excecoes:hover {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.btn-excecoes.ativa {
+  background: var(--warn);
+  color: #fff;
+}
 
 .status-select {
   padding: 5px 8px;
@@ -1952,6 +2000,45 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 }
 .nota-texto-italico {
   font-style: italic;
+}
+
+.excecoes-painel {
+  left: 20px;
+}
+
+.excecoes-contador {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.excecoes-painel .excecoes-lista {
+  padding: 6px;
+  gap: 4px;
+}
+
+.excecoes-painel .excecao-item {
+  padding: 0;
+  border-bottom: 0;
+}
+
+.excecoes-painel .excecao-corpo {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.excecoes-painel .excecao-corpo:hover {
+  background: var(--border-soft);
+}
+
+.excecoes-painel .excecao-corpo.ativa {
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+
+.excecoes-painel .excecao-ok {
+  margin: 7px 6px 0 0;
 }
 
 .busca-linha {

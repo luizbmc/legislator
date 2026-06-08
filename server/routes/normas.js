@@ -88,6 +88,7 @@ router.post('/', (req, res) => {
       ementa,
       dados_publicacao,
       data_ultima_alteracao,
+      atualizacao_pendente,
       vigencia = 'Vigente',
       link_acesso,
       anexo,
@@ -99,10 +100,10 @@ router.post('/', (req, res) => {
     const result = db.prepare(`
       INSERT INTO normas (
         tipo, epigrafe, apelido, ementa, dados_publicacao,
-        data_ultima_alteracao, vigencia, link_acesso, anexo, observacoes,
+        data_ultima_alteracao, atualizacao_pendente, vigencia, link_acesso, anexo, observacoes,
         criado_em, atualizado_em
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       tipo,
       epigrafe,
@@ -110,6 +111,7 @@ router.post('/', (req, res) => {
       ementa || null,
       dados_publicacao || null,
       data_ultima_alteracao || null,
+      atualizacao_pendente ? 1 : 0,
       vigencia || 'Vigente',
       link_acesso || null,
       anexo || null,
@@ -186,6 +188,7 @@ router.patch('/:id/meta', (req, res) => {
       ementa,
       dados_publicacao,
       data_ultima_alteracao,
+      atualizacao_pendente,
       vigencia = 'Vigente',
       link_acesso,
       anexo,
@@ -203,6 +206,7 @@ router.patch('/:id/meta', (req, res) => {
         ementa = ?,
         dados_publicacao = ?,
         data_ultima_alteracao = ?,
+        atualizacao_pendente = ?,
         vigencia = ?,
         link_acesso = ?,
         anexo = ?,
@@ -216,6 +220,7 @@ router.patch('/:id/meta', (req, res) => {
       ementa || null,
       dados_publicacao || null,
       data_ultima_alteracao || null,
+      atualizacao_pendente ? 1 : 0,
       vigencia || 'Vigente',
       link_acesso || null,
       anexo || null,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TIPOS_NORMA } from '../constants/normas.js'
 import logoNormando from '../logo.png'
@@ -81,12 +81,19 @@ function normaTemTagVm(norma) {
   return (norma.tags || []).some(tag => normalizarBusca(tag) === 'vm')
 }
 
+function AvisoAtualizacaoPendente({ norma }) {
+  if (!norma?.atualizacao_pendente) return null
+  return <span className="norma-pendente-icone" title="Atualização pendente">⚠️</span>
+}
+
 export default function Home() {
   const nav = useNavigate()
   const [normas,  setNormas]  = useState([])
   const [busca,   setBusca]   = useState('')
   const [tipo,    setTipo]    = useState('')
   const [status,  setStatus]  = useState('')
+  const [tagFiltro, setTagFiltro] = useState('')
+  const [todasTags, setTodasTags] = useState([])
   const [buscarConteudo, setBuscarConteudo] = useState(false)
   const [somenteVm, setSomenteVm] = useState(false)
   const [visao,   setVisao]   = useState('cards')
@@ -99,6 +106,12 @@ export default function Home() {
       .then(setNormas)
       .finally(() => setLoading(false))
   }, [busca, tipo, status, buscarConteudo])
+
+  useEffect(() => {
+    window.legislator.normas.tags()
+      .then(tags => setTodasTags(Array.isArray(tags) ? tags : []))
+      .catch(() => setTodasTags([]))
+  }, [])
 
   async function excluir(e, id) {
     e.stopPropagation()
@@ -122,12 +135,31 @@ export default function Home() {
   }
 
   const termoBuscaPrincipal = normalizarBusca(busca)
+  const tagsDisponiveis = useMemo(() => {
+    const mapa = new Map()
+    todasTags.forEach(tag => {
+      const nome = String(tag || '').trim()
+      if (nome) mapa.set(normalizarBusca(nome), nome)
+    })
+    normas.forEach(norma => {
+      const tagsNorma = norma.tags || []
+      tagsNorma.forEach(tag => {
+        const nome = String(tag || '').trim()
+        if (nome) mapa.set(normalizarBusca(nome), nome)
+      })
+    })
+    return Array.from(mapa.values()).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  }, [normas, todasTags])
   const normasFiltradasPorBusca = buscarConteudo
     ? normas
     : normas.filter(n => normaBateNaBuscaPrincipal(n, termoBuscaPrincipal))
-  const normasVisiveis = somenteVm
-    ? normasFiltradasPorBusca.filter(normaTemTagVm)
+  const tagFiltroNormalizada = normalizarBusca(tagFiltro)
+  const normasFiltradasPorTag = tagFiltro
+    ? normasFiltradasPorBusca.filter(n => (n.tags || []).some(tag => normalizarBusca(tag) === tagFiltroNormalizada))
     : normasFiltradasPorBusca
+  const normasVisiveis = somenteVm
+    ? normasFiltradasPorTag.filter(normaTemTagVm)
+    : normasFiltradasPorTag
 
   return (
     <div className="home-page">
@@ -185,6 +217,10 @@ export default function Home() {
           <option value="revisao">Em revisão</option>
           <option value="finalizado">Finalizado</option>
         </select>
+        <select className="home-tag-select" value={tagFiltro} onChange={e => setTagFiltro(e.target.value)}>
+          <option value="">Todas as tags</option>
+          {tagsDisponiveis.map(tag => <option key={tag} value={tag}>{tag}</option>)}
+        </select>
         <div className="view-toggle" aria-label="Visualização">
           <button
             type="button"
@@ -222,7 +258,7 @@ export default function Home() {
                   <span className="norma-tipo">{n.tipo}</span>
                   <span className="norma-status" style={{ color: st.cor }}>{st.label}</span>
                 </div>
-                <div className="norma-epigrafe">{n.epigrafe}</div>
+                <div className="norma-epigrafe"><AvisoAtualizacaoPendente norma={n} />{n.epigrafe}</div>
                 {n.apelido && <div className="norma-apelido">{n.apelido}</div>}
                 {n.ementa  && <div className="norma-ementa">{n.ementa}</div>}
                 {n.tags?.length > 0 && (
@@ -266,7 +302,7 @@ export default function Home() {
                 return (
                   <tr key={n.id} onClick={() => nav(`/editor/${n.id}`)}>
                     <td className="catalog-table-type">{n.tipo}</td>
-                    <td className="catalog-table-title">{n.epigrafe}</td>
+                    <td className="catalog-table-title"><AvisoAtualizacaoPendente norma={n} />{n.epigrafe}</td>
                     <td>{n.apelido || <span className="catalog-table-muted">-</span>}</td>
                     <td>
                       <span className="catalog-table-status" style={{ color: st.cor }}>

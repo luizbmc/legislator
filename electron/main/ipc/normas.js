@@ -10,7 +10,7 @@ export function registerNormasHandlers() {
     let sql = `
       SELECT n.id, n.tipo, n.epigrafe, n.apelido, n.ementa, n.status,
              n.dados_publicacao, n.data_ultima_alteracao, n.vigencia,
-             n.link_acesso, n.anexo, n.observacoes,
+             n.atualizacao_pendente, n.link_acesso, n.anexo, n.observacoes,
              n.criado_em, n.atualizado_em,
              GROUP_CONCAT(t.nome, '|||') AS tags_str
       FROM normas n
@@ -71,6 +71,7 @@ export function registerNormasHandlers() {
       ementa,
       dados_publicacao,
       data_ultima_alteracao,
+      atualizacao_pendente,
       vigencia = 'Vigente',
       link_acesso,
       anexo,
@@ -80,9 +81,9 @@ export function registerNormasHandlers() {
     const result = db.prepare(`
       INSERT INTO normas (
         tipo, epigrafe, apelido, ementa, dados_publicacao,
-        data_ultima_alteracao, vigencia, link_acesso, anexo, observacoes
+        data_ultima_alteracao, atualizacao_pendente, vigencia, link_acesso, anexo, observacoes
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       tipo,
       epigrafe,
@@ -90,6 +91,7 @@ export function registerNormasHandlers() {
       ementa || null,
       dados_publicacao || null,
       data_ultima_alteracao || null,
+      atualizacao_pendente ? 1 : 0,
       vigencia || 'Vigente',
       link_acesso || null,
       anexo || null,
@@ -151,6 +153,7 @@ export function registerNormasHandlers() {
     ementa,
     dados_publicacao,
     data_ultima_alteracao,
+    atualizacao_pendente,
     vigencia = 'Vigente',
     link_acesso,
     anexo,
@@ -167,6 +170,7 @@ export function registerNormasHandlers() {
         ementa        = ?,
         dados_publicacao = ?,
         data_ultima_alteracao = ?,
+        atualizacao_pendente = ?,
         vigencia      = ?,
         link_acesso   = ?,
         anexo         = ?,
@@ -180,6 +184,7 @@ export function registerNormasHandlers() {
       ementa || null,
       dados_publicacao || null,
       data_ultima_alteracao || null,
+      atualizacao_pendente ? 1 : 0,
       vigencia || 'Vigente',
       link_acesso || null,
       anexo || null,

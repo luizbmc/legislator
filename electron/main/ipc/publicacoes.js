@@ -7,7 +7,7 @@ const SECOES_PADRAO = ['Normas principais', 'Normas correlatas', 'Outras normas'
 const EXPORTACOES_VALIDAS = new Set(['ignorar', 'atualizacao', 'completa'])
 
 function exportacaoParaSalvar(norma) {
-  if (norma?.status !== 'finalizado') return 'ignorar'
+  if (norma?.status !== 'finalizado' || norma?.atualizacao_pendente) return 'ignorar'
   return EXPORTACOES_VALIDAS.has(norma?.exportacao) ? norma.exportacao : 'completa'
 }
 
@@ -60,6 +60,21 @@ function normaCompleta(db, id) {
   return db.prepare('SELECT * FROM normas WHERE id = ?').get(id)
 }
 
+function normasComAtualizacaoPendente(pub) {
+  return (pub?.secoes ?? [])
+    .flatMap(secao => secao.normas ?? [])
+    .filter(norma => Boolean(norma?.atualizacao_pendente))
+}
+
+function assertPublicacaoExportavel(pub) {
+  const pendentes = normasComAtualizacaoPendente(pub)
+  if (pendentes.length) {
+    const nomes = pendentes.slice(0, 5).map(norma => norma.epigrafe || 'Norma sem epígrafe').join('\n- ')
+    const sufixo = pendentes.length > 5 ? `\n... e mais ${pendentes.length - 5}` : ''
+    throw new Error(`Exportação bloqueada: a publicação contém norma(s) com Atualização pendente:\n- ${nomes}${sufixo}`)
+  }
+}
+
 // ── Helper: lê publicação completa (com seções e normas) ──────────
 function buscarCompleto(db, id) {
   const pub = db.prepare('SELECT * FROM publicacoes WHERE id = ?').get(id)
@@ -72,7 +87,7 @@ function buscarCompleto(db, id) {
   for (const s of secoes) {
     s.normas = db.prepare(`
       SELECT pn.id AS pn_id, pn.norma_id, pn.ordem, pn.exportacao,
-             n.tipo, n.epigrafe, n.apelido, n.status
+             n.tipo, n.epigrafe, n.apelido, n.status, n.atualizacao_pendente
       FROM publicacao_normas pn
       JOIN normas n ON n.id = pn.norma_id
       WHERE pn.secao_id = ?
@@ -232,6 +247,7 @@ export function registerPublicacoesHandlers() {
     const db  = getDb()
     const pub = buscarCompleto(db, id)
     if (!pub) throw new Error('Publicação não encontrada')
+    assertPublicacaoExportavel(pub)
 
     const { filePath } = await dialog.showSaveDialog({
       title: 'Exportar publicação — DOCX',
@@ -251,6 +267,7 @@ export function registerPublicacoesHandlers() {
     const db  = getDb()
     const pub = buscarCompleto(db, id)
     if (!pub) throw new Error('Publicação não encontrada')
+    assertPublicacaoExportavel(pub)
 
     const { filePath } = await dialog.showSaveDialog({
       title: 'Exportar publicação — HTML',
@@ -269,6 +286,7 @@ export function registerPublicacoesHandlers() {
     const db = getDb()
     const pub = buscarCompleto(db, id)
     if (!pub) throw new Error('Publicacao nao encontrada')
+    assertPublicacaoExportavel(pub)
 
     const pastaBase = await escolherPastaExportacao('Selecionar pasta para exportar Word')
     if (!pastaBase) return { cancelado: true }
@@ -301,6 +319,7 @@ export function registerPublicacoesHandlers() {
     const db = getDb()
     const pub = buscarCompleto(db, id)
     if (!pub) throw new Error('Publicacao nao encontrada')
+    assertPublicacaoExportavel(pub)
 
     const itens = (pub.secoes ?? []).flatMap(secao => secao.normas ?? [])
     if (!itens.some(item => exportacaoEfetiva(item) !== 'ignorar')) {

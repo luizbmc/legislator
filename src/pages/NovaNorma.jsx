@@ -13,6 +13,7 @@ function formInicial(origem) {
       ementa: '',
       dados_publicacao: '',
       data_ultima_alteracao: '',
+      atualizacao_pendente: false,
       vigencia: 'Vigente',
       link_acesso: '',
       anexo: '',
@@ -27,6 +28,7 @@ function formInicial(origem) {
     ementa: origem.ementa || '',
     dados_publicacao: origem.dados_publicacao || '',
     data_ultima_alteracao: origem.data_ultima_alteracao || '',
+    atualizacao_pendente: Boolean(origem.atualizacao_pendente),
     vigencia: origem.vigencia || 'Vigente',
     link_acesso: origem.link_acesso || '',
     anexo: origem.anexo || '',
@@ -47,6 +49,7 @@ export default function NovaNorma() {
   const [erro,     setErro]     = useState('')
 
   const set = campo => e => setForm(f => ({ ...f, [campo]: e.target.value }))
+  const setCheck = campo => e => setForm(f => ({ ...f, [campo]: e.target.checked }))
 
   useEffect(() => {
     window.legislator.normas.tags().then(setTodasTags).catch(() => {})
@@ -172,6 +175,17 @@ export default function NovaNorma() {
                   value={form.data_ultima_alteracao}
                   onChange={set('data_ultima_alteracao')}
                 />
+              </div>
+              <div className="campo campo-check">
+                <label className={`home-check pendente-check${form.atualizacao_pendente ? ' ativo' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.atualizacao_pendente)}
+                    onChange={setCheck('atualizacao_pendente')}
+                  />
+                  {form.atualizacao_pendente && <span className="pendente-check-alerta" aria-hidden="true">⚠️</span>}
+                  <span>Atualização pendente</span>
+                </label>
               </div>
               <div className="campo">
                 <label>Vigência</label>
