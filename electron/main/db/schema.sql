@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS normas (
   link_acesso   TEXT,
   anexo         TEXT,
   observacoes   TEXT,
+  caminho_rede  TEXT,
   conteudo_raw  TEXT,
   conteudo_doc  TEXT NOT NULL DEFAULT '{"type":"doc","content":[]}',
   conteudo_txt  TEXT NOT NULL DEFAULT '',

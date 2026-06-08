@@ -11,6 +11,7 @@ export function registerNormasHandlers() {
       SELECT n.id, n.tipo, n.epigrafe, n.apelido, n.ementa, n.status,
              n.dados_publicacao, n.data_ultima_alteracao, n.vigencia,
              n.atualizacao_pendente, n.link_acesso, n.anexo, n.observacoes,
+             n.caminho_rede,
              n.criado_em, n.atualizado_em,
              GROUP_CONCAT(t.nome, '|||') AS tags_str
       FROM normas n
@@ -25,9 +26,9 @@ export function registerNormasHandlers() {
         sql += ` AND (
           n.epigrafe LIKE ? OR n.apelido LIKE ? OR n.ementa LIKE ? OR n.conteudo_txt LIKE ? OR
           n.dados_publicacao LIKE ? OR n.vigencia LIKE ? OR n.link_acesso LIKE ? OR
-          n.anexo LIKE ? OR n.observacoes LIKE ?
+          n.anexo LIKE ? OR n.observacoes LIKE ? OR n.caminho_rede LIKE ?
         )`
-        params.push(term, term, term, term, term, term, term, term, term)
+        params.push(term, term, term, term, term, term, term, term, term, term)
       } else {
         sql += ' AND (n.epigrafe LIKE ? OR n.apelido LIKE ?)'
         params.push(term, term)
@@ -76,14 +77,15 @@ export function registerNormasHandlers() {
       link_acesso,
       anexo,
       observacoes,
+      caminho_rede,
       tags = [],
     } = dados
     const result = db.prepare(`
       INSERT INTO normas (
         tipo, epigrafe, apelido, ementa, dados_publicacao,
-        data_ultima_alteracao, atualizacao_pendente, vigencia, link_acesso, anexo, observacoes
+        data_ultima_alteracao, atualizacao_pendente, vigencia, link_acesso, anexo, observacoes, caminho_rede
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       tipo,
       epigrafe,
@@ -96,6 +98,7 @@ export function registerNormasHandlers() {
       link_acesso || null,
       anexo || null,
       observacoes || null,
+      caminho_rede || null,
     )
     const id = result.lastInsertRowid
 
@@ -158,6 +161,7 @@ export function registerNormasHandlers() {
     link_acesso,
     anexo,
     observacoes,
+    caminho_rede,
     tags = [],
   }) => {
     const db = getDb()
@@ -175,6 +179,7 @@ export function registerNormasHandlers() {
         link_acesso   = ?,
         anexo         = ?,
         observacoes   = ?,
+        caminho_rede  = ?,
         atualizado_em = datetime('now')
       WHERE id = ?
     `).run(
@@ -189,6 +194,7 @@ export function registerNormasHandlers() {
       link_acesso || null,
       anexo || null,
       observacoes || null,
+      caminho_rede || null,
       id,
     )
 

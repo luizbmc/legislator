@@ -15,9 +15,9 @@ router.get('/', (req, res) => {
         where.push(`(
           n.epigrafe LIKE ? OR n.apelido LIKE ? OR n.ementa LIKE ? OR n.conteudo_txt LIKE ? OR
           n.dados_publicacao LIKE ? OR n.vigencia LIKE ? OR n.link_acesso LIKE ? OR
-          n.anexo LIKE ? OR n.observacoes LIKE ?
+          n.anexo LIKE ? OR n.observacoes LIKE ? OR n.caminho_rede LIKE ?
         )`)
-        params.push(like, like, like, like, like, like, like, like, like)
+        params.push(like, like, like, like, like, like, like, like, like, like)
       } else {
         where.push(`(n.epigrafe LIKE ? OR n.apelido LIKE ?)`)
         params.push(like, like)
@@ -93,6 +93,7 @@ router.post('/', (req, res) => {
       link_acesso,
       anexo,
       observacoes,
+      caminho_rede,
       tags = [],
     } = req.body
     const agora = new Date().toISOString()
@@ -100,10 +101,10 @@ router.post('/', (req, res) => {
     const result = db.prepare(`
       INSERT INTO normas (
         tipo, epigrafe, apelido, ementa, dados_publicacao,
-        data_ultima_alteracao, atualizacao_pendente, vigencia, link_acesso, anexo, observacoes,
+        data_ultima_alteracao, atualizacao_pendente, vigencia, link_acesso, anexo, observacoes, caminho_rede,
         criado_em, atualizado_em
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       tipo,
       epigrafe,
@@ -116,6 +117,7 @@ router.post('/', (req, res) => {
       link_acesso || null,
       anexo || null,
       observacoes || null,
+      caminho_rede || null,
       agora,
       agora,
     )
@@ -193,6 +195,7 @@ router.patch('/:id/meta', (req, res) => {
       link_acesso,
       anexo,
       observacoes,
+      caminho_rede,
       tags = [],
     } = req.body
     const id = req.params.id
@@ -211,6 +214,7 @@ router.patch('/:id/meta', (req, res) => {
         link_acesso = ?,
         anexo = ?,
         observacoes = ?,
+        caminho_rede = ?,
         atualizado_em = ?
       WHERE id = ?
     `).run(
@@ -225,6 +229,7 @@ router.patch('/:id/meta', (req, res) => {
       link_acesso || null,
       anexo || null,
       observacoes || null,
+      caminho_rede || null,
       agora,
       id,
     )

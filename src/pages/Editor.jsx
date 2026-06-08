@@ -619,6 +619,7 @@ export default function Editor() {
     link_acesso: '',
     anexo: '',
     observacoes: '',
+    caminho_rede: '',
   })
   const [editTags,              setEditTags]              = useState([])
   const [editTagInput,          setEditTagInput]          = useState('')
@@ -1113,6 +1114,7 @@ export default function Editor() {
       link_acesso: norma.link_acesso ?? '',
       anexo: norma.anexo ?? '',
       observacoes: norma.observacoes ?? '',
+      caminho_rede: norma.caminho_rede ?? '',
     })
     setEditTags(norma.tags ?? [])
     setEditTagInput('')
@@ -2382,6 +2384,14 @@ export default function Editor() {
                     onChange={e => setEditForm(f => ({ ...f, observacoes: e.target.value }))}
                   />
                 </div>
+              </div>
+              <div className="campo">
+                <label>Caminho na rede <span className="campo-opcional">(opcional)</span></label>
+                <input
+                  placeholder={'Ex: \\\\servidor\\pasta\\norma.docx'}
+                  value={editForm.caminho_rede}
+                  onChange={e => setEditForm(f => ({ ...f, caminho_rede: e.target.value }))}
+                />
               </div>
               <div className="campo">
                 <label>Tags <span className="campo-opcional">(opcional)</span></label>
