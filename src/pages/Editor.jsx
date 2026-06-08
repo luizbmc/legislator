@@ -1095,6 +1095,8 @@ export default function Editor() {
         await window.legislator.excecoes.salvar(parseInt(id), excecoes)
       }
       setModificado(false)
+    } catch (err) {
+      alert(err?.message || 'Não foi possível salvar a norma.')
     } finally {
       setSalvando(false)
     }

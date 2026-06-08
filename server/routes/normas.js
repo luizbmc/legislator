@@ -148,25 +148,34 @@ router.put('/:id', (req, res) => {
     const atual = db.prepare(`SELECT * FROM normas WHERE id = ?`).get(id)
     if (!atual) return res.status(404).json({ error: 'Norma não encontrada' })
 
-    // Salvar versão anterior
-    if (atual.conteudo_doc && atual.conteudo_doc !== '{"type":"doc","content":[]}') {
-      const ultimaVersao = db.prepare(`
-        SELECT versao FROM normas_versoes WHERE norma_id = ? ORDER BY versao DESC LIMIT 1
-      `).get(id)
-      const proximaVersao = ultimaVersao ? ultimaVersao.versao + 1 : 1
+    const agora = new Date().toISOString()
+    db.transaction(() => {
+      // Salvar versão anterior
+      if (atual.conteudo_doc && atual.conteudo_doc !== '{"type":"doc","content":[]}') {
+        const ultimaVersao = db.prepare(`
+          SELECT versao FROM normas_versoes WHERE norma_id = ? ORDER BY versao DESC LIMIT 1
+        `).get(id)
+        const proximaVersao = ultimaVersao ? ultimaVersao.versao + 1 : 1
+
+        db.prepare(`
+          INSERT INTO normas_versoes (norma_id, versao, doc_json, criado_em)
+          VALUES (?, ?, ?, ?)
+        `).run(id, proximaVersao, atual.conteudo_doc, agora)
+      }
 
       db.prepare(`
-        INSERT INTO normas_versoes (norma_id, versao, doc_json, criado_em)
-        VALUES (?, ?, ?, ?)
-      `).run(id, proximaVersao, atual.conteudo_doc, new Date().toISOString())
-    }
-
-    const agora = new Date().toISOString()
-    db.prepare(`
-      UPDATE normas
-      SET conteudo_doc = ?, conteudo_txt = ?, status = ?, data_atualizacao = ?, atualizado_em = ?
-      WHERE id = ?
-    `).run(conteudo_doc, conteudo_txt, status, data_atualizacao, agora, id)
+        UPDATE normas
+        SET conteudo_doc = ?, conteudo_txt = ?, status = ?, data_atualizacao = ?, atualizado_em = ?
+        WHERE id = ?
+      `).run(
+        conteudo_doc ?? '{"type":"doc","content":[]}',
+        conteudo_txt ?? '',
+        status ?? atual.status ?? 'rascunho',
+        data_atualizacao ?? atual.data_atualizacao ?? null,
+        agora,
+        id,
+      )
+    })()
 
     const norma = db.prepare(`SELECT * FROM normas WHERE id = ?`).get(id)
     const tagRows = db.prepare(`
@@ -176,6 +185,7 @@ router.put('/:id', (req, res) => {
 
     res.json(norma)
   } catch (err) {
+    console.error('Erro ao salvar norma:', err)
     res.status(500).json({ error: err.message })
   }
 })
@@ -307,14 +317,24 @@ router.put('/:id/excecoes', (req, res) => {
     const lista = req.body
     const agora = new Date().toISOString()
 
-    db.prepare(`DELETE FROM excecoes WHERE norma_id = ?`).run(id)
+    db.transaction((itens) => {
+      db.prepare(`DELETE FROM excecoes WHERE norma_id = ?`).run(id)
 
-    for (const exc of lista) {
-      db.prepare(`
-        INSERT INTO excecoes (norma_id, tipo, descricao, linha, node_id, resolvida, criado_em)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(id, exc.tipo, exc.descricao, exc.linha, exc.node_id, exc.resolvida || 0, agora)
-    }
+      for (const exc of itens) {
+        db.prepare(`
+          INSERT INTO excecoes (norma_id, tipo, descricao, linha, node_id, resolvida, criado_em)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          id,
+          exc.tipo || '',
+          exc.descricao || '',
+          exc.linha ?? null,
+          exc.node_id ?? exc.nodeId ?? null,
+          exc.resolvida ? 1 : 0,
+          agora,
+        )
+      }
+    })(Array.isArray(lista) ? lista : [])
 
     res.json({ ok: true })
   } catch (err) {

@@ -125,25 +125,27 @@ export function registerNormasHandlers() {
       SELECT conteudo_doc FROM normas WHERE id = ?
     `).get(id)
 
-    if (atual?.conteudo_doc && atual.conteudo_doc !== '{"type":"doc","content":[]}') {
-      const { versao } = db.prepare(`
-        SELECT COALESCE(MAX(versao), 0) AS versao FROM normas_versoes WHERE norma_id = ?
-      `).get(id)
-      db.prepare(`
-        INSERT INTO normas_versoes (norma_id, versao, doc_json)
-        VALUES (?, ?, ?)
-      `).run(id, versao + 1, atual.conteudo_doc)
-    }
+    db.transaction(() => {
+      if (atual?.conteudo_doc && atual.conteudo_doc !== '{"type":"doc","content":[]}') {
+        const { versao } = db.prepare(`
+          SELECT COALESCE(MAX(versao), 0) AS versao FROM normas_versoes WHERE norma_id = ?
+        `).get(id)
+        db.prepare(`
+          INSERT INTO normas_versoes (norma_id, versao, doc_json)
+          VALUES (?, ?, ?)
+        `).run(id, versao + 1, atual.conteudo_doc)
+      }
 
-    db.prepare(`
-      UPDATE normas SET
-        conteudo_doc      = ?,
-        conteudo_txt      = ?,
-        status            = COALESCE(?, status),
-        data_atualizacao  = COALESCE(?, data_atualizacao),
-        atualizado_em     = datetime('now')
-      WHERE id = ?
-    `).run(conteudo_doc, conteudo_txt ?? '', status ?? null, data_atualizacao ?? null, id)
+      db.prepare(`
+        UPDATE normas SET
+          conteudo_doc      = ?,
+          conteudo_txt      = ?,
+          status            = COALESCE(?, status),
+          data_atualizacao  = COALESCE(?, data_atualizacao),
+          atualizado_em     = datetime('now')
+        WHERE id = ?
+      `).run(conteudo_doc, conteudo_txt ?? '', status ?? null, data_atualizacao ?? null, id)
+    })()
 
     return db.prepare('SELECT * FROM normas WHERE id = ?').get(id)
   })
