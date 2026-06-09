@@ -79,6 +79,557 @@ function primeiraNormaComAtualizacaoPendente(secoes = []) {
   return null
 }
 
+function textoInlineRecorte(content = []) {
+  return content.map(node => {
+    if (node.type === 'text') return node.text || ''
+    if (node.type === 'hardBreak') return ' '
+    return ''
+  }).join('').replace(/\s+/g, ' ').trim()
+}
+
+function textoBlocoRecorte(node) {
+  return textoInlineRecorte(node?.content || [])
+}
+
+function textoNoRecorte(node) {
+  if (!node) return ''
+  if (node.type === 'recorteOmissao') return '[...]'
+  if (node.type === 'table') return '[Tabela]'
+  return textoBlocoRecorte(node)
+}
+
+function normalizarNumeroArtigo(valor) {
+  return String(valor || '')
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/^arts?\.?/i, '')
+    .replace(/^artigos?/i, '')
+    .replace(/[ºª°]/g, '')
+    .toUpperCase()
+    .replace(/\./g, '')
+}
+
+function normalizarTextoRecorte(valor) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .trim()
+}
+
+function numeroArtigoNode(node) {
+  const texto = textoBlocoRecorte(node)
+  const match = texto.match(/^Art(?:s)?\.\s*((?:\d{1,3}(?:\.\d{3})+|\d+)(?:-[A-Z])?)/i)
+  return match ? normalizarNumeroArtigo(match[1]) : ''
+}
+
+function numeroArtigoComoInteiro(valor) {
+  const normalizado = normalizarNumeroArtigo(valor)
+  if (!/^\d+$/.test(normalizado)) return null
+  return parseInt(normalizado, 10)
+}
+
+function normalizarRomanoDispositivo(valor) {
+  const texto = String(valor || '').toUpperCase().trim().replace(/\s+/g, '')
+  const match = texto.match(/^([IVXLCDM]+)(-[A-Z])?$/)
+  if (!match) return texto
+  const alias = { IIV: 'VII' }
+  return (alias[match[1]] || match[1]) + (match[2] || '')
+}
+
+function romanoParaNumero(romano) {
+  const mapa = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 }
+  const texto = normalizarRomanoDispositivo(romano).replace(/[^IVXLCDM]/g, '')
+  if (!texto) return null
+  var total = 0
+  for (let i = 0; i < texto.length; i++) {
+    const atual = mapa[texto[i]] || 0
+    const prox = mapa[texto[i + 1]] || 0
+    total += atual < prox ? -atual : atual
+  }
+  return total || null
+}
+
+function numeroRomanoNode(node) {
+  const texto = textoBlocoRecorte(node)
+  const match = texto.match(/^([IVXLCDM]+(?:-[A-Z])?)\s*[-\u2013\u2014]\s/i)
+  return match ? normalizarRomanoDispositivo(match[1]) : ''
+}
+
+function alineaNode(node) {
+  const texto = textoBlocoRecorte(node)
+  const match = texto.match(/^([a-z\u00e0-\u00ff])\)\s/i)
+  return match ? match[1].toLowerCase() : ''
+}
+
+function nodeEhParagrafoMarcado(node) {
+  const texto = textoBlocoRecorte(node)
+  return node?.type === 'paragrafLei' && (/^§\s*\d+/i.test(texto) || /^Par[aá]grafo\s+único\b/i.test(texto))
+}
+
+function numeroParagrafoNode(node) {
+  const texto = textoBlocoRecorte(node)
+  if (/^Par[aá]grafo\s+único\b/i.test(texto)) return 'UNICO'
+  const match = texto.match(/^§\s*(\d+)\s*[ºª°]?/i)
+  return match ? match[1] : ''
+}
+
+function normalizarParagrafoDispositivo(valor) {
+  const texto = String(valor || '').trim()
+  if (/^par[aá]grafo\s+único$/i.test(texto)) return 'UNICO'
+  const match = texto.match(/^§?\s*(\d+)\s*[ºª°]?$/i)
+  return match ? match[1] : texto.toUpperCase()
+}
+
+function nodeEhArtigo(node) {
+  return node?.type === 'artigo' || node?.type === 'artigoTitulo'
+}
+
+function nivelHeadingRecorte(node) {
+  const texto = normalizarTextoRecorte(textoBlocoRecorte(node))
+  if (node?.type === 'partelivroTitCap') {
+    if (/^PARTE\b/.test(texto)) return 1
+    if (/^LIVRO\b/.test(texto)) return 2
+    if (/^TITULO\b/.test(texto)) return 3
+    if (/^CAPITULO\b/.test(texto)) return 4
+    return 4
+  }
+  if (node?.type === 'aberturaCapitulo') return 4
+  if (node?.type === 'secaoSubsecao') {
+    if (/^SUBSECAO\b/.test(texto)) return 6
+    if (/^SECAO\b/.test(texto)) return 5
+    return 5
+  }
+  return null
+}
+
+function nodeEhHeadingRecorte(node) {
+  return nivelHeadingRecorte(node) != null
+}
+
+function blocosDaNorma(doc) {
+  return Array.isArray(doc?.content) ? doc.content : []
+}
+
+function montarIndiceArtigos(blocos) {
+  const artigos = []
+  for (let i = 0; i < blocos.length; i++) {
+    if (!nodeEhArtigo(blocos[i])) continue
+    const numero = numeroArtigoNode(blocos[i])
+    if (!numero) continue
+    let fim = blocos.length
+    for (let j = i + 1; j < blocos.length; j++) {
+      if (nodeEhArtigo(blocos[j]) || nodeEhHeadingRecorte(blocos[j])) {
+        fim = j
+        break
+      }
+    }
+    artigos.push({ numero, inicio: i, fim })
+  }
+  return artigos
+}
+
+function dividirEntradasRecorte(especificacao) {
+  const entradas = []
+  let atual = ''
+  let chaves = 0
+  let aspas = false
+  const texto = String(especificacao || '')
+  for (let i = 0; i < texto.length; i++) {
+    const ch = texto[i]
+    if (ch === '"') aspas = !aspas
+    if (!aspas && ch === '{') chaves++
+    if (!aspas && ch === '}') chaves = Math.max(0, chaves - 1)
+    if (!aspas && chaves === 0 && ch === ';') {
+      if (atual.trim()) entradas.push(atual.trim())
+      atual = ''
+      continue
+    }
+    atual += ch
+  }
+  if (atual.trim()) entradas.push(atual.trim())
+  return entradas
+}
+
+function parseDetalheDispositivo(texto) {
+  const detalhe = String(texto || '').trim()
+  if (!detalhe || /^caput$/i.test(detalhe)) return { tipo: 'caput' }
+
+  const partes = detalhe
+    .split(',')
+    .map(p => p.trim())
+    .filter(Boolean)
+
+  const incisoRange = partes[0]?.match(/^([IVXLCDM]+(?:-[A-Z])?)\s+a\s+([IVXLCDM]+(?:-[A-Z])?)$/i)
+  if (incisoRange) {
+    return {
+      tipo: 'incisosRange',
+      incisoInicio: normalizarRomanoDispositivo(incisoRange[1]),
+      incisoFim: normalizarRomanoDispositivo(incisoRange[2]),
+    }
+  }
+
+  const inciso = partes[0]?.match(/^([IVXLCDM]+(?:-[A-Z])?)$/i)
+  const incisosLista = partes.map(parte => parte.match(/^([IVXLCDM]+(?:-[A-Z])?)$/i)?.[1])
+  const alineaRange = partes[1]?.match(/^"?([a-z\u00e0-\u00ff])"?\s+a\s+"?([a-z\u00e0-\u00ff])"?$/i)
+  const alinea = partes[1]?.match(/^"?([a-z\u00e0-\u00ff])"?$/i)
+  const alineasLista = partes.slice(1).map(parte => parte.match(/^"?([a-z\u00e0-\u00ff])"?$/i)?.[1]?.toLowerCase())
+
+  if (inciso && alineaRange) {
+    return {
+      tipo: 'alineasRangeDeInciso',
+      inciso: normalizarRomanoDispositivo(inciso[1]),
+      alineaInicio: alineaRange[1].toLowerCase(),
+      alineaFim: alineaRange[2].toLowerCase(),
+    }
+  }
+
+  if (incisosLista.length > 1 && incisosLista.every(Boolean)) {
+    return {
+      tipo: 'incisosLista',
+      incisos: incisosLista.map(normalizarRomanoDispositivo),
+    }
+  }
+
+  if (inciso && alineasLista.length > 1 && alineasLista.every(Boolean)) {
+    return {
+      tipo: 'alineasListaDeInciso',
+      inciso: normalizarRomanoDispositivo(inciso[1]),
+      alineas: alineasLista,
+    }
+  }
+
+  if (inciso && alinea) {
+    return {
+      tipo: 'alineaDeInciso',
+      inciso: normalizarRomanoDispositivo(inciso[1]),
+      alinea: alinea[1].toLowerCase(),
+    }
+  }
+
+  if (inciso && partes.length === 1) {
+    return {
+      tipo: 'inciso',
+      inciso: normalizarRomanoDispositivo(inciso[1]),
+    }
+  }
+
+  return { erro: 'Detalhamento do artigo não reconhecido.' }
+}
+
+function parseGrupoRecorte(conteudo) {
+  return dividirEntradasRecorte(conteudo).map(parte => {
+    const paragrafo = parte.match(/^(§\s*\d+\s*[ºª°]?|par[aá]grafo\s+único)\s*(?:,\s*(.+))?$/i)
+    if (paragrafo) {
+      const detalhe = parseDetalheDispositivo(paragrafo[2] || 'caput')
+      return {
+        ...detalhe,
+        escopo: 'paragrafo',
+        paragrafo: normalizarParagrafoDispositivo(paragrafo[1]),
+      }
+    }
+    return { ...parseDetalheDispositivo(parte), escopo: 'artigo' }
+  })
+}
+
+function parseItemRecorte(entrada) {
+  const texto = entrada.trim()
+  const range = texto.match(/^Arts?\.\s*((?:\d{1,3}(?:\.\d{3})+|\d+))[ºª°]?\s+a\s*((?:\d{1,3}(?:\.\d{3})+|\d+))[ºª°]?$/i)
+  if (range) {
+    return {
+      tipo: 'artigosRange',
+      inicio: normalizarNumeroArtigo(range[1]),
+      fim: normalizarNumeroArtigo(range[2]),
+    }
+  }
+
+  const grupo = texto.match(/^Art\.\s*((?:\d{1,3}(?:\.\d{3})+|\d+)(?:-[A-Z])?)[ºª°]?\s*\{([\s\S]+)\}$/i)
+  if (grupo) {
+    const itens = parseGrupoRecorte(grupo[2])
+    const erro = itens.find(item => item.erro)
+    if (erro) return { erro: erro.erro }
+    return {
+      tipo: 'artigoGrupo',
+      numero: normalizarNumeroArtigo(grupo[1]),
+      itens,
+    }
+  }
+
+  const match = texto.match(/^Art\.\s*((?:\d{1,3}(?:\.\d{3})+|\d+)(?:-[A-Z])?)[ºª°]?(.*)$/i)
+  if (!match) return { erro: 'Comando não reconhecido.' }
+
+  const numero = normalizarNumeroArtigo(match[1])
+  const detalhe = parseDetalheDispositivo(match[2].replace(/^,/, ''))
+  if (detalhe.erro) return detalhe
+
+  if (detalhe.tipo === 'caput' && !match[2].trim()) return { tipo: 'artigoInteiro', numero }
+  return { ...detalhe, numero }
+}
+
+function encontrarArtigo(indice, numero) {
+  return indice.find(art => art.numero === normalizarNumeroArtigo(numero))
+}
+
+function extrairBlocosArtigo(blocos, artigo) {
+  return blocos.slice(artigo.inicio, artigo.fim)
+}
+
+function headingsDoArtigo(blocos, inicioArtigo) {
+  let pilha = []
+  for (let i = 0; i < inicioArtigo; i++) {
+    const node = blocos[i]
+    const nivel = nivelHeadingRecorte(node)
+    if (nivel == null) continue
+    pilha = pilha.filter(item => item.nivel < nivel)
+    pilha.push({ node, nivel, index: i })
+  }
+  return pilha.map(item => item.node)
+}
+
+function limitesEscopoArtigo(blocosArtigo) {
+  let fim = blocosArtigo.length
+  for (let i = 1; i < blocosArtigo.length; i++) {
+    if (nodeEhParagrafoMarcado(blocosArtigo[i])) {
+      fim = i
+      break
+    }
+  }
+  return { inicio: 1, fim }
+}
+
+function limitesEscopoParagrafo(blocosArtigo, paragrafo) {
+  const numero = normalizarParagrafoDispositivo(paragrafo)
+  for (let i = 1; i < blocosArtigo.length; i++) {
+    if (nodeEhParagrafoMarcado(blocosArtigo[i]) && numeroParagrafoNode(blocosArtigo[i]) === numero) {
+      let fim = blocosArtigo.length
+      for (let j = i + 1; j < blocosArtigo.length; j++) {
+        if (nodeEhParagrafoMarcado(blocosArtigo[j])) {
+          fim = j
+          break
+        }
+      }
+      return { inicio: i + 1, fim, paragrafoIndex: i }
+    }
+  }
+  return null
+}
+
+function extrairInciso(blocosArtigo, inciso, escopo) {
+  const selecionados = []
+  const limite = escopo || limitesEscopoArtigo(blocosArtigo)
+  let capturando = false
+  for (let i = limite.inicio; i < limite.fim; i++) {
+    const node = blocosArtigo[i]
+    if (node.type === 'inciso') {
+      capturando = numeroRomanoNode(node) === inciso
+    } else if (nodeEhParagrafoMarcado(node)) {
+      capturando = false
+    }
+    if (capturando) selecionados.push(node)
+  }
+  return selecionados
+}
+
+function extrairIncisos(blocosArtigo, inicio, fim, escopo) {
+  const inicioNum = romanoParaNumero(inicio)
+  const fimNum = romanoParaNumero(fim)
+  if (!inicioNum || !fimNum) return []
+  const selecionados = []
+  let capturando = false
+  const limite = escopo || limitesEscopoArtigo(blocosArtigo)
+  for (let i = limite.inicio; i < limite.fim; i++) {
+    const node = blocosArtigo[i]
+    if (node.type === 'inciso') {
+      const num = romanoParaNumero(numeroRomanoNode(node))
+      capturando = Boolean(num && num >= inicioNum && num <= fimNum)
+    } else if (nodeEhParagrafoMarcado(node)) {
+      capturando = false
+    }
+    if (capturando) selecionados.push(node)
+  }
+  return selecionados
+}
+
+function extrairIncisosLista(blocosArtigo, incisos, escopo) {
+  const resultado = []
+  for (const inciso of incisos) {
+    adicionarUnicos(resultado, extrairInciso(blocosArtigo, inciso, escopo))
+  }
+  return resultado
+}
+
+function extrairAlineasDeInciso(blocosArtigo, inciso, alineaInicio, alineaFim, escopo) {
+  const resultado = []
+  let dentroInciso = false
+  const limite = escopo || limitesEscopoArtigo(blocosArtigo)
+  const ini = alineaInicio.charCodeAt(0)
+  const fim = alineaFim.charCodeAt(0)
+  for (let i = limite.inicio; i < limite.fim; i++) {
+    const node = blocosArtigo[i]
+    if (node.type === 'inciso') {
+      dentroInciso = numeroRomanoNode(node) === inciso
+      if (dentroInciso) resultado.push(node)
+      continue
+    }
+    if (!dentroInciso) continue
+    if (nodeEhParagrafoMarcado(node) || node.type === 'inciso') break
+    if (node.type === 'alinea') {
+      const codigo = alineaNode(node).charCodeAt(0)
+      if (!codigo || codigo < ini || codigo > fim) continue
+      resultado.push(node)
+      for (let j = i + 1; j < blocosArtigo.length; j++) {
+        const child = blocosArtigo[j]
+        if (child.type === 'alinea' || child.type === 'inciso' || nodeEhParagrafoMarcado(child)) break
+        if (child.type === 'item') resultado.push(child)
+      }
+    }
+  }
+  return resultado
+}
+
+function extrairAlineaDeInciso(blocosArtigo, inciso, alinea, escopo) {
+  return extrairAlineasDeInciso(blocosArtigo, inciso, alinea, alinea, escopo)
+}
+
+function extrairAlineasListaDeInciso(blocosArtigo, inciso, alineas, escopo) {
+  const resultado = []
+  for (const alinea of alineas) {
+    adicionarUnicos(resultado, extrairAlineaDeInciso(blocosArtigo, inciso, alinea, escopo))
+  }
+  return resultado
+}
+
+function adicionarUnicos(destino, blocos) {
+  for (const bloco of blocos) {
+    if (!destino.includes(bloco)) destino.push(bloco)
+  }
+}
+
+function nodeTemConteudoRecorte(node) {
+  if (!node) return false
+  if (node.type === 'table') return true
+  return Boolean(textoBlocoRecorte(node))
+}
+
+function ordenarUnicosPorPosicao(blocosArtigo, selecionados) {
+  const vistos = []
+  for (const node of selecionados) {
+    if (node && !vistos.includes(node)) vistos.push(node)
+  }
+  return vistos.sort((a, b) => blocosArtigo.indexOf(a) - blocosArtigo.indexOf(b))
+}
+
+function inserirMarcadoresOmissao(blocosBase, selecionados, fimOmissaoAte) {
+  const ordenados = ordenarUnicosPorPosicao(blocosBase, selecionados)
+  if (ordenados.length <= 1) return ordenados
+
+  const resultado = []
+  let indiceAnterior = -1
+  for (const node of ordenados) {
+    const indiceAtual = blocosBase.indexOf(node)
+    if (
+      indiceAnterior >= 0 &&
+      indiceAtual > indiceAnterior + 1 &&
+      blocosBase.slice(indiceAnterior + 1, indiceAtual).some(nodeTemConteudoRecorte)
+    ) {
+      resultado.push({ type: 'recorteOmissao' })
+    }
+    resultado.push(node)
+    indiceAnterior = indiceAtual
+  }
+  const limiteFim = fimOmissaoAte == null ? blocosBase.length : fimOmissaoAte
+  if (
+    indiceAnterior >= 0 &&
+    indiceAnterior < limiteFim - 1 &&
+    blocosBase.slice(indiceAnterior + 1, limiteFim).some(nodeTemConteudoRecorte)
+  ) {
+    resultado.push({ type: 'recorteOmissao' })
+  }
+  return resultado
+}
+
+function extrairDetalheArtigo(blocosArtigo, detalhe, escopo) {
+  if (!detalhe || detalhe.tipo === 'caput') return []
+  if (detalhe.tipo === 'inciso') return extrairInciso(blocosArtigo, detalhe.inciso, escopo)
+  if (detalhe.tipo === 'incisosRange') return extrairIncisos(blocosArtigo, detalhe.incisoInicio, detalhe.incisoFim, escopo)
+  if (detalhe.tipo === 'incisosLista') return extrairIncisosLista(blocosArtigo, detalhe.incisos, escopo)
+  if (detalhe.tipo === 'alineaDeInciso') return extrairAlineaDeInciso(blocosArtigo, detalhe.inciso, detalhe.alinea, escopo)
+  if (detalhe.tipo === 'alineasRangeDeInciso') return extrairAlineasDeInciso(blocosArtigo, detalhe.inciso, detalhe.alineaInicio, detalhe.alineaFim, escopo)
+  if (detalhe.tipo === 'alineasListaDeInciso') return extrairAlineasListaDeInciso(blocosArtigo, detalhe.inciso, detalhe.alineas, escopo)
+  return []
+}
+
+function extrairGrupoArtigo(blocosArtigo, itens) {
+  const selecionados = [blocosArtigo[0]]
+  for (const item of itens) {
+    if (item.escopo === 'paragrafo') {
+      const escopo = limitesEscopoParagrafo(blocosArtigo, item.paragrafo)
+      if (!escopo) continue
+      adicionarUnicos(selecionados, [blocosArtigo[escopo.paragrafoIndex]])
+      adicionarUnicos(selecionados, extrairDetalheArtigo(blocosArtigo, item, escopo))
+      continue
+    }
+    adicionarUnicos(selecionados, extrairDetalheArtigo(blocosArtigo, item, limitesEscopoArtigo(blocosArtigo)))
+  }
+  return selecionados
+}
+
+function extrairRecortesDaNorma(doc, especificacao) {
+  const blocos = blocosDaNorma(doc)
+  const indice = montarIndiceArtigos(blocos)
+  const entradas = dividirEntradasRecorte(especificacao)
+
+  return entradas.map(entrada => {
+    const parsed = parseItemRecorte(entrada)
+    if (parsed.erro) return { entrada, erro: parsed.erro, textos: [] }
+
+    if (parsed.tipo === 'artigosRange') {
+      const ini = numeroArtigoComoInteiro(parsed.inicio)
+      const fim = numeroArtigoComoInteiro(parsed.fim)
+      if (ini == null || fim == null) return { entrada, erro: 'Intervalo de artigos inválido.', textos: [] }
+      const artigosSelecionados = indice
+        .filter(art => {
+          const n = numeroArtigoComoInteiro(art.numero)
+          return n != null && n >= ini && n <= fim
+        })
+      const selecionados = artigosSelecionados.flatMap(art => extrairBlocosArtigo(blocos, art))
+      const primeiroArtigo = artigosSelecionados[0]
+      const ultimoArtigo = artigosSelecionados[artigosSelecionados.length - 1]
+      const comHeadings = primeiroArtigo
+        ? [...headingsDoArtigo(blocos, primeiroArtigo.inicio), ...selecionados]
+        : selecionados
+      const exibidos = ultimoArtigo
+        ? inserirMarcadoresOmissao(blocos, comHeadings, ultimoArtigo.fim)
+        : comHeadings
+      return { entrada, textos: exibidos.map(textoNoRecorte), total: selecionados.length }
+    }
+
+    const artigo = encontrarArtigo(indice, parsed.numero)
+    if (!artigo) return { entrada, erro: `Artigo ${parsed.numero} não encontrado.`, textos: [] }
+    const blocosArtigo = extrairBlocosArtigo(blocos, artigo)
+    let selecionados = []
+
+    if (parsed.tipo === 'artigoInteiro') selecionados = blocosArtigo
+    if (parsed.tipo === 'caput') selecionados = blocosArtigo.slice(0, 1)
+    if (parsed.tipo === 'inciso') selecionados = [blocosArtigo[0], ...extrairInciso(blocosArtigo, parsed.inciso)]
+    if (parsed.tipo === 'incisosRange') selecionados = [blocosArtigo[0], ...extrairIncisos(blocosArtigo, parsed.incisoInicio, parsed.incisoFim)]
+    if (parsed.tipo === 'incisosLista') selecionados = [blocosArtigo[0], ...extrairIncisosLista(blocosArtigo, parsed.incisos)]
+    if (parsed.tipo === 'alineaDeInciso') selecionados = [blocosArtigo[0], ...extrairAlineaDeInciso(blocosArtigo, parsed.inciso, parsed.alinea)]
+    if (parsed.tipo === 'alineasRangeDeInciso') selecionados = [blocosArtigo[0], ...extrairAlineasDeInciso(blocosArtigo, parsed.inciso, parsed.alineaInicio, parsed.alineaFim)]
+    if (parsed.tipo === 'alineasListaDeInciso') selecionados = [blocosArtigo[0], ...extrairAlineasListaDeInciso(blocosArtigo, parsed.inciso, parsed.alineas)]
+    if (parsed.tipo === 'artigoGrupo') selecionados = extrairGrupoArtigo(blocosArtigo, parsed.itens)
+    const comHeadings = [...headingsDoArtigo(blocos, artigo.inicio), ...selecionados]
+    const exibidos = inserirMarcadoresOmissao(blocos, comHeadings, artigo.fim)
+
+    return {
+      entrada,
+      erro: selecionados.length <= 1 && parsed.tipo !== 'caput' ? 'Nenhum dispositivo específico encontrado no artigo.' : null,
+      textos: exibidos.map(textoNoRecorte),
+      total: selecionados.length,
+    }
+  })
+}
+
 export default function PublicacaoPage() {
   const { id } = useParams()
   const nav    = useNavigate()
@@ -104,6 +655,12 @@ export default function PublicacaoPage() {
   const [todasTags, setTodasTags] = useState([])
   const [criandoNorma, setCriandoNorma] = useState(false)
   const [erroNovaNorma, setErroNovaNorma] = useState('')
+  const [recorteNormaId, setRecorteNormaId] = useState('')
+  const [recorteDispositivos, setRecorteDispositivos] = useState('')
+  const [recorteErro, setRecorteErro] = useState('')
+  const [recorteCarregando, setRecorteCarregando] = useState(false)
+  const [recorteAjudaAberta, setRecorteAjudaAberta] = useState(false)
+  const [modalResultadoRecorte, setModalResultadoRecorte] = useState(null)
 
   // Modal nova seção
   const [modalSecao,    setModalSecao]    = useState(false)
@@ -257,6 +814,11 @@ export default function PublicacaoPage() {
     setNovaNormaTagInput('')
     setNovaNormaSugestoes([])
     setErroNovaNorma('')
+    setRecorteNormaId('')
+    setRecorteDispositivos('')
+    setRecorteErro('')
+    setRecorteCarregando(false)
+    setRecorteAjudaAberta(false)
   }
 
   function fecharModalNorma() {
@@ -356,6 +918,36 @@ export default function PublicacaoPage() {
       setErroNovaNorma(err.message || 'Erro ao criar norma.')
     } finally {
       setCriandoNorma(false)
+    }
+  }
+
+  async function testarRecorteNorma(e) {
+    e.preventDefault()
+    if (!recorteNormaId) {
+      setRecorteErro('Selecione a norma de origem.')
+      return
+    }
+    if (!recorteDispositivos.trim()) {
+      setRecorteErro('Informe os dispositivos do recorte.')
+      return
+    }
+
+    setRecorteCarregando(true)
+    setRecorteErro('')
+    try {
+      const norma = await window.legislator.normas.buscar(parseInt(recorteNormaId, 10))
+      if (!norma) throw new Error('Norma de origem não encontrada.')
+      const doc = norma.conteudo_doc ? JSON.parse(norma.conteudo_doc) : { type: 'doc', content: [] }
+      const itens = extrairRecortesDaNorma(doc, recorteDispositivos)
+      setModalResultadoRecorte({
+        norma,
+        especificacao: recorteDispositivos,
+        itens,
+      })
+    } catch (err) {
+      setRecorteErro(err?.message || 'Não foi possível gerar o recorte.')
+    } finally {
+      setRecorteCarregando(false)
     }
   }
 
@@ -608,10 +1200,9 @@ export default function PublicacaoPage() {
                         title="Abrir no editor"
                         onClick={() => nav(`/editor/${n.norma_id}`)}
                       >
-                        <span className="pub-norma-tipo">{n.tipo}</span>
-                        <span className={`pub-norma-status pub-norma-status-${st.cls}`}>{st.label}</span>
                         <span className="pub-norma-epigrafe"><AvisoAtualizacaoPendente norma={n} />{n.epigrafe}</span>
                         {n.apelido && <span className="pub-norma-apelido">{n.apelido}</span>}
+                        <span className={`pub-norma-status pub-norma-status-${st.cls}`}>{st.label}</span>
                       </div>
                       <div className="pub-norma-exportacao">
                         <select
@@ -661,6 +1252,13 @@ export default function PublicacaoPage() {
               </button>
               <button
                 type="button"
+                className={abaModalNorma === 'recorte' ? 'ativa' : ''}
+                onClick={() => setAbaModalNorma('recorte')}
+              >
+                Adicionar recorte de norma
+              </button>
+              <button
+                type="button"
                 className={abaModalNorma === 'nova' ? 'ativa' : ''}
                 onClick={() => setAbaModalNorma('nova')}
               >
@@ -668,7 +1266,7 @@ export default function PublicacaoPage() {
               </button>
             </div>
             <div className="modal-norma-picker-body">
-              {abaModalNorma === 'catalogo' ? (
+              {abaModalNorma === 'catalogo' && (
                 <>
                   <div className="modal-norma-filtros">
                     <input
@@ -709,7 +1307,76 @@ export default function PublicacaoPage() {
                     })}
                   </div>
                 </>
-              ) : (
+              )}
+              {abaModalNorma === 'recorte' && (
+                <form className="modal-recorte-norma-form" onSubmit={testarRecorteNorma}>
+                  <div className="campo">
+                    <label>Norma de origem *</label>
+                    <select
+                      value={recorteNormaId}
+                      onChange={e => setRecorteNormaId(e.target.value)}
+                    >
+                      <option value="">Selecione uma norma...</option>
+                      {normasDisponiveis.map(n => (
+                        <option key={n.id} value={n.id}>
+                          {n.atualizacao_pendente ? '⚠️ ' : ''}{n.epigrafe}{n.apelido ? ` (${n.apelido})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="campo">
+                    <div className="modal-recorte-label-linha">
+                      <label>Dispositivos do recorte *</label>
+                      <button
+                        type="button"
+                        className="modal-recorte-help-btn"
+                        onClick={() => setRecorteAjudaAberta(v => !v)}
+                        aria-expanded={recorteAjudaAberta}
+                        title="Ver exemplos de fórmula de extração"
+                      >
+                        ?
+                      </button>
+                    </div>
+                    <textarea
+                      rows={5}
+                      value={recorteDispositivos}
+                      onChange={e => setRecorteDispositivos(e.target.value)}
+                      placeholder={'Ex: Art. 11; Art. 14, caput; Art. 23, III a V; Art. 34 { V, "b"; VII, "b" a "e" }; Art. 60 { §4º, II }; Arts. 38 a 41'}
+                    />
+                  </div>
+
+                  {recorteAjudaAberta && (
+                    <div className="modal-recorte-help">
+                      <strong>Exemplos de fórmula</strong>
+                      <ul>
+                        <li><code>Art. 11</code><span>artigo inteiro</span></li>
+                        <li><code>Art. 14, caput</code><span>somente o texto inicial do artigo</span></li>
+                        <li><code>Art. 5º {'{'} I, II, V {'}'}</code><span>incisos específicos</span></li>
+                        <li><code>Art. 23, III a V</code><span>intervalo de incisos</span></li>
+                        <li><code>Art. 34 {'{'} VII, "a", "b", "d" {'}'}</code><span>alíneas soltas do mesmo inciso</span></li>
+                        <li><code>Art. 34 {'{'} VII, "b" a "e" {'}'}</code><span>intervalo de alíneas</span></li>
+                        <li><code>Art. 60 {'{'} §4º, II {'}'}</code><span>inciso dentro de parágrafo</span></li>
+                        <li><code>Arts. 38 a 41</code><span>intervalo de artigos completos</span></li>
+                      </ul>
+                    </div>
+                  )}
+
+                  <p className="modal-recorte-ajuda">
+                    Separe artigos por ponto e vírgula. Use chaves para recortar vários dispositivos do mesmo artigo, inclusive incisos dentro de parágrafos.
+                  </p>
+
+                  {recorteErro && <p className="form-erro">{recorteErro}</p>}
+
+                  <div className="form-acoes">
+                    <button type="button" className="btn-ghost" onClick={fecharModalNorma}>Cancelar</button>
+                    <button type="submit" className="btn-primary" disabled={recorteCarregando || !recorteNormaId || !recorteDispositivos.trim()}>
+                      {recorteCarregando ? 'Extraindo...' : 'Testar extração'}
+                    </button>
+                  </div>
+                </form>
+              )}
+              {abaModalNorma === 'nova' && (
                 <form className="modal-nova-norma-form" onSubmit={criarNormaEAdicionar}>
                   <div className="campo">
                     <label>Tipo *</label>
@@ -780,6 +1447,45 @@ export default function PublicacaoPage() {
       )}
 
       {/* ── Modal: nova seção ──────────────────────────────────── */}
+      {modalResultadoRecorte && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalResultadoRecorte(null) }}>
+          <div className="modal-box modal-recorte-resultado" onMouseDown={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Resultado do recorte</h3>
+              <button className="btn-ghost modal-fechar" onClick={() => setModalResultadoRecorte(null)}>×</button>
+            </div>
+            <div className="modal-recorte-resultado-corpo">
+              <div className="modal-recorte-resumo">
+                <strong>{modalResultadoRecorte.norma.epigrafe}</strong>
+                {modalResultadoRecorte.norma.apelido && <span>{modalResultadoRecorte.norma.apelido}</span>}
+                <code>{modalResultadoRecorte.especificacao}</code>
+              </div>
+
+              <div className="modal-recorte-resultados">
+                {modalResultadoRecorte.itens.map((item, idx) => (
+                  <section key={`${item.entrada}-${idx}`} className={`modal-recorte-item${item.erro ? ' com-erro' : ''}`}>
+                    <header>
+                      <span>{idx + 1}</span>
+                      <strong>{item.entrada}</strong>
+                      {!item.erro && <em>{item.total || item.textos.length} bloco(s)</em>}
+                    </header>
+                    {item.erro ? (
+                      <p className="form-erro">{item.erro}</p>
+                    ) : (
+                      <ul>
+                        {item.textos.map((texto, textoIdx) => (
+                          <li key={`${idx}-${textoIdx}`}>{texto || '—'}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {modalSecao && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalSecao(false) }}>
           <div className="modal-box" style={{ width: 'min(380px, 96vw)' }} onMouseDown={e => e.stopPropagation()}>
