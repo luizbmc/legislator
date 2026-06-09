@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS publicacoes (
   organizador   TEXT,
   lancado_em    TEXT,
   descricao     TEXT,
+  caminho_rede  TEXT,
   status        TEXT NOT NULL DEFAULT 'previsto',
   cor_capa      TEXT,
   criado_em     TEXT NOT NULL DEFAULT (datetime('now')),

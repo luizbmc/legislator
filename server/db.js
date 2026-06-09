@@ -82,6 +82,8 @@ CREATE TABLE IF NOT EXISTS publicacoes (
   organizador   TEXT,
   lancado_em    TEXT,
   descricao     TEXT,
+  caminho_rede  TEXT,
+  cor_capa      TEXT,
   status        TEXT DEFAULT 'previsto',
   ultima_edicao INTEGER DEFAULT 0,
   criado_em     TEXT,
@@ -248,6 +250,14 @@ async function init() {
   if (!colsPub.includes('ultima_edicao')) {
     _sqlDb.exec('ALTER TABLE publicacoes ADD COLUMN ultima_edicao INTEGER DEFAULT 0')
     console.log('Migration: coluna ultima_edicao adicionada a publicacoes')
+  }
+  if (!colsPub.includes('cor_capa')) {
+    _sqlDb.exec('ALTER TABLE publicacoes ADD COLUMN cor_capa TEXT')
+    console.log('Migration: coluna cor_capa adicionada a publicacoes')
+  }
+  if (!colsPub.includes('caminho_rede')) {
+    _sqlDb.exec('ALTER TABLE publicacoes ADD COLUMN caminho_rede TEXT')
+    console.log('Migration: coluna caminho_rede adicionada a publicacoes')
   }
 
   flush()

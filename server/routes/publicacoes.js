@@ -59,7 +59,7 @@ router.get('/', (req, res) => {
     if (busca && busca.trim()) {
       const term = `%${busca.trim()}%`
       where += ` AND (
-        p.titulo LIKE ? OR p.edicao LIKE ? OR p.organizador LIKE ? OR p.descricao LIKE ? OR
+        p.titulo LIKE ? OR p.edicao LIKE ? OR p.organizador LIKE ? OR p.descricao LIKE ? OR p.caminho_rede LIKE ? OR
         EXISTS (
           SELECT 1
           FROM publicacao_secoes ps2
@@ -69,7 +69,7 @@ router.get('/', (req, res) => {
             AND (n2.epigrafe LIKE ? OR n2.apelido LIKE ? OR n2.ementa LIKE ?)
         )
       )`
-      params.push(term, term, term, term, term, term, term)
+      params.push(term, term, term, term, term, term, term, term)
     }
     if (status) {
       where += ' AND p.status = ?'
@@ -108,13 +108,13 @@ router.get('/:id', (req, res) => {
 // POST / — criar publicação
 router.post('/', (req, res) => {
   try {
-    const { titulo, edicao, organizador, lancado_em, descricao, status, ultima_edicao } = req.body
+    const { titulo, edicao, organizador, lancado_em, descricao, caminho_rede, cor_capa, status, ultima_edicao } = req.body
     const agora = new Date().toISOString()
 
     const result = db.prepare(`
-      INSERT INTO publicacoes (titulo, edicao, organizador, lancado_em, descricao, status, ultima_edicao, criado_em, atualizado_em)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(titulo, edicao, organizador, lancado_em, descricao, status || 'previsto', ultima_edicao ? 1 : 0, agora, agora)
+      INSERT INTO publicacoes (titulo, edicao, organizador, lancado_em, descricao, caminho_rede, cor_capa, status, ultima_edicao, criado_em, atualizado_em)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(titulo, edicao, organizador, lancado_em, descricao, caminho_rede || null, cor_capa || null, status || 'previsto', ultima_edicao ? 1 : 0, agora, agora)
 
     const pubId = result.lastInsertRowid
 
@@ -135,14 +135,14 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const id = req.params.id
-    const { titulo, edicao, organizador, lancado_em, descricao, status, ultima_edicao, secoes } = req.body
+    const { titulo, edicao, organizador, lancado_em, descricao, caminho_rede, cor_capa, status, ultima_edicao, secoes } = req.body
     const agora = new Date().toISOString()
 
     db.prepare(`
       UPDATE publicacoes
-      SET titulo = ?, edicao = ?, organizador = ?, lancado_em = ?, descricao = ?, status = ?, ultima_edicao = ?, atualizado_em = ?
+      SET titulo = ?, edicao = ?, organizador = ?, lancado_em = ?, descricao = ?, caminho_rede = ?, cor_capa = ?, status = ?, ultima_edicao = ?, atualizado_em = ?
       WHERE id = ?
-    `).run(titulo, edicao, organizador, lancado_em, descricao, status, ultima_edicao ? 1 : 0, agora, id)
+    `).run(titulo, edicao, organizador, lancado_em, descricao, caminho_rede || null, cor_capa || null, status, ultima_edicao ? 1 : 0, agora, id)
 
     if (secoes) {
       salvarSecoes(id, secoes)
@@ -174,14 +174,16 @@ router.post('/:id/duplicar', (req, res) => {
     const agora = new Date().toISOString()
 
     const result = db.prepare(`
-      INSERT INTO publicacoes (titulo, edicao, organizador, lancado_em, descricao, status, ultima_edicao, criado_em, atualizado_em)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO publicacoes (titulo, edicao, organizador, lancado_em, descricao, caminho_rede, cor_capa, status, ultima_edicao, criado_em, atualizado_em)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       `Cópia de ${original.titulo}`,
       original.edicao,
       original.organizador,
       original.lancado_em,
       original.descricao,
+      original.caminho_rede || null,
+      original.cor_capa || null,
       original.status,
       original.ultima_edicao ? 1 : 0,
       agora,

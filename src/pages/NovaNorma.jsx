@@ -18,7 +18,6 @@ function formInicial(origem) {
       link_acesso: '',
       anexo: '',
       observacoes: '',
-      caminho_rede: '',
     }
   }
 
@@ -34,7 +33,6 @@ function formInicial(origem) {
     link_acesso: origem.link_acesso || '',
     anexo: origem.anexo || '',
     observacoes: origem.observacoes || '',
-    caminho_rede: origem.caminho_rede || '',
   }
 }
 
@@ -223,15 +221,6 @@ export default function NovaNorma() {
                 onChange={set('observacoes')}
               />
             </div>
-          </div>
-
-          <div className="campo">
-            <label>Caminho na rede <span className="campo-opcional">(opcional)</span></label>
-            <input
-              placeholder={'Ex: \\\\servidor\\pasta\\norma.docx'}
-              value={form.caminho_rede}
-              onChange={set('caminho_rede')}
-            />
           </div>
 
           <div className="campo">

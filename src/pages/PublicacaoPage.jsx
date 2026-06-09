@@ -84,7 +84,7 @@ export default function PublicacaoPage() {
   const nav    = useNavigate()
 
   const [pub,       setPub]       = useState(null)
-  const [form,      setForm]      = useState({ titulo: '', edicao: '', organizador: '', lancado_em: '', descricao: '', status: 'previsto', cor_capa: DEFAULT_COVER_COLOR, ultima_edicao: false })
+  const [form,      setForm]      = useState({ titulo: '', edicao: '', organizador: '', lancado_em: '', descricao: '', caminho_rede: '', status: 'previsto', cor_capa: DEFAULT_COVER_COLOR, ultima_edicao: false })
   const [secoes,    setSecoes]    = useState([])
   const [salvando,  setSalvando]  = useState(false)
   const [modificado,setModificado]= useState(false)
@@ -124,6 +124,7 @@ export default function PublicacaoPage() {
       organizador: data.organizador ?? '',
       lancado_em:  data.lancado_em  ?? '',
       descricao:   data.descricao   ?? '',
+      caminho_rede: data.caminho_rede ?? '',
       status:      data.status      ?? 'previsto',
       cor_capa:    data.cor_capa    ?? DEFAULT_COVER_COLOR,
       ultima_edicao: Boolean(data.ultima_edicao),
@@ -472,6 +473,14 @@ export default function PublicacaoPage() {
             <div className="campo pub-meta-descricao">
               <label>Descrição</label>
               <textarea rows={3} value={form.descricao} onChange={setField('descricao')} placeholder="Descrição da publicação…" />
+            </div>
+            <div className="campo">
+              <label>Caminho na rede</label>
+              <input
+                value={form.caminho_rede}
+                onChange={setField('caminho_rede')}
+                placeholder={'Ex: \\\\servidor\\pasta\\publicacao.indd'}
+              />
             </div>
             <div className="campo">
               <label>Status</label>

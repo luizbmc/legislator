@@ -619,7 +619,6 @@ export default function Editor() {
     link_acesso: '',
     anexo: '',
     observacoes: '',
-    caminho_rede: '',
   })
   const [editTags,              setEditTags]              = useState([])
   const [editTagInput,          setEditTagInput]          = useState('')
@@ -827,8 +826,85 @@ export default function Editor() {
     setModalNotaRodape(true)
   }
 
+  function localizarBlocoExcecao(exc) {
+    if (!editor || !exc) return null
+    let linhaAtual = 0
+    let bloco = null
+
+    editor.state.doc.forEach((node, offset) => {
+      if (bloco) return
+      if (node.type?.name === 'table') return
+      linhaAtual++
+      if (linhaAtual !== exc.linha) return
+      bloco = {
+        node,
+        from: offset + 1,
+        to: offset + node.nodeSize - 1,
+      }
+    })
+
+    return bloco
+  }
+
+  function posicaoDocPorOffsetTexto(bloco, offsetTexto) {
+    if (!editor || !bloco) return null
+    const alvo = Math.max(0, Number(offsetTexto) || 0)
+    let acumulado = 0
+    let posicao = null
+
+    editor.state.doc.descendants((node, pos) => {
+      if (posicao != null) return false
+      if (pos < bloco.from || pos > bloco.to) return true
+
+      if (node.isText && node.text) {
+        const len = node.text.length
+        if (alvo <= acumulado + len) {
+          posicao = pos + Math.max(0, alvo - acumulado)
+          return false
+        }
+        acumulado += len
+        return false
+      }
+
+      if (node.type?.name === 'hardBreak') {
+        if (alvo <= acumulado + 1) {
+          posicao = pos
+          return false
+        }
+        acumulado += 1
+        return false
+      }
+
+      return true
+    })
+
+    return posicao ?? bloco.to
+  }
+
+  function localizarExcecaoNoEditor(exc) {
+    const bloco = localizarBlocoExcecao(exc)
+    if (!bloco) return exc
+
+    const texto = bloco.node.textContent || ''
+    let inicio = Number.isFinite(exc.alvoInicio) ? exc.alvoInicio : null
+    let fim = Number.isFinite(exc.alvoFim) ? exc.alvoFim : null
+
+    if (inicio == null || fim == null || inicio < 0 || fim <= inicio || inicio > texto.length) {
+      const alvo = exc.alvoTexto || exc.texto || ''
+      const idx = alvo ? texto.indexOf(alvo) : -1
+      inicio = idx >= 0 ? idx : 0
+      fim = idx >= 0 ? idx + alvo.length : Math.min(texto.length, 80)
+    }
+
+    const from = posicaoDocPorOffsetTexto(bloco, inicio)
+    const to = posicaoDocPorOffsetTexto(bloco, fim)
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return exc
+
+    return { ...exc, from, to }
+  }
+
   function receberExcecoesDetectadas(lista = []) {
-    const normalizadas = Array.isArray(lista) ? lista : []
+    const normalizadas = (Array.isArray(lista) ? lista : []).map(localizarExcecaoNoEditor)
     setExcecoes(normalizadas)
     const temPendentes = normalizadas.some(exc => !exc.resolvida)
     setExcecoesAberto(temPendentes)
@@ -1116,7 +1192,6 @@ export default function Editor() {
       link_acesso: norma.link_acesso ?? '',
       anexo: norma.anexo ?? '',
       observacoes: norma.observacoes ?? '',
-      caminho_rede: norma.caminho_rede ?? '',
     })
     setEditTags(norma.tags ?? [])
     setEditTagInput('')
@@ -2386,14 +2461,6 @@ export default function Editor() {
                     onChange={e => setEditForm(f => ({ ...f, observacoes: e.target.value }))}
                   />
                 </div>
-              </div>
-              <div className="campo">
-                <label>Caminho na rede <span className="campo-opcional">(opcional)</span></label>
-                <input
-                  placeholder={'Ex: \\\\servidor\\pasta\\norma.docx'}
-                  value={editForm.caminho_rede}
-                  onChange={e => setEditForm(f => ({ ...f, caminho_rede: e.target.value }))}
-                />
               </div>
               <div className="campo">
                 <label>Tags <span className="campo-opcional">(opcional)</span></label>

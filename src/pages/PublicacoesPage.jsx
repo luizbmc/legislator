@@ -18,6 +18,7 @@ const FORM_PUBLICACAO_VAZIO = {
   organizador: '',
   lancado_em: '',
   descricao: '',
+  caminho_rede: '',
   status: 'previsto',
   cor_capa: '',
   ultima_edicao: false,
@@ -94,6 +95,7 @@ export default function PublicacoesPage() {
         organizador: origem.organizador || '',
         lancado_em: origem.lancado_em || '',
         descricao: origem.descricao || '',
+        caminho_rede: origem.caminho_rede || '',
         status: origem.status || 'previsto',
         cor_capa: origem.cor_capa || '',
         ultima_edicao: Boolean(origem.ultima_edicao),
@@ -285,6 +287,14 @@ export default function PublicacoesPage() {
               <div className="campo">
                 <label>Descrição <span className="campo-opcional">(opcional)</span></label>
                 <textarea rows={3} value={form.descricao} onChange={set('descricao')} placeholder="Descrição da publicação…" />
+              </div>
+              <div className="campo">
+                <label>Caminho na rede <span className="campo-opcional">(opcional)</span></label>
+                <input
+                  value={form.caminho_rede}
+                  onChange={set('caminho_rede')}
+                  placeholder={'Ex: \\\\servidor\\pasta\\publicacao.indd'}
+                />
               </div>
               <div className="campo">
                 <label>Status</label>

@@ -132,7 +132,7 @@ export function registerPublicacoesHandlers() {
     if (busca && busca.trim()) {
       const term = '%' + busca.trim() + '%'
       where += ` AND (
-        p.titulo LIKE ? OR p.edicao LIKE ? OR p.organizador LIKE ? OR p.descricao LIKE ? OR
+        p.titulo LIKE ? OR p.edicao LIKE ? OR p.organizador LIKE ? OR p.descricao LIKE ? OR p.caminho_rede LIKE ? OR
         EXISTS (
           SELECT 1
           FROM publicacao_secoes ps2
@@ -142,7 +142,7 @@ export function registerPublicacoesHandlers() {
             AND (n2.epigrafe LIKE ? OR n2.apelido LIKE ? OR n2.ementa LIKE ?)
         )
       )`
-      params.push(term, term, term, term, term, term, term)
+      params.push(term, term, term, term, term, term, term, term)
     }
     if (status) {
       where += ' AND p.status = ?'
@@ -154,6 +154,7 @@ export function registerPublicacoesHandlers() {
 
     return db.prepare(`
       SELECT p.id, p.titulo, p.edicao, p.organizador, p.lancado_em, p.status, p.cor_capa, p.ultima_edicao,
+             p.caminho_rede,
              p.criado_em, p.atualizado_em,
              COUNT(DISTINCT ps.id)  AS total_secoes,
              COUNT(DISTINCT pn.id)  AS total_normas
@@ -172,12 +173,12 @@ export function registerPublicacoesHandlers() {
   })
 
   // ── Criar ────────────────────────────────────────────────────────
-  ipcMain.handle('publicacoes:criar', (_, { titulo, edicao, organizador, lancado_em, descricao, status, cor_capa, ultima_edicao }) => {
+  ipcMain.handle('publicacoes:criar', (_, { titulo, edicao, organizador, lancado_em, descricao, caminho_rede, status, cor_capa, ultima_edicao }) => {
     const db  = getDb()
     const res = db.prepare(`
-      INSERT INTO publicacoes (titulo, edicao, organizador, lancado_em, descricao, status, cor_capa, ultima_edicao)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(titulo, edicao || null, organizador || null, lancado_em || null, descricao || null, status || 'previsto', cor_capa || null, ultima_edicao ? 1 : 0)
+      INSERT INTO publicacoes (titulo, edicao, organizador, lancado_em, descricao, caminho_rede, status, cor_capa, ultima_edicao)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(titulo, edicao || null, organizador || null, lancado_em || null, descricao || null, caminho_rede || null, status || 'previsto', cor_capa || null, ultima_edicao ? 1 : 0)
 
     const id = res.lastInsertRowid
     const criarSecoes = db.transaction(() => {
@@ -189,7 +190,7 @@ export function registerPublicacoesHandlers() {
   })
 
   // ── Salvar (metadata + seções) ───────────────────────────────────
-  ipcMain.handle('publicacoes:salvar', (_, id, { titulo, edicao, organizador, lancado_em, descricao, status, cor_capa, ultima_edicao, secoes }) => {
+  ipcMain.handle('publicacoes:salvar', (_, id, { titulo, edicao, organizador, lancado_em, descricao, caminho_rede, status, cor_capa, ultima_edicao, secoes }) => {
     const db = getDb()
 
     const salvar = db.transaction(() => {
@@ -200,12 +201,13 @@ export function registerPublicacoesHandlers() {
           organizador   = ?,
           lancado_em    = ?,
           descricao     = ?,
+          caminho_rede  = ?,
           status        = ?,
           cor_capa      = ?,
           ultima_edicao = ?,
           atualizado_em = datetime('now')
         WHERE id = ?
-      `).run(titulo, edicao || null, organizador || null, lancado_em || null, descricao || null, status || 'previsto', cor_capa || null, ultima_edicao ? 1 : 0, id)
+      `).run(titulo, edicao || null, organizador || null, lancado_em || null, descricao || null, caminho_rede || null, status || 'previsto', cor_capa || null, ultima_edicao ? 1 : 0, id)
 
       salvarSecoes(db, id, secoes ?? [])
     })
@@ -228,11 +230,11 @@ export function registerPublicacoesHandlers() {
 
     const duplicar = db.transaction(() => {
       const res = db.prepare(`
-        INSERT INTO publicacoes (titulo, edicao, organizador, lancado_em, descricao, status, cor_capa, ultima_edicao)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO publicacoes (titulo, edicao, organizador, lancado_em, descricao, caminho_rede, status, cor_capa, ultima_edicao)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         `Cópia de ${ori.titulo}`,
-        ori.edicao, ori.organizador, ori.lancado_em, ori.descricao, ori.status || 'previsto', ori.cor_capa || null, ori.ultima_edicao ? 1 : 0
+        ori.edicao, ori.organizador, ori.lancado_em, ori.descricao, ori.caminho_rede || null, ori.status || 'previsto', ori.cor_capa || null, ori.ultima_edicao ? 1 : 0
       )
       salvarSecoes(db, res.lastInsertRowid, ori.secoes)
       return res.lastInsertRowid

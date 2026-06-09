@@ -13,6 +13,25 @@ function temMarca(node, nome) {
 
 const RE_TERMO_ITALICO_OBRIGATORIO = /\b(?:Diário|[Cc]aput|DOU)\b/
 
+function alvoRegex(texto, regex) {
+  const match = String(texto || '').match(regex)
+  if (!match || match.index == null) return null
+  return {
+    inicio: match.index,
+    fim: match.index + match[0].length,
+    texto: match[0],
+  }
+}
+
+function alvoTextoInteiro(texto) {
+  const valor = String(texto || '')
+  return {
+    inicio: 0,
+    fim: valor.length,
+    texto: valor,
+  }
+}
+
 function temTermoSemItalico(linha) {
   if (!linha.content?.length) {
     return RE_TERMO_ITALICO_OBRIGATORIO.test(linha.text || '')
@@ -31,12 +50,14 @@ const PADROES = [
     tipo: 'ordinal_antigo',
     descricao: 'Ordinal na grafia antiga (1o, 2a) — use 1º, 2ª',
     test: l => /\b\d+[oa]\b/.test(l.text),
+    alvo: l => alvoRegex(l.text, /\b\d+[oa]\b/),
     estilosExcluidos: ['assinatura-nome', 'assinatura-data', 'assinatura', 'data'],
   },
   {
     tipo: 'traco_simples_inciso',
     descricao: 'Traço simples (-) em inciso — use travessão (–)',
     test: l => l.style === 'inciso' && /^[IVXLCDM]+(?:-[A-Z])? - /.test(l.text),
+    alvo: l => alvoRegex(l.text, / - /),
   },
   {
     // Artigos 1–9 devem ter º logo após o número (ex: "Art. 5º")
@@ -53,6 +74,7 @@ const PADROES = [
       const seg = l.text[m[0].length] ?? ''
       return !/[º°]/.test(seg)
     },
+    alvo: l => alvoRegex(l.text, /^Arts?\.\s+\d+(?:\.\d{3})*/),
   },
   {
     // Artigos 10+ não têm º, mas devem ter ponto após o número (ex: "Art. 169. texto")
@@ -70,6 +92,7 @@ const PADROES = [
       const seg = l.text[m[0].length] ?? ''
       return seg !== '.' && seg !== '-'
     },
+    alvo: l => alvoRegex(l.text, /^Art\.\s+\d+(?:\.\d{3})*/),
   },
   {
     // Parágrafos §1–§9 devem ter º logo após o número (ex: "§ 5º")
@@ -83,6 +106,7 @@ const PADROES = [
       const seg = l.text[m[0].length] ?? ''
       return !/[º°]/.test(seg)
     },
+    alvo: l => alvoRegex(l.text, /^§{1,2}\s*\d+/),
   },
   {
     // Parágrafos §10+ não têm º, mas devem ter ponto após o número (ex: "§ 10. texto")
@@ -96,11 +120,13 @@ const PADROES = [
       const seg = l.text[m[0].length] ?? ''
       return seg !== '.' && seg !== '-'
     },
+    alvo: l => alvoRegex(l.text, /^§{1,2}\s*\d+/),
   },
   {
     tipo: 'alinea_sem_parentese',
     descricao: 'Possível alínea sem fechamento de parêntese',
     test: l => /^[a-z]\s+[^)]/.test(l.text) && l.style === 'texto-lei',
+    alvo: l => alvoRegex(l.text, /^[a-z]/),
   },
   {
     tipo: 'parenteses_desbalanceados',
@@ -120,12 +146,14 @@ const PADROES = [
       const f = (texto.match(/\)/g) || []).length
       return a !== f
     },
+    alvo: l => alvoRegex(l.text, /\(|\)/) || alvoTextoInteiro(l.text),
     estilosExcluidos: ['vazio'],
   },
   {
     tipo: 'linha_nao_classificada',
     descricao: 'Linha toda em maiúsculas não reconhecida como título',
     test: l => l.style === 'texto-lei' && /^[A-ZÁÉÍÓÚÂÊÔÎÛÀÈÌÒÙÃÕÇ\s\-]{15,}$/.test(l.text),
+    alvo: l => alvoTextoInteiro(l.text),
   },
   {
     // Caractere inicial inesperado — possível artefato de conversão (ex.: ¬, •, →)
@@ -138,12 +166,14 @@ const PADROES = [
       const first = l.text[0]
       return !!first && !/[a-záéíóúâêôîûàèìòùãõçA-ZÁÉÍÓÚÂÊÔÎÛÀÈÌÒÙÃÕÇ0-9§("'«\[]/.test(first)
     },
+    alvo: l => l.text ? { inicio: 0, fim: 1, texto: l.text[0] } : null,
     estilosExcluidos: ['vazio', 'citacao'],
   },
   {
     tipo: 'termo_sem_italico',
     descricao: 'Diário, Caput, caput ou DOU sem itálico',
     test: temTermoSemItalico,
+    alvo: l => alvoRegex(l.text, RE_TERMO_ITALICO_OBRIGATORIO),
   },
   {
     // Parágrafo com texto livre que não foi reconhecido como nenhuma estrutura
@@ -153,6 +183,7 @@ const PADROES = [
     tipo: 'estrutura_nao_identificada',
     descricao: 'Estrutura não identificada — verificar estilo da linha',
     test: l => l.style === 'texto-lei' && !/^Pena\s–/.test(l.text),
+    alvo: l => alvoTextoInteiro(l.text),
     estilosExcluidos: ['vazio'],
   },
 ]
@@ -166,11 +197,15 @@ export function detectarExcecoes(linhas) {
     for (const padrao of PADROES) {
       if (padrao.estilosExcluidos?.includes(linha.style)) continue
       if (padrao.test(linha)) {
+        const alvo = padrao.alvo?.(linha)
         excecoes.push({
           linha: i + 1,
           tipo: padrao.tipo,
           descricao: padrao.descricao,
           texto: linha.text.slice(0, 80),
+          alvoTexto: alvo?.texto ?? linha.text.slice(0, 80),
+          alvoInicio: alvo?.inicio ?? 0,
+          alvoFim: alvo?.fim ?? Math.min(linha.text.length, 80),
           style: linha.style,
           resolvida: false,
         })

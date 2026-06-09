@@ -3024,12 +3024,12 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 .padronizacao-painel {
   position: fixed;
   top: calc(var(--topbar-h) + 10px);
-  left: 10px;
+  left: 6px;
   z-index: 220;
-  width: min(620px, calc(100vw - 20px));
-  max-width: 620px;
+  width: min(520px, calc(100vw - 20px));
+  max-width: 520px;
   max-height: calc(100vh - var(--topbar-h) - 24px);
-  background: var(--surface);
+  background: #ffffff;
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0,0,0,.18);
@@ -3404,8 +3404,8 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 
 .padronizacao-grupo-topo {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 260px) auto;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
   align-items: center;
   width: 100%;
   height: auto;
@@ -3462,6 +3462,8 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 }
 
 .padronizacao-substituicao-input {
+  grid-column: 1;
+  grid-row: 2;
   width: 100%;
   min-width: 0;
   height: 32px;
@@ -3486,6 +3488,8 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 }
 
 .padronizacao-substituicao-btn {
+  grid-column: 2;
+  grid-row: 2;
   height: 32px;
   padding: 5px 12px;
   font-size: 12px;
