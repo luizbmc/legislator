@@ -666,7 +666,7 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 }
 .nova-norma-header h2 { font-size: 18px; font-weight: 700; }
 
-.campo { display: flex; flex-direction: column; gap: 5px; margin-bottom: 16px; }
+.campo { display: flex; flex-direction: column; gap: 5px; margin-bottom: 16px; margin-left: 4px; margin-right: 4px;}
 .campo label { font-size: 13px; font-weight: 600; }
 .campo-opcional { font-weight: 400; color: var(--text-muted); }
 
@@ -4545,7 +4545,7 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 
 /* ── Modal picker de normas ────────────────────────────────────── */
 .modal-norma-picker {
-  width: min(700px, 96vw);
+  width: min(800px, 96vw);
   max-height: 80vh;
   display: flex;
   flex-direction: column;
