@@ -6,6 +6,10 @@
  *
  * Executa no contexto do renderer (browser), portanto DOMParser está disponível.
  */
+import {
+  estiloTextoComumPorHtmlClass,
+  estiloTextoComumPorWordStyleName,
+} from '../../constants/textoComumWord.js'
 
 // ── Extrai texto plano de um elemento (br → espaço, não quebra) ───
 // <br> dentro de parágrafo é layout — tratamos como espaço para não
@@ -331,8 +335,62 @@ const BLOCO_TAGS = new Set([
   'BLOCKQUOTE', 'PRE', 'LI',
 ])
 
+function buildWordStyleNameMap(doc) {
+  const map = {}
+  const css = Array.from(doc.querySelectorAll('style'))
+    .map(style => style.textContent || '')
+    .join('\n')
+
+  css.split('}').forEach(rule => {
+    const parts = rule.split('{')
+    if (parts.length < 2) return
+    const selector = parts[0] || ''
+    const body = parts.slice(1).join('{') || ''
+    const nome = body.match(/mso-style-name\s*:\s*["']?([^;"'}]+)/i)?.[1]
+    if (!nome) return
+
+    const classRe = /\.([A-Za-z0-9_-]+)/g
+    let match
+    while ((match = classRe.exec(selector))) {
+      if (match[1]) map[match[1]] = nome
+    }
+  })
+  return map
+}
+
+function styleHintTextoComum(el, wordStyleNameMap = {}) {
+  for (const classe of Array.from(el?.classList || [])) {
+    const byClass = estiloTextoComumPorHtmlClass(classe)
+    if (byClass) return byClass
+
+    const byWordStyle = estiloTextoComumPorWordStyleName(wordStyleNameMap[classe])
+    if (byWordStyle) return byWordStyle
+  }
+
+  const attrs = [
+    el?.getAttribute?.('data-style-name'),
+    el?.getAttribute?.('style-name'),
+    el?.getAttribute?.('data-mce-style-name'),
+  ]
+
+  const styleAttr = el?.getAttribute?.('style') || ''
+  const msoStyle = styleAttr.match(/mso-style-name\s*:\s*["']?([^;"'}]+)/i)?.[1]
+  attrs.push(msoStyle)
+
+  for (const attr of attrs) {
+    const byAttr = estiloTextoComumPorWordStyleName(attr)
+    if (byAttr) return byAttr
+  }
+
+  if (/mso-list\s*:/i.test(styleAttr) || Array.from(el?.classList || []).some(classe => /MsoListParagraph/i.test(classe))) {
+    return 'texto-comum-bullets'
+  }
+
+  return null
+}
+
 // ── Extrai blocos de um elemento (recursivo) ──────────────────────
-function extrairBlocos(el, blocos, footnotes = {}) {
+function extrairBlocos(el, blocos, footnotes = {}, wordStyleNameMap = {}) {
   for (const child of el.childNodes) {
     if (child.nodeType !== Node.ELEMENT_NODE) continue
     const tag = child.tagName.toUpperCase()
@@ -348,7 +406,7 @@ function extrairBlocos(el, blocos, footnotes = {}) {
         const text = getPlainText(li, footnotes).trim().replace(/\s+/g, ' ')
         if (text) {
           const content = fillNotaGaps(applyTextNota(parseInline(li, footnotes)))
-          blocos.push({ type: 'text', text, content })
+          blocos.push({ type: 'text', text, content, styleHint: styleHintTextoComum(li, wordStyleNameMap) || 'texto-comum-bullets' })
         }
       }
       continue
@@ -358,18 +416,18 @@ function extrairBlocos(el, blocos, footnotes = {}) {
       // Se o elemento contém tabela aninhada (ex.: <div> do Word com <table> dentro),
       // desce recursivamente para preservar a estrutura tabular.
       if (typeof child.querySelector === 'function' && child.querySelector('table')) {
-        extrairBlocos(child, blocos, footnotes)
+        extrairBlocos(child, blocos, footnotes, wordStyleNameMap)
         continue
       }
       // <br> dentro do parágrafo é layout — getPlainText já converte para espaço
       const text    = getPlainText(child, footnotes).trim().replace(/\s+/g, ' ')
       const content = fillNotaGaps(applyTextNota(parseInline(child, footnotes)))
-      if (text) blocos.push({ type: 'text', text, content })
+      if (text) blocos.push({ type: 'text', text, content, styleHint: styleHintTextoComum(child, wordStyleNameMap) })
       continue
     }
 
     // Contêiner genérico (section, article, main, etc.) — desce
-    extrairBlocos(child, blocos, footnotes)
+    extrairBlocos(child, blocos, footnotes, wordStyleNameMap)
   }
 }
 
@@ -547,9 +605,10 @@ export function parseHtmlInput(html) {
   const body = doc.body
   const footnotes = buildFootnoteMap(doc)
   removeMammothFootnoteBlocks(doc, footnotes)
+  const wordStyleNameMap = buildWordStyleNameMap(doc)
 
   const blocos = []
-  extrairBlocos(body, blocos, footnotes)
+  extrairBlocos(body, blocos, footnotes, wordStyleNameMap)
 
   // Fallback: HTML sem tags de bloco → trata como texto puro
   if (blocos.length === 0) {

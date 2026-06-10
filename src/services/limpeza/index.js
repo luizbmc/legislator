@@ -10,6 +10,7 @@ import { corrigirPontuacaoEnumeracoes } from './08_corrigirPontuacaoEnumeracoes.
 import { substituirTextoEmNota, RE_EMENDA_CONSTITUCIONAL_NOTA, RE_PARENTESE_INTERMEDIARIO_NOTA, RE_VETADO_CAIXA_ALTA_NOTA } from './substituirNota.js'
 import { aplicarCitacoes } from '../aplicarCitacoes.js'
 import { aplicarNotasVadeMecum } from '../notasVadeMecum.js'
+import { isTipoTextoComum } from '../../constants/normas.js'
 
 /**
  * Mescla conteúdo rico (negrito/itálico) de volta nas linhas classificadas
@@ -19,7 +20,7 @@ import { aplicarNotasVadeMecum } from '../notasVadeMecum.js'
  * a uma linha classificada pelo pipeline. Blocos vazios são ignorados
  * (foram descartados por normalizarTexto).
  */
-export function mergeComHtml(blocos, classifiedLinhas) {
+export function mergeComHtml(blocos, classifiedLinhas, { preferStyleHint = false } = {}) {
   const result = []
 
   // Extrai só letras e dígitos (minúsculas) — imune a mudanças de pontuação entre
@@ -134,7 +135,11 @@ export function mergeComHtml(blocos, classifiedLinhas) {
         }
       }
 
-      result.push({ ...classified, content })
+      result.push({
+        ...classified,
+        style: preferStyleHint && bloco.styleHint ? bloco.styleHint : classified.style,
+        content,
+      })
     } else {
       // Nenhum bloco correspondente (linha surgiu de merge) — sem rich content
       result.push(classified)
@@ -219,7 +224,7 @@ export function pipeline(input, { tipoNorma = '', estiloVadeMecum = false } = {}
 
   // ── Mescla rich content + tabelas (somente se veio de HTML) ──
   const merged = blocos
-    ? mergeComHtml(blocos, e5.output)
+    ? mergeComHtml(blocos, e5.output, { preferStyleHint: isTipoTextoComum(tipoNorma) })
     : e5.output
 
   // ── Etapa 6: marcas de caractere (bold-artigo etc.) ──────────
@@ -254,7 +259,7 @@ export function pipelineDeBlocos(textoParaPipeline, blocos = null, { tipoNorma =
   etapas.push({ nome: 'EspaÃ§os nÃ£o-separÃ¡veis', log: e5.log })
 
   const merged = blocos?.length
-    ? mergeComHtml(blocos, e5.output)
+    ? mergeComHtml(blocos, e5.output, { preferStyleHint: isTipoTextoComum(tipoNorma) })
     : e5.output
 
   const e6m = aplicarMarcas(merged, { estiloVadeMecum })
@@ -328,6 +333,14 @@ const STYLE_TO_NODE = {
   'assinatura-nome':            'assinatura',
   'assinatura-nome-espaco-ant': 'assinatura',
   'texto-lei':                  'paragrafLei',
+  'texto-comum-titulo':         'textoComumTitulo',
+  'texto-comum-subtitulo':      'textoComumSubtitulo',
+  'texto-comum-corrido':        'textoComumCorrido',
+  'texto-comum-recuado':        'textoComumRecuado',
+  'texto-comum-citacao':        'textoComumCitacao',
+  'texto-comum-bullets':        'textoComumBullets',
+  'texto-comum-assinatura':     'textoComumAssinatura',
+  'texto-comum-assinatura-cargo':'textoComumAssinaturaCargo',
 }
 
 // ── Trim de trailing whitespace em content inline ────────────────
@@ -376,6 +389,27 @@ export function linhasParaTiptap(linhas) {
         // Descarta linha se ficou sem conteúdo após trim
         if (!content.length) return null
 
+        return { type: nodeType, content }
+      })
+      .filter(Boolean),
+  }
+}
+
+export function blocosTextoComumParaTiptap({ blocos = [] } = {}) {
+  return {
+    type: 'doc',
+    content: (blocos || [])
+      .map(bloco => {
+        if (bloco.type === 'table') return bloco.node
+        if (bloco.type !== 'text' || !bloco.text?.trim()) return null
+
+        const style = bloco.styleHint || 'texto-comum-corrido'
+        const nodeType = STYLE_TO_NODE[style] || 'textoComumCorrido'
+        const content = bloco.content?.length
+          ? trimInlineTrailing(bloco.content)
+          : [{ type: 'text', text: bloco.text.replace(/[  ]+$/, '') }]
+
+        if (!content.length) return null
         return { type: nodeType, content }
       })
       .filter(Boolean),

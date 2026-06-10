@@ -11,7 +11,8 @@ import TableHeader from '@tiptap/extension-table-header'
 import { Slice } from '@tiptap/pm/model'
 import { ALL_EXTENSIONS } from './extensions/index.js'
 import { applyTextNota, fillNotaGaps, parseHtmlInput } from '../../services/limpeza/00_parseHtml.js'
-import { processarBlocosParaTiptap } from '../../services/limpeza/index.js'
+import { blocosTextoComumParaTiptap, processarBlocosParaTiptap } from '../../services/limpeza/index.js'
+import { isTipoTextoComum } from '../../constants/normas.js'
 import './LegislatorEditor.css'
 
 const STYLE_LABELS = {
@@ -37,6 +38,14 @@ const STYLE_LABELS = {
   notaTitulo: 'Nota título',
   assinaturaData: 'Data',
   assinaturaNome: 'Assinatura',
+  textoComumTitulo: 'Título',
+  textoComumSubtitulo: 'Subtítulo',
+  textoComumCorrido: 'Texto corrido',
+  textoComumRecuado: 'Texto recuado',
+  textoComumCitacao: 'Citação',
+  textoComumBullets: 'Bullets',
+  textoComumAssinatura: 'Assinatura',
+  textoComumAssinaturaCargo: 'Assinatura-cargo',
 }
 
 function firstTextRect(paragraph) {
@@ -398,18 +407,22 @@ export default function LegislatorEditor({
         if (!html.trim() && !textoPuro.trim()) return false
 
         try {
-          const entrada = htmlTemNotasRodape(html)
+          const textoComum = isTipoTextoComum(tipoNormaRef.current)
+          const usarParserHtml = htmlTemNotasRodape(html) || textoComum
+          const entrada = usarParserHtml
             ? parseHtmlInput(html)
             : slice?.content
               ? extrairBlocosDoFragmento(slice.content)
               : { textoPuro, blocos: [] }
           if (!entrada.textoPuro.trim()) return false
 
-          const resultado = processarBlocosParaTiptap(entrada, {
-            tipoNorma: tipoNormaRef.current,
-            estiloVadeMecum: (tagsRef.current || []).some(t => String(t).toLowerCase() === 'vm'),
-            notasVadeMecum: (tagsRef.current || []).some(t => String(t).toLowerCase() === 'vm'),
-          })
+          const resultado = textoComum
+            ? { doc: blocosTextoComumParaTiptap(entrada), excecoes: [], etapas: [] }
+            : processarBlocosParaTiptap(entrada, {
+                tipoNorma: tipoNormaRef.current,
+                estiloVadeMecum: (tagsRef.current || []).some(t => String(t).toLowerCase() === 'vm'),
+                notasVadeMecum: (tagsRef.current || []).some(t => String(t).toLowerCase() === 'vm'),
+              })
           if (!resultado.doc?.content?.length) return false
 
           const fragment = view.state.schema.nodeFromJSON(resultado.doc).content
@@ -419,7 +432,7 @@ export default function LegislatorEditor({
 
           event.preventDefault()
           view.dispatch(tr)
-          onPasteRotinasRef.current?.(resultado)
+          if (!textoComum) onPasteRotinasRef.current?.(resultado)
           return true
         } catch (err) {
           console.error('Erro ao aplicar rotinas na colagem externa:', err)

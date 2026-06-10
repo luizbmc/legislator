@@ -100,6 +100,15 @@ const ESTILOS_PARAGRAFO = [
   // Assinatura
   { id: 'data',            label: 'Data' },
   { id: 'assinatura',      label: 'Assinatura' },
+  // Texto comum
+  { id: 'textoComumTitulo',          label: 'Título' },
+  { id: 'textoComumSubtitulo',       label: 'Subtítulo' },
+  { id: 'textoComumCorrido',         label: 'Texto corrido' },
+  { id: 'textoComumRecuado',         label: 'Texto recuado' },
+  { id: 'textoComumCitacao',         label: 'Citação' },
+  { id: 'textoComumBullets',         label: 'Bullets' },
+  { id: 'textoComumAssinatura',      label: 'Assinatura' },
+  { id: 'textoComumAssinaturaCargo', label: 'Assinatura-cargo' },
   // Outros
   { id: 'paragraph',       label: 'Parágrafo base' },
 ]

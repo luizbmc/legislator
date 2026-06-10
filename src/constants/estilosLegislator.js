@@ -1,10 +1,11 @@
-import { isTipoFacoSaber, isTipoTratado } from './normas.js'
+import { isTipoFacoSaber, isTipoTextoComum, isTipoTratado } from './normas.js'
 
 export const ESTILO_DISPONIBILIDADE = {
   todos: 'Todos os tipos de norma',
   geral: 'Normas legislativas gerais; oculto em tratados internacionais',
   tratado: 'Tratados ou convenções internacionais',
   facoSaber: 'Resolução da CD, Resolução do CN e Decreto Legislativo',
+  textoComum: 'Texto comum',
   interno: 'Uso interno do editor/importadores',
   custom: 'Configurado pelo usuário',
 }
@@ -19,6 +20,17 @@ const ESTILOS_TRATADO = new Set([
   'citacao',
   'data',
   'assinatura',
+])
+
+const ESTILOS_TEXTO_COMUM = new Set([
+  'textoComumTitulo',
+  'textoComumSubtitulo',
+  'textoComumCorrido',
+  'textoComumRecuado',
+  'textoComumCitacao',
+  'textoComumBullets',
+  'textoComumAssinatura',
+  'textoComumAssinaturaCargo',
 ])
 
 export const ESTILOS_PARAGRAFO_LEGISLATOR = [
@@ -42,6 +54,14 @@ export const ESTILOS_PARAGRAFO_LEGISLATOR = [
   { node: 'data', label: 'Data', xmlTag: 'Data', htmlImport: 'p.corpo-legis_ass-data', cssClass: 'data', disponibilidade: 'todos' },
   { node: 'assinatura', label: 'Assinatura', xmlTag: 'Assinatura', htmlImport: 'p.corpo-legis_ass-nome, p.corpo-legis_ass-nome-espaco-ant', cssClass: 'assinatura', disponibilidade: 'todos' },
   { node: 'notaTitulo', label: 'Nota título', xmlTag: 'NotaTitulo', htmlImport: 'p.corpo-legis_nota-titulos, p.corpo-legis_nota-titulos-transp', cssClass: 'nota-titulo', disponibilidade: 'todos' },
+  { node: 'textoComumTitulo', label: 'Título', xmlTag: 'TextoTitulo', htmlImport: 'p.texto-comum_titulo, h1.texto-comum_titulo', cssClass: 'texto-comum-titulo', disponibilidade: 'textoComum' },
+  { node: 'textoComumSubtitulo', label: 'Subtítulo', xmlTag: 'TextoSubtitulo', htmlImport: 'p.texto-comum_subtitulo, h2.texto-comum_subtitulo', cssClass: 'texto-comum-subtitulo', disponibilidade: 'textoComum' },
+  { node: 'textoComumCorrido', label: 'Texto corrido', xmlTag: 'TextoCorrido', htmlImport: 'p.texto-comum_texto-corrido', cssClass: 'texto-comum-corrido', disponibilidade: 'textoComum' },
+  { node: 'textoComumRecuado', label: 'Texto recuado', xmlTag: 'TextoRecuado', htmlImport: 'p.texto-comum_texto-recuado', cssClass: 'texto-comum-recuado', disponibilidade: 'textoComum' },
+  { node: 'textoComumCitacao', label: 'Citação', xmlTag: 'TextoCitacao', htmlImport: 'p.texto-comum_citacao', cssClass: 'texto-comum-citacao', disponibilidade: 'textoComum' },
+  { node: 'textoComumBullets', label: 'Bullets', xmlTag: 'TextoBullets', htmlImport: 'p.texto-comum_bullets', cssClass: 'texto-comum-bullets', disponibilidade: 'textoComum' },
+  { node: 'textoComumAssinatura', label: 'Assinatura', xmlTag: 'TextoAssinatura', htmlImport: 'p.texto-comum_assinatura', cssClass: 'texto-comum-assinatura', disponibilidade: 'textoComum' },
+  { node: 'textoComumAssinaturaCargo', label: 'Assinatura-cargo', xmlTag: 'TextoAssinaturaCargo', htmlImport: 'p.texto-comum_assinatura-cargo', cssClass: 'texto-comum-assinatura-cargo', disponibilidade: 'textoComum' },
   { node: 'paragraph', label: 'Parágrafo base', xmlTag: 'p', cssClass: 'paragraph', disponibilidade: 'interno', interno: true },
 ]
 
@@ -60,13 +80,16 @@ export const ESTILOS_CARACTERE_LEGISLATOR = [
 ]
 
 export function estilosParagrafoDisponiveis(tipoNorma = '') {
+  if (isTipoTextoComum(tipoNorma)) {
+    return ESTILOS_PARAGRAFO_LEGISLATOR.filter(e => ESTILOS_TEXTO_COMUM.has(e.node))
+  }
   if (isTipoTratado(tipoNorma)) {
     return ESTILOS_PARAGRAFO_LEGISLATOR.filter(e => ESTILOS_TRATADO.has(e.node))
   }
   return ESTILOS_PARAGRAFO_LEGISLATOR.filter(e => {
     if (e.interno) return false
     if (e.apenasFacoSaber) return isTipoFacoSaber(tipoNorma)
-    return e.disponibilidade !== 'tratado'
+    return e.disponibilidade !== 'tratado' && e.disponibilidade !== 'textoComum'
   })
 }
 

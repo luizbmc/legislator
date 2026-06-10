@@ -4545,7 +4545,7 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 
 /* ── Modal picker de normas ────────────────────────────────────── */
 .modal-norma-picker {
-  width: min(600px, 96vw);
+  width: min(700px, 96vw);
   max-height: 80vh;
   display: flex;
   flex-direction: column;
@@ -4803,6 +4803,18 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   margin: 0 0 6px;
   color: var(--text);
   line-height: 1.35;
+}
+
+.modal-recorte-resultado-footer {
+  position: sticky;
+  bottom: -18px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: 4px -18px -18px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+  background: #fff;
 }
 
 .modal-norma-filtros {

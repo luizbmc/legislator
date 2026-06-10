@@ -157,6 +157,14 @@ const NODE_TO_STYLE = {
   'assinatura':       'assinatura',
   'assinaturaData':   'data',
   'assinaturaNome':   'assinatura',
+  'textoComumTitulo': 'texto-comum-titulo',
+  'textoComumSubtitulo': 'texto-comum-subtitulo',
+  'textoComumCorrido': 'texto-comum-corrido',
+  'textoComumRecuado': 'texto-comum-recuado',
+  'textoComumCitacao': 'texto-comum-citacao',
+  'textoComumBullets': 'texto-comum-bullets',
+  'textoComumAssinatura': 'texto-comum-assinatura',
+  'textoComumAssinaturaCargo': 'texto-comum-assinatura-cargo',
 }
 
 const STYLE_TO_NODE_DIRETO = {
@@ -182,6 +190,14 @@ const STYLE_TO_NODE_DIRETO = {
   'citacao':            'citacao',
   'data':               'data',
   'assinatura':         'assinatura',
+  'texto-comum-titulo': 'textoComumTitulo',
+  'texto-comum-subtitulo': 'textoComumSubtitulo',
+  'texto-comum-corrido': 'textoComumCorrido',
+  'texto-comum-recuado': 'textoComumRecuado',
+  'texto-comum-citacao': 'textoComumCitacao',
+  'texto-comum-bullets': 'textoComumBullets',
+  'texto-comum-assinatura': 'textoComumAssinatura',
+  'texto-comum-assinatura-cargo': 'textoComumAssinaturaCargo',
 }
 
 const ROTINAS_INDIVIDUAIS = new Set([4, 5, 6, 7, 8, 9])

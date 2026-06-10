@@ -85,6 +85,16 @@ export const Assinatura      = criarNo('assinatura',      'assinatura')
 export const AssinaturaData  = criarNo('assinaturaData',  'assinatura-data')
 export const AssinaturaNome  = criarNo('assinaturaNome',  'assinatura-nome')
 
+// ── Texto comum ──────────────────────────────────────────────────
+export const TextoComumTitulo          = criarNo('textoComumTitulo',          'texto-comum-titulo')
+export const TextoComumSubtitulo       = criarNo('textoComumSubtitulo',       'texto-comum-subtitulo')
+export const TextoComumCorrido         = criarNo('textoComumCorrido',         'texto-comum-corrido')
+export const TextoComumRecuado         = criarNo('textoComumRecuado',         'texto-comum-recuado')
+export const TextoComumCitacao         = criarNo('textoComumCitacao',         'texto-comum-citacao')
+export const TextoComumBullets         = criarNo('textoComumBullets',         'texto-comum-bullets')
+export const TextoComumAssinatura      = criarNo('textoComumAssinatura',      'texto-comum-assinatura')
+export const TextoComumAssinaturaCargo = criarNo('textoComumAssinaturaCargo', 'texto-comum-assinatura-cargo')
+
 export const EstiloParagrafoCustom = Node.create({
   name: 'estiloParagrafoCustom',
   group: 'block',
@@ -251,7 +261,10 @@ export const ALL_EXTENSIONS = [
   PartelivroTitCap, SecaoSubsecao,
   Artigo, ArtigoTitulo, CorpoTratado, ParagrafLei, NomeJuridico, Inciso, Alinea, Item, Citacao,
   Data, Assinatura,
-  AssinaturaData, AssinaturaNome, EstiloParagrafoCustom,
+  AssinaturaData, AssinaturaNome,
+  TextoComumTitulo, TextoComumSubtitulo, TextoComumCorrido, TextoComumRecuado,
+  TextoComumCitacao, TextoComumBullets, TextoComumAssinatura, TextoComumAssinaturaCargo,
+  EstiloParagrafoCustom,
   ParagraphAlteradoAttrs,
   Nota, NotaSobrescrito, NotaRodape, ItalicoLight, BoldArtigo, Regular, EstiloCaractereCustom,
   HiddenChars,

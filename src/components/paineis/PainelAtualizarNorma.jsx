@@ -19,6 +19,8 @@ import { aplicarCitacoes }             from '../../services/aplicarCitacoes.js'
 import { aplicarNotasVadeMecum }       from '../../services/notasVadeMecum.js'
 import { xmlParaTiptap }               from '../../services/importarXml.js'
 import { htmlInDesignParaTiptap }      from '../../services/importarHtmlInDesign.js'
+import { isTipoTextoComum }            from '../../constants/normas.js'
+import { TEXTO_COMUM_WORD_STYLE_MAP }  from '../../constants/textoComumWord.js'
 
 // ── Configuração dos fluxos ───────────────────────────────────────
 const FLUXO_DOCX = {
@@ -174,7 +176,10 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
         return
       } else {
         const buffer = await arquivo.arrayBuffer()
-        const { value: html } = await mammoth.convertToHtml({ arrayBuffer: buffer })
+        const mammothOptions = isTipoTextoComum(tipoNorma)
+          ? { styleMap: TEXTO_COMUM_WORD_STYLE_MAP }
+          : {}
+        const { value: html } = await mammoth.convertToHtml({ arrayBuffer: buffer }, mammothOptions)
         entradaPipeline = html
       }
 

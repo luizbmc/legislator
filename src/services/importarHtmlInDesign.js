@@ -27,6 +27,14 @@ const BLOCK_CLASS_TO_NODE = {
   'corpo-legis_ass-data': 'data',
   'corpo-legis_ass-nome': 'assinatura',
   'corpo-legis_ass-nome-espaco-ant': 'assinatura',
+  'texto-comum_titulo': 'textoComumTitulo',
+  'texto-comum_subtitulo': 'textoComumSubtitulo',
+  'texto-comum_texto-corrido': 'textoComumCorrido',
+  'texto-comum_texto-recuado': 'textoComumRecuado',
+  'texto-comum_citacao': 'textoComumCitacao',
+  'texto-comum_bullets': 'textoComumBullets',
+  'texto-comum_assinatura': 'textoComumAssinatura',
+  'texto-comum_assinatura-cargo': 'textoComumAssinaturaCargo',
 }
 
 function classList(el) {

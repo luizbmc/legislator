@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { isTipoFacoSaber, isTipoTratado } from '../../constants/normas.js'
+import { isTipoFacoSaber, isTipoTextoComum, isTipoTratado } from '../../constants/normas.js'
 import {
   estilosCaractereConfigurados,
   estilosParagrafoConfigurados,
@@ -29,6 +29,14 @@ const ESTILOS = [
   { node: 'data',             label: 'Data' },
   { node: 'assinatura',       label: 'Assinatura' },
   { node: 'notaTitulo',       label: 'Nota título' },
+  { node: 'textoComumTitulo',          label: 'Título' },
+  { node: 'textoComumSubtitulo',       label: 'Subtítulo' },
+  { node: 'textoComumCorrido',         label: 'Texto corrido' },
+  { node: 'textoComumRecuado',         label: 'Texto recuado' },
+  { node: 'textoComumCitacao',         label: 'Citação' },
+  { node: 'textoComumBullets',         label: 'Bullets' },
+  { node: 'textoComumAssinatura',      label: 'Assinatura' },
+  { node: 'textoComumAssinaturaCargo', label: 'Assinatura-cargo' },
 ]
 
 const ESTILOS_TRATADO = new Set([
@@ -41,6 +49,17 @@ const ESTILOS_TRATADO = new Set([
   'citacao',
   'data',
   'assinatura',
+])
+
+const ESTILOS_TEXTO_COMUM = new Set([
+  'textoComumTitulo',
+  'textoComumSubtitulo',
+  'textoComumCorrido',
+  'textoComumRecuado',
+  'textoComumCitacao',
+  'textoComumBullets',
+  'textoComumAssinatura',
+  'textoComumAssinaturaCargo',
 ])
 
 // ── Estilos de caractere ──────────────────────────────────────────
@@ -192,9 +211,11 @@ export default function PainelEstilos({ editor, editable = true, tipoNorma = '' 
 
   const { node: ativoAtual, customStyleId, marks } = estado
   const estilosConfigurados = estilosParagrafoConfigurados({ incluirInternos: false })
-  const estilosBaseDisponiveis = isTipoTratado(tipoNorma)
-    ? ESTILOS.filter(e => ESTILOS_TRATADO.has(e.node))
-    : ESTILOS.filter(e => !e.apenasFacoSaber || isTipoFacoSaber(tipoNorma))
+  const estilosBaseDisponiveis = isTipoTextoComum(tipoNorma)
+    ? ESTILOS.filter(e => ESTILOS_TEXTO_COMUM.has(e.node))
+    : isTipoTratado(tipoNorma)
+      ? ESTILOS.filter(e => ESTILOS_TRATADO.has(e.node))
+      : ESTILOS.filter(e => !ESTILOS_TEXTO_COMUM.has(e.node) && (!e.apenasFacoSaber || isTipoFacoSaber(tipoNorma)))
   const estilosCustomDisponiveis = estilosConfigurados
     .filter(e => e.custom && estiloAtivoNoTipo(e, tipoNorma))
   const estilosDisponiveis = [...estilosBaseDisponiveis, ...estilosCustomDisponiveis]

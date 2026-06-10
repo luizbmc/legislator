@@ -15,6 +15,10 @@ export const TIPOS_NORMA = [
   'Código',
   'Portaria',
   'Instrução Normativa',
+  'Ato institucional',
+  'Outros',
+  'Texto comum',
+  'Recorte',
 ]
 
 export function isTipoTratado(tipo) {
@@ -36,4 +40,26 @@ export function isTipoFacoSaber(tipo) {
   return normalizado === 'resolucao da cd' ||
     normalizado === 'decreto legislativo' ||
     normalizado === 'resolucao do cn'
+}
+
+export function isTipoTextoComum(tipo) {
+  const normalizado = String(tipo || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+
+  return normalizado === 'texto comum'
+}
+
+export function isTipoRecorte(tipo) {
+  const normalizado = String(tipo || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+
+  return normalizado === 'recorte'
+}
+
+export function isTipoOcultoCatalogo(tipo) {
+  return isTipoTextoComum(tipo) || isTipoRecorte(tipo)
 }

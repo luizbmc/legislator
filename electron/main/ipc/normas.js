@@ -76,14 +76,18 @@ export function registerNormasHandlers() {
       link_acesso,
       anexo,
       observacoes,
+      conteudo_doc,
+      conteudo_txt,
+      status = 'rascunho',
       tags = [],
     } = dados
     const result = db.prepare(`
       INSERT INTO normas (
         tipo, epigrafe, apelido, ementa, dados_publicacao,
-        data_ultima_alteracao, atualizacao_pendente, vigencia, link_acesso, anexo, observacoes
+        data_ultima_alteracao, atualizacao_pendente, vigencia, link_acesso, anexo, observacoes,
+        conteudo_doc, conteudo_txt, status
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       tipo,
       epigrafe,
@@ -96,6 +100,9 @@ export function registerNormasHandlers() {
       link_acesso || null,
       anexo || null,
       observacoes || null,
+      conteudo_doc ?? '{"type":"doc","content":[]}',
+      conteudo_txt ?? '',
+      status || 'rascunho',
     )
     const id = result.lastInsertRowid
 

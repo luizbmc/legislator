@@ -13,9 +13,11 @@ import { baixarXml }        from '../services/exportarXml.js'
 import { xmlParaTiptap }     from '../services/importarXml.js'
 import { analisarClassesHtmlInDesign, htmlInDesignParaTiptap } from '../services/importarHtmlInDesign.js'
 import { estiloAtivoNoTipo, estilosParagrafoConfigurados } from '../services/preferenciasEstilo.js'
-import { limparHtmlInternet } from '../services/limpeza/00_parseHtml.js'
+import { limparHtmlInternet, parseHtmlInput } from '../services/limpeza/00_parseHtml.js'
+import { blocosTextoComumParaTiptap } from '../services/limpeza/index.js'
 import { detectarExcecoes } from '../services/limpeza/06_detectarExcecoes.js'
-import { TIPOS_NORMA }      from '../constants/normas.js'
+import { isTipoTextoComum, TIPOS_NORMA }      from '../constants/normas.js'
+import { TEXTO_COMUM_WORD_STYLE_MAP } from '../constants/textoComumWord.js'
 
 const DOC_VAZIO = '{"type":"doc","content":[]}'
 
@@ -177,6 +179,14 @@ const EXPORTABLE_BLOCK_TYPES = new Set([
   'assinatura',
   'assinaturaData',
   'assinaturaNome',
+  'textoComumTitulo',
+  'textoComumSubtitulo',
+  'textoComumCorrido',
+  'textoComumRecuado',
+  'textoComumCitacao',
+  'textoComumBullets',
+  'textoComumAssinatura',
+  'textoComumAssinaturaCargo',
   'paragraph',
   'table',
 ])
@@ -204,6 +214,14 @@ const NODE_TO_STYLE_EXCECOES = {
   assinatura: 'assinatura',
   assinaturaData: 'data',
   assinaturaNome: 'assinatura',
+  textoComumTitulo: 'texto-comum-titulo',
+  textoComumSubtitulo: 'texto-comum-subtitulo',
+  textoComumCorrido: 'texto-comum-corrido',
+  textoComumRecuado: 'texto-comum-recuado',
+  textoComumCitacao: 'texto-comum-citacao',
+  textoComumBullets: 'texto-comum-bullets',
+  textoComumAssinatura: 'texto-comum-assinatura',
+  textoComumAssinaturaCargo: 'texto-comum-assinatura-cargo',
 }
 
 function textoInlineExcecoes(content) {
@@ -592,6 +610,8 @@ export default function Editor() {
 
   const fileRef = useRef(null)
   const colagemRef = useRef(null)
+  const colagemHtmlOriginalRef = useRef('')
+  const colagemTextoOriginalRef = useRef('')
   // Mapa { contentIdx → 'modificado' | 'remocaoApos' } atualizado a cada aceite.
   // Usado como fonte autoritativa para injetar flags no JSON exportado/salvo.
   const nodesAlteradosRef = useRef({})
@@ -671,16 +691,30 @@ export default function Editor() {
   // ── Carga inicial ─────────────────────────────────────────────
   useEffect(() => {
     window.legislator.normas.buscar(parseInt(id)).then(n => {
+      const textoComum = isTipoTextoComum(n.tipo)
       setNorma(n)
       setStatus(n.status ?? 'rascunho')
       setFase('editar')
-      setModoEdicaoManual(false)
+      setModoEdicaoManual(textoComum)
+      setMarcasAtualizacaoVisiveis(!textoComum)
       if (n.conteudo_doc && n.conteudo_doc !== DOC_VAZIO) {
         setDocJson(JSON.parse(n.conteudo_doc))
         setAbaEsq('sumario')
       }
     })
   }, [id])
+
+  useEffect(() => {
+    if (!editor || !isTipoTextoComum(norma?.tipo)) return
+    setModoEdicaoManual(true)
+    setMarcasAtualizacaoVisiveis(false)
+    editor.setEditable(true)
+    window.setTimeout(() => {
+      inicializarBaselineEdicaoManual()
+      nodesAlteradosRef.current = {}
+      manualTrackingSuspensoRef.current = false
+    }, 0)
+  }, [editor, norma?.tipo])
 
   // ── Atalhos de teclado globais ────────────────────────────────
   useEffect(() => {
@@ -1176,7 +1210,27 @@ export default function Editor() {
         importarHtmlComMapeamento(html, file.name)
       } else {
         const arrayBuffer = await file.arrayBuffer()
-        const { value: html } = await mammoth.convertToHtml({ arrayBuffer })
+        const mammothOptions = isTipoTextoComum(norma?.tipo)
+          ? { styleMap: TEXTO_COMUM_WORD_STYLE_MAP }
+          : {}
+        const { value: html } = await mammoth.convertToHtml({ arrayBuffer }, mammothOptions)
+        if (isTipoTextoComum(norma?.tipo)) {
+          const entrada = parseHtmlInput(html)
+          const doc = blocosTextoComumParaTiptap(entrada)
+          setDocJson(doc)
+          setInputHtml('')
+          setNomeArq(file.name)
+          limparExcecoesDetectadas()
+          setFase('editar')
+          manualTrackingSuspensoRef.current = true
+          baselineAposImportacaoRef.current = true
+          nodesAlteradosRef.current = {}
+          manualBaselineRef.current = []
+          setModoEdicaoManual(true)
+          setAbaEsq('estilos')
+          concluirImportacaoDocxEmModoEdicao()
+          return
+        }
         setInputHtml(html)
         setNomeArq(file.name)
         limparExcecoesDetectadas()
@@ -1202,6 +1256,8 @@ export default function Editor() {
   function abrirColagemInternet() {
     setModalColarTexto(true)
     setColagemTemConteudo(false)
+    colagemHtmlOriginalRef.current = ''
+    colagemTextoOriginalRef.current = ''
     window.setTimeout(() => {
       if (!colagemRef.current) return
       colagemRef.current.innerHTML = ''
@@ -1213,20 +1269,53 @@ export default function Editor() {
     e.preventDefault()
     const html = e.clipboardData?.getData('text/html') || ''
     const textoPuro = e.clipboardData?.getData('text/plain') || ''
-    const limpo = limparHtmlInternet(html, textoPuro)
+    const textoComum = isTipoTextoComum(norma?.tipo)
+    const limpo = textoComum && html.trim()
+      ? html
+      : limparHtmlInternet(html, textoPuro)
 
     if (!colagemRef.current) return
+    colagemHtmlOriginalRef.current = textoComum ? limpo : ''
+    colagemTextoOriginalRef.current = textoComum ? String(textoPuro || '').trim() : ''
     colagemRef.current.innerHTML = limpo
     setColagemTemConteudo(Boolean(colagemRef.current.textContent?.trim()))
   }
 
+  function onColagemInput(e) {
+    setColagemTemConteudo(Boolean(e.currentTarget.textContent?.trim()))
+    if (colagemTextoOriginalRef.current &&
+        String(e.currentTarget.innerText || '').trim() !== colagemTextoOriginalRef.current) {
+      colagemHtmlOriginalRef.current = ''
+      colagemTextoOriginalRef.current = ''
+    }
+  }
+
   function confirmarColagemInternet() {
     if (!colagemRef.current) return
+    if (!colagemRef.current.textContent?.trim()) return
+
+    if (isTipoTextoComum(norma?.tipo)) {
+      const htmlOrigem = colagemHtmlOriginalRef.current || colagemRef.current.innerHTML
+      const entrada = parseHtmlInput(htmlOrigem)
+      const doc = blocosTextoComumParaTiptap(entrada)
+      setDocJson(doc)
+      editor?.commands.setContent(doc, false)
+      setInputHtml('')
+      setNomeArq('Texto colado')
+      limparExcecoesDetectadas()
+      setFase('editar')
+      setAbaEsq('estilos')
+      setModalColarTexto(false)
+      setModificado(true)
+      colagemHtmlOriginalRef.current = ''
+      colagemTextoOriginalRef.current = ''
+      return
+    }
+
     const limpo = limparHtmlInternet(
       colagemRef.current.innerHTML,
       colagemRef.current.innerText,
     )
-    if (!colagemRef.current.textContent?.trim()) return
 
     setInputHtml(limpo)
     setNomeArq('Texto colado da internet')
@@ -2128,14 +2217,16 @@ export default function Editor() {
                   </span>
                   <span className="rotinas-btn-trocar">Importar</span>
                 </div>
-                <button
-                  type="button"
-                  className="rotinas-colar-btn"
-                  onClick={abrirColagemInternet}
-                  title="Colar texto da internet"
-                >
-                  Colar
-                </button>
+                {!isTipoTextoComum(norma?.tipo) && (
+                  <button
+                    type="button"
+                    className="rotinas-colar-btn"
+                    onClick={abrirColagemInternet}
+                    title="Colar texto da internet"
+                  >
+                    Colar
+                  </button>
+                )}
               </div>
 
               <div className="abas-esq">
@@ -2292,7 +2383,7 @@ export default function Editor() {
                 suppressContentEditableWarning
                 data-placeholder="Cole aqui o texto copiado da internet"
                 onPaste={colarTextoInternet}
-                onInput={e => setColagemTemConteudo(Boolean(e.currentTarget.textContent?.trim()))}
+                onInput={onColagemInput}
               />
               <div className="modal-acoes">
                 <button type="button" className="btn-ghost" onClick={() => setModalColarTexto(false)}>

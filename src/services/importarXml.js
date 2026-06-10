@@ -26,6 +26,14 @@ const TAG_TO_NODE = {
   Assinatura: 'assinatura',
   AssinaturaData: 'data',
   AssinaturaNome: 'assinatura',
+  TextoTitulo: 'textoComumTitulo',
+  TextoSubtitulo: 'textoComumSubtitulo',
+  TextoCorrido: 'textoComumCorrido',
+  TextoRecuado: 'textoComumRecuado',
+  TextoCitacao: 'textoComumCitacao',
+  TextoBullets: 'textoComumBullets',
+  TextoAssinatura: 'textoComumAssinatura',
+  TextoAssinaturaCargo: 'textoComumAssinaturaCargo',
 }
 
 function localName(node) {

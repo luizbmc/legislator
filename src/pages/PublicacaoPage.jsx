@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { TIPOS_NORMA } from '../constants/normas.js'
+import { isTipoTextoComum, TIPOS_NORMA } from '../constants/normas.js'
 
 const COVER_COLORS = [
   'hsl(0 42% 78%)',
@@ -26,6 +26,14 @@ const NOVA_NORMA_FORM_INICIAL = {
   tipo: 'Lei Ordinária',
   epigrafe: '',
   apelido: '',
+  ementa: '',
+  dados_publicacao: '',
+  data_ultima_alteracao: '',
+  atualizacao_pendente: false,
+  vigencia: 'Vigente',
+  link_acesso: '',
+  anexo: '',
+  observacoes: '',
 }
 
 const STATUS_NORMA = {
@@ -65,6 +73,13 @@ function normaTemTagVm(norma) {
   return (norma.tags || []).some(tag => normalizarTag(tag) === 'vm')
 }
 
+function textoTagsNorma(norma) {
+  const tags = (norma?.tags || [])
+    .map(tag => String(tag || '').trim())
+    .filter(Boolean)
+  return tags.length ? ` [${tags.join(', ')}]` : ''
+}
+
 function AvisoAtualizacaoPendente({ norma }) {
   if (!norma?.atualizacao_pendente) return null
   return <span className="norma-pendente-icone" title="Atualização pendente">⚠️</span>
@@ -96,6 +111,61 @@ function textoNoRecorte(node) {
   if (node.type === 'recorteOmissao') return '[...]'
   if (node.type === 'table') return '[Tabela]'
   return textoBlocoRecorte(node)
+}
+
+function textoNodeTiptap(node) {
+  if (!node) return ''
+  if (node.type === 'text') return node.text || ''
+  if (node.type === 'hardBreak') return '\n'
+  if (!Array.isArray(node.content)) return ''
+  return node.content.map(textoNodeTiptap).join('')
+}
+
+function textoDocTiptap(doc) {
+  return (doc?.content || [])
+    .map(node => textoNodeTiptap(node).replace(/\s+\n/g, '\n').trim())
+    .filter(Boolean)
+    .join('\n')
+}
+
+function blocoTextoRecorte(type, text) {
+  const conteudo = String(text || '').trim()
+  if (!conteudo) return null
+  return {
+    type,
+    content: [{ type: 'text', text: conteudo }],
+  }
+}
+
+function formatarApelidoRecorte(apelido) {
+  const texto = String(apelido || '').trim()
+  if (!texto) return ''
+  return texto.charAt(0) === '(' ? texto : `(${texto})`
+}
+
+function clonarBlocoRecorte(node) {
+  if (!node) return null
+  if (node.type === 'recorteOmissao') {
+    return blocoTextoRecorte('paragrafLei', '[...]')
+  }
+  return JSON.parse(JSON.stringify(node))
+}
+
+function montarDocRecorte(norma, itens) {
+  const content = [
+    blocoTextoRecorte('epigrafe', norma?.epigrafe),
+    blocoTextoRecorte('epigrafeApelido', formatarApelidoRecorte(norma?.apelido)),
+    blocoTextoRecorte('ementa', norma?.ementa),
+  ].filter(Boolean)
+
+  for (const item of itens || []) {
+    for (const bloco of item.blocos || []) {
+      const clonado = clonarBlocoRecorte(bloco)
+      if (clonado) content.push(clonado)
+    }
+  }
+
+  return { type: 'doc', content }
 }
 
 function normalizarNumeroArtigo(valor) {
@@ -581,7 +651,7 @@ function extrairRecortesDaNorma(doc, especificacao) {
 
   return entradas.map(entrada => {
     const parsed = parseItemRecorte(entrada)
-    if (parsed.erro) return { entrada, erro: parsed.erro, textos: [] }
+    if (parsed.erro) return { entrada, erro: parsed.erro, textos: [], blocos: [] }
 
     if (parsed.tipo === 'artigosRange') {
       const ini = numeroArtigoComoInteiro(parsed.inicio)
@@ -601,7 +671,7 @@ function extrairRecortesDaNorma(doc, especificacao) {
       const exibidos = ultimoArtigo
         ? inserirMarcadoresOmissao(blocos, comHeadings, ultimoArtigo.fim)
         : comHeadings
-      return { entrada, textos: exibidos.map(textoNoRecorte), total: selecionados.length }
+      return { entrada, textos: exibidos.map(textoNoRecorte), blocos: exibidos, total: selecionados.length }
     }
 
     const artigo = encontrarArtigo(indice, parsed.numero)
@@ -625,6 +695,7 @@ function extrairRecortesDaNorma(doc, especificacao) {
       entrada,
       erro: selecionados.length <= 1 && parsed.tipo !== 'caput' ? 'Nenhum dispositivo específico encontrado no artigo.' : null,
       textos: exibidos.map(textoNoRecorte),
+      blocos: exibidos,
       total: selecionados.length,
     }
   })
@@ -645,6 +716,7 @@ export default function PublicacaoPage() {
   const [modalSecaoIdx, setModalSecaoIdx] = useState(null)  // índice da seção alvo
   const [buscaNorma,    setBuscaNorma]    = useState('')
   const [somenteVm,     setSomenteVm]     = useState(false)
+  const [somenteTextoComum, setSomenteTextoComum] = useState(false)
   const [normasDisponiveis, setNormasDisponiveis] = useState([])
   const [loadingNormas, setLoadingNormas] = useState(false)
   const [abaModalNorma, setAbaModalNorma] = useState('catalogo')
@@ -659,6 +731,7 @@ export default function PublicacaoPage() {
   const [recorteDispositivos, setRecorteDispositivos] = useState('')
   const [recorteErro, setRecorteErro] = useState('')
   const [recorteCarregando, setRecorteCarregando] = useState(false)
+  const [criandoRecorte, setCriandoRecorte] = useState(false)
   const [recorteAjudaAberta, setRecorteAjudaAberta] = useState(false)
   const [modalResultadoRecorte, setModalResultadoRecorte] = useState(null)
 
@@ -818,7 +891,9 @@ export default function PublicacaoPage() {
     setRecorteDispositivos('')
     setRecorteErro('')
     setRecorteCarregando(false)
+    setCriandoRecorte(false)
     setRecorteAjudaAberta(false)
+    setSomenteTextoComum(false)
   }
 
   function fecharModalNorma() {
@@ -903,7 +978,14 @@ export default function PublicacaoPage() {
         tipo: novaNormaForm.tipo,
         epigrafe: novaNormaForm.epigrafe.trim(),
         apelido: novaNormaForm.apelido.trim(),
-        ementa: '',
+        ementa: novaNormaForm.ementa.trim(),
+        dados_publicacao: novaNormaForm.dados_publicacao.trim(),
+        data_ultima_alteracao: novaNormaForm.data_ultima_alteracao,
+        atualizacao_pendente: Boolean(novaNormaForm.atualizacao_pendente),
+        vigencia: novaNormaForm.vigencia.trim() || 'Vigente',
+        link_acesso: novaNormaForm.link_acesso.trim(),
+        anexo: novaNormaForm.anexo.trim(),
+        observacoes: novaNormaForm.observacoes.trim(),
         tags: novaNormaTags,
       })
       const normaCriada = {
@@ -951,6 +1033,58 @@ export default function PublicacaoPage() {
     }
   }
 
+  async function criarRecorteConfirmado() {
+    if (!modalResultadoRecorte) return
+    if (modalResultadoRecorte.itens.some(item => item.erro)) {
+      setRecorteErro('Corrija os itens com erro antes de criar o recorte.')
+      return
+    }
+
+    const doc = montarDocRecorte(modalResultadoRecorte.norma, modalResultadoRecorte.itens)
+    if (!doc.content.length) {
+      setRecorteErro('O recorte nÃ£o possui conteÃºdo para criar a norma.')
+      return
+    }
+
+    setCriandoRecorte(true)
+    setRecorteErro('')
+    try {
+      const origem = modalResultadoRecorte.norma
+      const conteudoDoc = JSON.stringify(doc)
+      const conteudoTxt = textoDocTiptap(doc)
+      const criada = await window.legislator.normas.criar({
+        tipo: 'Recorte',
+        epigrafe: `Recorte de ${origem.epigrafe || 'norma'}`,
+        apelido: origem.apelido || '',
+        ementa: origem.ementa || '',
+        vigencia: origem.vigencia || 'Vigente',
+        tags: [],
+        status: 'rascunho',
+      })
+      const salva = await window.legislator.normas.salvar(criada.id, {
+        conteudo_doc: conteudoDoc,
+        conteudo_txt: conteudoTxt,
+        status: 'rascunho',
+        data_atualizacao: criada.data_atualizacao || null,
+      })
+      const normaCriada = {
+        ...criada,
+        ...salva,
+        tipo: 'Recorte',
+        tags: [],
+        status: salva.status || criada.status || 'rascunho',
+      }
+      adicionarNorma(normaCriada)
+      setNormasDisponiveis(prev => [...prev, normaCriada])
+      setModalResultadoRecorte(null)
+      fecharModalNorma()
+    } catch (err) {
+      setRecorteErro(err?.message || 'NÃ£o foi possÃ­vel criar o recorte.')
+    } finally {
+      setCriandoRecorte(false)
+    }
+  }
+
   async function exportar(tipo) {
     try {
       if (modificado) {
@@ -984,6 +1118,7 @@ export default function PublicacaoPage() {
   const normasFiltradas = normasDisponiveis.filter(n =>
     !normaJaNaPublicacao(n.id) &&
     (!somenteVm || normaTemTagVm(n)) &&
+    (!somenteTextoComum || isTipoTextoComum(n.tipo)) &&
     (n.epigrafe.toLowerCase().includes(buscaNorma.toLowerCase()) ||
      (n.apelido ?? '').toLowerCase().includes(buscaNorma.toLowerCase()))
   )
@@ -1239,7 +1374,7 @@ export default function PublicacaoPage() {
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) fecharModalNorma() }}>
           <div className="modal-box modal-norma-picker" onMouseDown={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Adicionar norma — ${secoes[modalSecaoIdx]?.titulo}</h3>
+              <h3>Adicionar norma — {secoes[modalSecaoIdx]?.titulo}</h3>
               <button className="btn-ghost modal-fechar" onClick={fecharModalNorma}>✕</button>
             </div>
             <div className="modal-norma-abas">
@@ -1284,6 +1419,14 @@ export default function PublicacaoPage() {
                       />
                       <span>Vade mecum</span>
                     </label>
+                    <label className={`home-check${somenteTextoComum ? ' ativo' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={somenteTextoComum}
+                        onChange={e => setSomenteTextoComum(e.target.checked)}
+                      />
+                      <span>Texto comum</span>
+                    </label>
                   </div>
                   <div className="modal-norma-lista">
                     {loadingNormas ? (
@@ -1319,7 +1462,7 @@ export default function PublicacaoPage() {
                       <option value="">Selecione uma norma...</option>
                       {normasDisponiveis.map(n => (
                         <option key={n.id} value={n.id}>
-                          {n.atualizacao_pendente ? '⚠️ ' : ''}{n.epigrafe}{n.apelido ? ` (${n.apelido})` : ''}
+                          {n.atualizacao_pendente ? '⚠️ ' : ''}{n.epigrafe}{n.apelido ? ` (${n.apelido})` : ''}{textoTagsNorma(n)}
                         </option>
                       ))}
                     </select>
@@ -1391,6 +1534,7 @@ export default function PublicacaoPage() {
                     <label>Epígrafe *</label>
                     <input
                       autoFocus
+                      placeholder="Ex: Lei nº 9.610, de 19 de fevereiro de 1998"
                       value={novaNormaForm.epigrafe}
                       onChange={e => setNovaNormaForm(f => ({ ...f, epigrafe: e.target.value }))}
                       required
@@ -1399,10 +1543,88 @@ export default function PublicacaoPage() {
                   <div className="campo">
                     <label>Apelido <span className="campo-opcional">(opcional)</span></label>
                     <input
+                      placeholder="Ex: Lei de Direitos Autorais"
                       value={novaNormaForm.apelido}
                       onChange={e => setNovaNormaForm(f => ({ ...f, apelido: e.target.value }))}
                     />
                   </div>
+                  <div className="campo">
+                    <label>Ementa <span className="campo-opcional">(opcional)</span></label>
+                    <textarea
+                      rows={3}
+                      placeholder="Dispõe sobre..."
+                      value={novaNormaForm.ementa}
+                      onChange={e => setNovaNormaForm(f => ({ ...f, ementa: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="form-secao">
+                    <h3>Dados complementares</h3>
+                    <div className="campo">
+                      <label>Dados de publicação, republicação e retificação <span className="campo-opcional">(opcional)</span></label>
+                      <textarea
+                        rows={3}
+                        value={novaNormaForm.dados_publicacao}
+                        onChange={e => setNovaNormaForm(f => ({ ...f, dados_publicacao: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="form-grid-2">
+                      <div className="campo">
+                        <label>Data da última alteração <span className="campo-opcional">(opcional)</span></label>
+                        <input
+                          type="date"
+                          value={novaNormaForm.data_ultima_alteracao}
+                          onChange={e => setNovaNormaForm(f => ({ ...f, data_ultima_alteracao: e.target.value }))}
+                        />
+                      </div>
+                      <div className="campo campo-check">
+                        <label className={`home-check pendente-check${novaNormaForm.atualizacao_pendente ? ' ativo' : ''}`}>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(novaNormaForm.atualizacao_pendente)}
+                            onChange={e => setNovaNormaForm(f => ({ ...f, atualizacao_pendente: e.target.checked }))}
+                          />
+                          {novaNormaForm.atualizacao_pendente && <span className="pendente-check-alerta" aria-hidden="true">⚠️</span>}
+                          <span>Atualização pendente</span>
+                        </label>
+                      </div>
+                      <div className="campo">
+                        <label>Vigência</label>
+                        <input
+                          value={novaNormaForm.vigencia}
+                          onChange={e => setNovaNormaForm(f => ({ ...f, vigencia: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="campo">
+                      <label>Link para acesso <span className="campo-opcional">(opcional)</span></label>
+                      <input
+                        type="url"
+                        value={novaNormaForm.link_acesso}
+                        onChange={e => setNovaNormaForm(f => ({ ...f, link_acesso: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="campo">
+                      <label>Anexo <span className="campo-opcional">(opcional)</span></label>
+                      <input
+                        value={novaNormaForm.anexo}
+                        onChange={e => setNovaNormaForm(f => ({ ...f, anexo: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="campo">
+                      <label>Outras observações <span className="campo-opcional">(opcional)</span></label>
+                      <textarea
+                        rows={3}
+                        value={novaNormaForm.observacoes}
+                        onChange={e => setNovaNormaForm(f => ({ ...f, observacoes: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+
                   <div className="campo">
                     <label>Tags <span className="campo-opcional">(opcional)</span></label>
                     <div className="tag-input-wrap">
@@ -1480,6 +1702,20 @@ export default function PublicacaoPage() {
                     )}
                   </section>
                 ))}
+              </div>
+              {recorteErro && <p className="form-erro">{recorteErro}</p>}
+              <div className="modal-recorte-resultado-footer">
+                <button type="button" className="btn-ghost" onClick={() => setModalResultadoRecorte(null)}>
+                  Voltar ao ajuste
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={criandoRecorte || modalResultadoRecorte.itens.some(item => item.erro)}
+                  onClick={criarRecorteConfirmado}
+                >
+                  {criandoRecorte ? 'Criando...' : 'Criar recorte'}
+                </button>
               </div>
             </div>
           </div>

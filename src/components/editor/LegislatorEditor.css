@@ -268,6 +268,67 @@
 }
 
 /* ══════════════════════════════════════════════════════════ */
+/* Texto comum                                               */
+/* ══════════════════════════════════════════════════════════ */
+.leg-texto-comum-titulo {
+  font-size: 18pt;
+  font-weight: 700;
+  text-align: center;
+  margin: 18pt 0 8pt;
+  text-indent: 0;
+}
+
+.leg-texto-comum-subtitulo {
+  font-size: 14pt;
+  font-weight: 600;
+  text-align: center;
+  margin: 12pt 0 6pt;
+  text-indent: 0;
+}
+
+.leg-texto-comum-corrido {
+  text-align: justify;
+  text-indent: 1.5cm;
+  margin: 4pt 0 0;
+}
+
+.leg-texto-comum-recuado {
+  text-align: justify;
+  margin: 4pt 0 0 1.5cm;
+  text-indent: 0;
+}
+
+.leg-texto-comum-citacao {
+  text-align: justify;
+  margin: 6pt 1.5cm;
+  font-size: 10pt;
+}
+
+.leg-texto-comum-bullets {
+  display: list-item;
+  list-style-type: disc;
+  list-style-position: outside;
+  text-align: justify;
+  margin: 3pt 0 0 1cm;
+  padding-left: 0.2cm;
+  text-indent: 0;
+}
+
+.leg-texto-comum-assinatura {
+  text-align: center;
+  font-weight: 600;
+  margin: 12pt 0 0;
+  text-indent: 0;
+}
+
+.leg-texto-comum-assinatura-cargo {
+  text-align: center;
+  color: #777;
+  margin: 2pt 0 0;
+  text-indent: 0;
+}
+
+/* ══════════════════════════════════════════════════════════ */
 /* Assinatura                                                */
 /* ══════════════════════════════════════════════════════════ */
 .leg-data,

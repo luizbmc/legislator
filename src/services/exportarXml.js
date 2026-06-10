@@ -169,6 +169,14 @@ const NO_PARA_XML = {
   assinatura:       'Assinatura',
   assinaturaData:   'Data',
   assinaturaNome:   'Assinatura',
+  textoComumTitulo: 'TextoTitulo',
+  textoComumSubtitulo: 'TextoSubtitulo',
+  textoComumCorrido: 'TextoCorrido',
+  textoComumRecuado: 'TextoRecuado',
+  textoComumCitacao: 'TextoCitacao',
+  textoComumBullets: 'TextoBullets',
+  textoComumAssinatura: 'TextoAssinatura',
+  textoComumAssinaturaCargo: 'TextoAssinaturaCargo',
   // Parágrafo padrão do TipTap (em células de tabela)
   paragraph:        'p',
 }

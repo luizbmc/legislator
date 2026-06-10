@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { TIPOS_NORMA } from '../constants/normas.js'
+import { isTipoOcultoCatalogo, TIPOS_NORMA } from '../constants/normas.js'
 
 const DOC_VAZIO = '{"type":"doc","content":[]}'
+const TIPOS_NORMA_CADASTRO = TIPOS_NORMA.filter(t => !isTipoOcultoCatalogo(t))
 
 function formInicial(origem) {
   if (!origem) {
@@ -122,7 +123,7 @@ export default function NovaNorma() {
           <div className="campo">
             <label>Tipo *</label>
             <select value={form.tipo} onChange={set('tipo')}>
-              {TIPOS_NORMA.map(t => <option key={t} value={t}>{t}</option>)}
+              {TIPOS_NORMA_CADASTRO.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
 

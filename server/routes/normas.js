@@ -93,6 +93,9 @@ router.post('/', (req, res) => {
       link_acesso,
       anexo,
       observacoes,
+      conteudo_doc,
+      conteudo_txt,
+      status = 'rascunho',
       tags = [],
     } = req.body
     const agora = new Date().toISOString()
@@ -101,9 +104,10 @@ router.post('/', (req, res) => {
       INSERT INTO normas (
         tipo, epigrafe, apelido, ementa, dados_publicacao,
         data_ultima_alteracao, atualizacao_pendente, vigencia, link_acesso, anexo, observacoes,
+        conteudo_doc, conteudo_txt, status,
         criado_em, atualizado_em
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       tipo,
       epigrafe,
@@ -116,6 +120,9 @@ router.post('/', (req, res) => {
       link_acesso || null,
       anexo || null,
       observacoes || null,
+      conteudo_doc ?? '{"type":"doc","content":[]}',
+      conteudo_txt ?? '',
+      status || 'rascunho',
       agora,
       agora,
     )
