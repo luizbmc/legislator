@@ -1,4 +1,4 @@
-import { Node, Mark, mergeAttributes } from '@tiptap/core'
+import { Node, Mark, Extension, mergeAttributes } from '@tiptap/core'
 import { HiddenChars }   from './HiddenChars.js'
 import { DiffHighlight } from './DiffHighlight.js'
 import { NotaRodapeConnector } from './NotaRodapeConnector.js'
@@ -118,6 +118,35 @@ export const EstiloParagrafoCustom = Node.create({
   },
 })
 
+export const ParagraphAlteradoAttrs = Extension.create({
+  name: 'paragraphAlteradoAttrs',
+
+  addGlobalAttributes() {
+    return [
+      {
+        types: ['paragraph'],
+        attributes: {
+          alterado: {
+            default: null,
+            parseHTML: element => element.getAttribute('data-alterado'),
+            renderHTML: attrs => attrs.alterado ? { 'data-alterado': attrs.alterado } : {},
+          },
+          diffType: {
+            default: null,
+            parseHTML: element => element.getAttribute('data-diff-type'),
+            renderHTML: attrs => attrs.diffType ? { 'data-diff-type': attrs.diffType } : {},
+          },
+          diffSubtype: {
+            default: null,
+            parseHTML: element => element.getAttribute('data-diff-subtype'),
+            renderHTML: attrs => attrs.diffSubtype ? { 'data-diff-subtype': attrs.diffSubtype } : {},
+          },
+        },
+      },
+    ]
+  },
+})
+
 // ── Marks customizados ──────────────────────────────────────────
 
 // Nota: texto entre parênteses após . ; :
@@ -223,6 +252,7 @@ export const ALL_EXTENSIONS = [
   Artigo, ArtigoTitulo, CorpoTratado, ParagrafLei, NomeJuridico, Inciso, Alinea, Item, Citacao,
   Data, Assinatura,
   AssinaturaData, AssinaturaNome, EstiloParagrafoCustom,
+  ParagraphAlteradoAttrs,
   Nota, NotaSobrescrito, NotaRodape, ItalicoLight, BoldArtigo, Regular, EstiloCaractereCustom,
   HiddenChars,
   DiffHighlight,

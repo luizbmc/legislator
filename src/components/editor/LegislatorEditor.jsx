@@ -186,6 +186,63 @@ function textoMarcadorNotaRodape() {
   return '[nota]'
 }
 
+function contarBlocosColados(slice) {
+  var total = 0
+  try {
+    slice?.content?.forEach(node => {
+      if (node.isBlock && node.type.name !== 'table') total++
+    })
+  } catch {}
+  return total
+}
+
+function blocoTopoEmPos(doc, pos) {
+  var encontrado = null
+  doc.forEach((node, offset, index) => {
+    if (encontrado) return
+    if (pos >= offset && pos <= offset + node.nodeSize) {
+      encontrado = { node, offset, index }
+    }
+  })
+  return encontrado
+}
+
+function marcarBlocosColadosComoAdicionados(view, quantidade) {
+  if (!quantidade) return
+
+  window.setTimeout(() => {
+    try {
+      const { state } = view
+      const fim = blocoTopoEmPos(state.doc, state.selection.from)
+      if (!fim) return
+
+      const inicioIdx = Math.max(0, fim.index - quantidade + 1)
+      const fimIdx = fim.index
+      let tr = state.tr
+      let alterou = false
+
+      state.doc.forEach((node, offset, index) => {
+        if (index < inicioIdx || index > fimIdx) return
+        if (node.type.name === 'table') return
+        if (!node.type.attrs?.alterado || !node.type.attrs?.diffType) return
+        if (node.attrs?.alterado === 'modificado' && node.attrs?.diffType === 'added') return
+
+        tr = tr.setNodeMarkup(offset, node.type, {
+          ...node.attrs,
+          alterado: 'modificado',
+          diffType: 'added',
+        })
+        alterou = true
+      })
+
+      if (alterou) {
+        tr = tr.setMeta('addToHistory', false)
+        view.dispatch(tr)
+      }
+    } catch {}
+  }, 0)
+}
+
 function htmlTemNotasRodape(html = '') {
   return /(?:footnote|endnote|mso-footnote-id|mso-element:\s*(?:footnote|endnote))/i.test(String(html || ''))
 }
@@ -230,6 +287,7 @@ export default function LegislatorEditor({
   tipoNorma = '',
   tags = [],
   onPasteRotinas,
+  trackInternalPasteAdditions = false,
 }) {
   const scrollRef = useRef(null)
   const tipoNormaRef = useRef(tipoNorma)
@@ -331,7 +389,12 @@ export default function LegislatorEditor({
         const html = event.clipboardData?.getData('text/html') || ''
         const textoPuro = event.clipboardData?.getData('text/plain') || ''
 
-        if (html.includes('data-pm-slice')) return false
+        if (html.includes('data-pm-slice')) {
+          if (trackInternalPasteAdditions) {
+            marcarBlocosColadosComoAdicionados(view, contarBlocosColados(slice))
+          }
+          return false
+        }
         if (!html.trim() && !textoPuro.trim()) return false
 
         try {

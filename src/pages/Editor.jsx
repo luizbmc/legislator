@@ -2207,6 +2207,7 @@ export default function Editor() {
               tipoNorma={norma?.tipo}
               tags={norma?.tags ?? []}
               onPasteRotinas={() => setModificado(true)}
+              trackInternalPasteAdditions={modoEdicaoManual}
             />
           </main>
 
