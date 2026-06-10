@@ -62,7 +62,7 @@ function AvisoAtualizacaoPendente({ norma }) {
   return <span className="norma-pendente-icone" title="Atualização pendente">⚠️</span>
 }
 
-export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags = [], onIniciarRevisao, onFechar, onEditarManual }) {
+export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags = [], onIniciarRevisao, onFechar, onEditarManual, onConsolidarAtualizacoes }) {
   const [fonte,       setFonte]       = useState('docx')      // 'docx' | 'catalogo'
   const [passo,       setPasso]       = useState('upload')
   const [nomeArq,     setNomeArq]     = useState('')
@@ -532,6 +532,20 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
                 {processando ? '⏳ Comparando…' : '🔍 Iniciar comparação →'}
               </button>
             </div>
+          </div>
+        )}
+
+        {onConsolidarAtualizacoes && (passo === 'upload' || passo === 'catalogo') && (
+          <div className="modal-atualizar-consolidar">
+            <button
+              type="button"
+              className="btn-ghost btn-consolidar-atualizacoes"
+              onClick={onConsolidarAtualizacoes}
+              disabled={processando}
+            >
+              <span>Consolidar atualizações</span>
+              <small>Ao executar essa função, as marcas de atualização serão removidas.</small>
+            </button>
           </div>
         )}
 

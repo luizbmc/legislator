@@ -320,6 +320,31 @@ function marcarNodoAlterado(ed, contentIdx, valor, extras = {}) {
   }
 }
 
+function limparMarcasAtualizacaoEditor(ed) {
+  if (!ed) return false
+
+  let tr = ed.state.tr
+  let alterou = false
+
+  ed.state.doc.forEach((node, offset) => {
+    const attrs = node.attrs || {}
+    if (!attrs.alterado && !attrs.diffType && !attrs.diffSubtype) return
+
+    const novosAttrs = {
+      ...attrs,
+      alterado: null,
+      diffType: null,
+      diffSubtype: null,
+    }
+
+    tr = tr.setNodeMarkup(offset, null, novosAttrs)
+    alterou = true
+  })
+
+  if (alterou) ed.view.dispatch(tr)
+  return alterou
+}
+
 /**
  * Pisca 3× o parágrafo alvo via overlay position:fixed em document.body.
  * Não toca no DOM do ProseMirror, que reverte alterações externas.
@@ -593,6 +618,7 @@ export default function Editor() {
   const [substituicoesPadronizacao, setSubstituicoesPadronizacao] = useState({})
   const [hiddenCharsAtivo, setHiddenCharsAtivo] = useState(false)
   const [styleIndicatorsAtivo, setStyleIndicatorsAtivo] = useState(false)
+  const [marcasAtualizacaoVisiveis, setMarcasAtualizacaoVisiveis] = useState(true)
   const [spellcheckAtivo, setSpellcheckAtivo] = useState(true)
   const [zoom,             setZoom]             = useState(1)
   const [irArtigoInput,    setIrArtigoInput]    = useState('')
@@ -634,6 +660,8 @@ export default function Editor() {
   const notaRodapeSelectionRef = useRef(null)
   const manualBaselineRef = useRef([])
   const manualTrackingRef = useRef(false)
+  const manualTrackingSuspensoRef = useRef(false)
+  const baselineAposImportacaoRef = useRef(false)
   const ocorrenciasPadronizacao = modalPadronizacao
     ? coletarOcorrenciasPadronizacao(editor, abaPadronizacao)
     : []
@@ -693,10 +721,7 @@ export default function Editor() {
     setModalAtualizarAberto(false)
     setModoEdicaoManual(true)
     if (!editor) return
-    manualBaselineRef.current = []
-    editor.state.doc.forEach(node => {
-      manualBaselineRef.current.push(nodeAssinaturaManual(node))
-    })
+    inicializarBaselineEdicaoManual()
     editor.setEditable(true)
     setTimeout(() => {
       try {
@@ -706,8 +731,55 @@ export default function Editor() {
     }, 0)
   }
 
+  function inicializarBaselineEdicaoManual() {
+    if (!editor) return
+    manualBaselineRef.current = []
+    editor.state.doc.forEach(node => {
+      manualBaselineRef.current.push(nodeAssinaturaManual(node))
+    })
+  }
+
+  function consolidarAtualizacoes() {
+    if (!editor) return
+    manualTrackingRef.current = true
+    try {
+      const alterou = limparMarcasAtualizacaoEditor(editor)
+      nodesAlteradosRef.current = {}
+      inicializarBaselineEdicaoManual()
+      if (alterou) {
+        setModificado(true)
+        setDocJson(editor.getJSON())
+      }
+    } finally {
+      manualTrackingRef.current = false
+    }
+    setModalAtualizarAberto(false)
+  }
+
+  function documentoTemMarcasAtualizacao() {
+    if (!editor) return false
+    var temMarcas = false
+    editor.state.doc.forEach(node => {
+      if (temMarcas) return
+      if (node.attrs?.alterado) temMarcas = true
+    })
+    return temMarcas
+  }
+
+  function concluirImportacaoDocxEmModoEdicao() {
+    if (baselineAposImportacaoRef.current) {
+      baselineAposImportacaoRef.current = false
+      window.setTimeout(() => {
+        inicializarBaselineEdicaoManual()
+        nodesAlteradosRef.current = {}
+        manualTrackingSuspensoRef.current = false
+      }, 0)
+    }
+    setModificado(true)
+  }
+
   function marcarAlteracoesManuais() {
-    if (!editor || manualTrackingRef.current) return
+    if (!editor || manualTrackingRef.current || manualTrackingSuspensoRef.current) return
     manualTrackingRef.current = true
     try {
       var tr = editor.state.tr
@@ -1075,6 +1147,8 @@ export default function Editor() {
     if (!file) return
     try {
       if (/\.xml$/i.test(file.name)) {
+        manualTrackingSuspensoRef.current = false
+        baselineAposImportacaoRef.current = false
         const xml = await file.text()
         const doc = xmlParaTiptap(xml)
         setDocJson(doc)
@@ -1086,6 +1160,8 @@ export default function Editor() {
         setAbaEsq('rotinas')
         setModificado(true)
       } else if (/\.html?$/i.test(file.name)) {
+        manualTrackingSuspensoRef.current = false
+        baselineAposImportacaoRef.current = false
         const html = await file.text()
         const ocorrencias = analisarClassesHtmlInDesign(html)
         if (ocorrencias.length) {
@@ -1105,11 +1181,17 @@ export default function Editor() {
         setNomeArq(file.name)
         limparExcecoesDetectadas()
         setFase('editar')
+        manualTrackingSuspensoRef.current = true
+        baselineAposImportacaoRef.current = true
+        nodesAlteradosRef.current = {}
+        manualBaselineRef.current = []
         setModoEdicaoManual(true)
         setAbaEsq('rotinas')
         setAutoExecutarRotinas(valor => valor + 1)
       }
     } catch (err) {
+      manualTrackingSuspensoRef.current = false
+      baselineAposImportacaoRef.current = false
       alert(String(err?.message || err))
     } finally {
       e.target.value = ''
@@ -1760,6 +1842,17 @@ export default function Editor() {
                 onClick={rodarExcecoesDoTopo}
                 title="Executar rotina de exceções e navegar pelos resultados"
               >Exceções</button>
+              <button
+                className={`btn-ghost btn-update-marks${marcasAtualizacaoVisiveis ? ' ativa' : ''}`}
+                onClick={() => {
+                  if (!documentoTemMarcasAtualizacao()) {
+                    alert('Não há marcas de atualização nesta norma.')
+                    return
+                  }
+                  setMarcasAtualizacaoVisiveis(v => !v)
+                }}
+                title={marcasAtualizacaoVisiveis ? 'Ocultar marcas de atualização' : 'Exibir marcas de atualização'}
+              >Marcação</button>
             </>}
             {emRevisao && (
               <span className="revisao-modo-label">🔍 Modo revisão</span>
@@ -2065,7 +2158,7 @@ export default function Editor() {
                     tags={norma?.tags ?? []}
                     autoExecutarKey={autoExecutarRotinas}
                     onExcecoes={receberExcecoesDetectadas}
-                    onModificado={() => setModificado(true)}
+                    onModificado={concluirImportacaoDocxEmModoEdicao}
                   />
                 </div>
               ) : (
@@ -2108,6 +2201,7 @@ export default function Editor() {
               onEditorReady={setEditor}
               zoom={zoom}
               styleIndicatorsActive={styleIndicatorsAtivo}
+              hideUpdateMarks={!marcasAtualizacaoVisiveis}
               spellcheckAtivo={spellcheckAtivo}
               editable={modoEdicaoManual || emRevisao}
               tipoNorma={norma?.tipo}
@@ -2141,6 +2235,7 @@ export default function Editor() {
           onIniciarRevisao={onIniciarRevisao}
           onFechar={() => setModalAtualizarAberto(false)}
           onEditarManual={iniciarEdicaoManual}
+          onConsolidarAtualizacoes={consolidarAtualizacoes}
         />
       )}
 

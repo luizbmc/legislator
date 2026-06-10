@@ -105,6 +105,11 @@
   box-shadow: inset 3px 0 0 rgba(151, 139, 54, 0.7);
 }
 
+.legislator-editor.update-marks-hidden .legislator-editor-inner [data-alterado] {
+  background: transparent;
+  box-shadow: none;
+}
+
 .legislator-editor-inner::selection,
 .legislator-editor-inner *::selection {
   background: rgba(59, 130, 246, 0.35);

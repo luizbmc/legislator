@@ -1762,10 +1762,15 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 }
 
 .btn-hidden-chars,
-.btn-style-indicators {
-  font-size: 15px;
+.btn-style-indicators,
+.btn-update-marks {
   font-weight: bold;
   transition: background .12s, color .12s;
+}
+
+.btn-hidden-chars,
+.btn-style-indicators {
+  font-size: 15px;
 }
 .btn-hidden-chars.ativa {
   background: #f97316;
@@ -3969,6 +3974,40 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.modal-atualizar-consolidar {
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--border-soft);
+  background: #fafafa;
+}
+
+.btn-consolidar-atualizacoes {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.btn-consolidar-atualizacoes span {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.btn-consolidar-atualizacoes small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.35;
 }
 
 .btn-full { width: 100%; justify-content: center; }

@@ -224,6 +224,7 @@ export default function LegislatorEditor({
   onEditorReady,
   zoom = 1,
   styleIndicatorsActive = false,
+  hideUpdateMarks = false,
   spellcheckAtivo = true,
   editable = true,
   tipoNorma = '',
@@ -497,7 +498,7 @@ export default function LegislatorEditor({
   return (
     <div
       ref={scrollRef}
-      className={`legislator-editor${styleIndicatorsActive ? ' style-indicators-active' : ''}${editable ? '' : ' legislator-editor-readonly'}`}
+      className={`legislator-editor${styleIndicatorsActive ? ' style-indicators-active' : ''}${hideUpdateMarks ? ' update-marks-hidden' : ''}${editable ? '' : ' legislator-editor-readonly'}`}
       style={{ '--editor-zoom': zoom }}
       onClick={handleEditorClick}
     >
