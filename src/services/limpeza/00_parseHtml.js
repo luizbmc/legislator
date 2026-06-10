@@ -265,10 +265,33 @@ export function fillNotaGaps(nodes) {
   let depth = 0      // parênteses abertos sem fechar (contados a partir do "(" inicial)
   let inside = false // true: estamos dentro de um parêntese aberto com nota
 
-  return nodes.map(node => {
+  let cursor = 0
+  const starts = nodes.map(node => {
+    const start = cursor
+    if (node.type === 'text') cursor += node.text.length
+    return start
+  })
+  const joined = nodes.map(node => node.type === 'text' ? node.text : '').join('')
+  const continuaNotaWord = closeIndex =>
+    /^\)[\s ]+e[\s ]+(?=[^)]*\d{1,2}\/\d{1,2}\/\d{4}\))/.test(joined.slice(closeIndex))
+
+  return nodes.map((node, nodeIndex) => {
     if (node.type !== 'text') return node
 
     const hasNota = node.marks?.some(m => m.type === 'nota')
+    const nodeStart = starts[nodeIndex]
+    const contarParenteses = startIndex => {
+      for (let k = startIndex; k < node.text.length; k++) {
+        if (node.text[k] === '(') depth++
+        if (node.text[k] === ')') {
+          depth--
+          // O Word pode quebrar uma mesma nota em dois hyperlinks:
+          // "(... 21/5/1956)" + " e " + "transformado ... 21/6/1965)".
+          // Nesse caso, o primeiro ")" é intermediário e a nota continua.
+          if (depth <= 0 && continuaNotaWord(nodeStart + k)) depth = 1
+        }
+      }
+    }
 
     if (!inside) {
       // Aguarda o primeiro nó com nota que contenha "(" para começar a rastrear.
@@ -277,10 +300,7 @@ export function fillNotaGaps(nodes) {
       if (hasNota) {
         const openIdx = node.text.indexOf('(')
         if (openIdx >= 0) {
-          for (let k = openIdx; k < node.text.length; k++) {
-            if (node.text[k] === '(') depth++
-            if (node.text[k] === ')') depth--
-          }
+          contarParenteses(openIdx)
           if (depth > 0) inside = true
         }
       }
@@ -288,10 +308,7 @@ export function fillNotaGaps(nodes) {
     }
 
     // Dentro de um parêntese com nota: conta todos os parênteses do nó
-    for (const ch of node.text) {
-      if (ch === '(') depth++
-      if (ch === ')') depth--
-    }
+    contarParenteses(0)
 
     // Aplica nota ao nó atual (se ainda não tem)
     const novoNodo = hasNota

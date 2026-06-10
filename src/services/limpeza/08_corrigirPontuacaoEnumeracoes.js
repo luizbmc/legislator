@@ -55,7 +55,45 @@ function textoDoContent(content) {
   return (content ?? []).map(node => node?.type === 'text' ? node.text ?? '' : '').join('')
 }
 
+function textoSemNotas(content) {
+  return (content ?? [])
+    .map(node => {
+      if (node?.type !== 'text') return ''
+      return temMarcaNota(node) ? '' : node.text ?? ''
+    })
+    .join('')
+}
+
+function linhaEnumeracaoSemTextoPrincipal(linha) {
+  if (!ESTILOS_ENUMERACAO.has(linha?.style) || !linha.content?.length) return false
+  const texto = textoSemNotas(linha.content).trim()
+  if (!texto) return true
+  if (linha.style === 'inciso') return /^[IVXLCDM]+(?:-[A-Z])?\s*[–—-]\.?\s*$/i.test(texto)
+  if (linha.style === 'alinea') return /^[a-zà-ÿ]\)\s*$/i.test(texto)
+  if (linha.style === 'item') return /^\d+[.)]?\s*$/i.test(texto)
+  return false
+}
+
+function limparPontuacaoMarcadorVazio(linha) {
+  if (!linhaEnumeracaoSemTextoPrincipal(linha)) return linha
+  if (linha.style !== 'inciso' || !linha.content?.length) return linha
+
+  let alterado = false
+  const content = linha.content.map(node => {
+    if (node?.type !== 'text' || temMarcaNota(node)) return node
+    const texto = node.text.replace(/([IVXLCDM]+(?:-[A-Z])?\s*[–—-])\.\s*$/i, '$1')
+    if (texto !== node.text) alterado = true
+    return texto !== node.text ? { ...node, text: texto } : node
+  })
+
+  return alterado
+    ? { ...linha, content, text: textoDoContent(content) }
+    : linha
+}
+
 function corrigirLinha(linha, pontuacao) {
+  if (linhaEnumeracaoSemTextoPrincipal(linha)) return limparPontuacaoMarcadorVazio(linha)
+
   if (linha.content?.length) {
     const corrigido = corrigirContent(linha.content, pontuacao)
     if (!corrigido.alterado) return linha

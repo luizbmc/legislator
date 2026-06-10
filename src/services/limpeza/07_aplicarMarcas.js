@@ -1,5 +1,5 @@
 import { applyTextNota, fillNotaGaps } from './00_parseHtml.js'
-import { substituirTextoEmNota, RE_EMENDA_CONSTITUCIONAL_NOTA } from './substituirNota.js'
+import { substituirTextoEmNota, RE_EMENDA_CONSTITUCIONAL_NOTA, RE_PARENTESE_INTERMEDIARIO_NOTA, RE_VETADO_CAIXA_ALTA_NOTA } from './substituirNota.js'
 
 /**
  * Etapa 07 — Aplicar marcas de caractere
@@ -365,6 +365,8 @@ export function aplicarMarcas(linhas, { estiloVadeMecum = false, somenteEstiloVa
   let countAdinNota   = 0
   let countEcNota     = 0
   let countNosSup     = 0
+  let countParentesesNota = 0
+  let countVetadoNota = 0
 
   const output = linhasBase.map(linha => {
     if (linha.isTable || !linha.text) return linha
@@ -469,16 +471,26 @@ export function aplicarMarcas(linhas, { estiloVadeMecum = false, somenteEstiloVa
       const contentComNota = fillNotaGaps(applyTextNota(baseContent))
       const adinNormalizado = substituirTextoEmNota(contentComNota, RE_ADIN_NOTA, 'ADI')
       const ecNormalizada = substituirTextoEmNota(adinNormalizado.content, RE_EMENDA_CONSTITUCIONAL_NOTA, 'EC')
+      const parentesesNormalizados = substituirTextoEmNota(
+        ecNormalizada.content,
+        RE_PARENTESE_INTERMEDIARIO_NOTA,
+        (_match, data, conector) => `${data}${conector}`,
+      )
+      const vetadoNormalizado = substituirTextoEmNota(parentesesNormalizados.content, RE_VETADO_CAIXA_ALTA_NOTA, 'Vetado')
       countAdinNota += adinNormalizado.count
       countEcNota += ecNormalizada.count
-      const semItalicoNota = normalizarItalicoEmNota(ecNormalizada.content)
+      countParentesesNota += parentesesNormalizados.count
+      countVetadoNota += vetadoNormalizado.count
+      const semItalicoNota = normalizarItalicoEmNota(vetadoNormalizado.content)
       const semAspas   = removeAspasCaputInNota(semItalicoNota)
       const novoContent = addItalicToKeywordsInNota(semAspas)
       if (
         !sameInlineContent(novoContent, baseContent) ||
         adinNormalizado.content !== contentComNota ||
         ecNormalizada.content !== adinNormalizado.content ||
-        semItalicoNota !== ecNormalizada.content
+        parentesesNormalizados.content !== ecNormalizada.content ||
+        vetadoNormalizado.content !== parentesesNormalizados.content ||
+        semItalicoNota !== vetadoNormalizado.content
       ) {
         result = { ...result, content: novoContent }
         if (novoContent !== semAspas) countNotaItalic++
@@ -537,6 +549,20 @@ export function aplicarMarcas(linhas, { estiloVadeMecum = false, somenteEstiloVa
     log.push(
       `${countEcNota} ocorrencia${countEcNota !== 1 ? 's' : ''} de Emenda Constitucional ` +
       `substituida${countEcNota !== 1 ? 's' : ''} por EC em nota`
+    )
+  }
+
+  if (countParentesesNota) {
+    log.push(
+      `${countParentesesNota} parêntese${countParentesesNota !== 1 ? 's' : ''} ` +
+      `intermediário${countParentesesNota !== 1 ? 's' : ''} removido${countParentesesNota !== 1 ? 's' : ''} em nota`
+    )
+  }
+
+  if (countVetadoNota) {
+    log.push(
+      `${countVetadoNota} ocorrencia${countVetadoNota !== 1 ? 's' : ''} de VETADO ` +
+      `normalizada${countVetadoNota !== 1 ? 's' : ''} para Vetado em nota`
     )
   }
 

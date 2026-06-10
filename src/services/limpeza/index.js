@@ -7,7 +7,7 @@ import { aplicarNBSP, NBSP_REGRAS } from './05_aplicarNBSP.js'
 import { detectarExcecoes }    from './06_detectarExcecoes.js'
 import { aplicarMarcas }       from './07_aplicarMarcas.js'
 import { corrigirPontuacaoEnumeracoes } from './08_corrigirPontuacaoEnumeracoes.js'
-import { substituirTextoEmNota, RE_EMENDA_CONSTITUCIONAL_NOTA } from './substituirNota.js'
+import { substituirTextoEmNota, RE_EMENDA_CONSTITUCIONAL_NOTA, RE_PARENTESE_INTERMEDIARIO_NOTA, RE_VETADO_CAIXA_ALTA_NOTA } from './substituirNota.js'
 import { aplicarCitacoes } from '../aplicarCitacoes.js'
 import { aplicarNotasVadeMecum } from '../notasVadeMecum.js'
 
@@ -154,7 +154,15 @@ export function mergeComHtml(blocos, classifiedLinhas) {
 
 function normalizarTextoNota(nodes) {
   RE_EMENDA_CONSTITUCIONAL_NOTA.lastIndex = 0
-  return substituirTextoEmNota(nodes, RE_EMENDA_CONSTITUCIONAL_NOTA, 'EC').content
+  const ecNormalizada = substituirTextoEmNota(nodes, RE_EMENDA_CONSTITUCIONAL_NOTA, 'EC').content
+  RE_PARENTESE_INTERMEDIARIO_NOTA.lastIndex = 0
+  const parentesesNormalizados = substituirTextoEmNota(
+    ecNormalizada,
+    RE_PARENTESE_INTERMEDIARIO_NOTA,
+    (_match, data, conector) => `${data}${conector}`,
+  ).content
+  RE_VETADO_CAIXA_ALTA_NOTA.lastIndex = 0
+  return substituirTextoEmNota(parentesesNormalizados, RE_VETADO_CAIXA_ALTA_NOTA, 'Vetado').content
 }
 
 export function normalizarDocNotas(doc) {
@@ -164,9 +172,7 @@ export function normalizarDocNotas(doc) {
     // (cobrindo matches que atravessam a fronteira entre nós nota), e então
     // desce recursivamente para os blocos filhos.
     RE_EMENDA_CONSTITUCIONAL_NOTA.lastIndex = 0
-    const content = substituirTextoEmNota(node.content, RE_EMENDA_CONSTITUCIONAL_NOTA, 'EC')
-      .content
-      .map(walk)
+    const content = normalizarTextoNota(node.content).map(walk)
     return { ...node, content }
   }
 

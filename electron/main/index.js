@@ -81,6 +81,7 @@ function createWindow() {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       contextIsolation: true,
+      spellcheck: true,
     },
   })
 

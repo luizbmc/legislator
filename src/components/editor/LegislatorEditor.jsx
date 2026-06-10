@@ -286,6 +286,7 @@ export default function LegislatorEditor({
         class: 'legislator-editor-inner',
         spellcheck: 'true',
         lang: 'pt-BR',
+        'xml:lang': 'pt-BR',
       },
 
       /**
@@ -381,6 +382,9 @@ export default function LegislatorEditor({
   useEffect(() => {
     if (!editor) return
     editor.view.dom.setAttribute('spellcheck', spellcheckAtivo ? 'true' : 'false')
+    editor.view.dom.setAttribute('lang', 'pt-BR')
+    editor.view.dom.setAttribute('xml:lang', 'pt-BR')
+    document.documentElement.setAttribute('lang', 'pt-BR')
   }, [editor, spellcheckAtivo])
 
   // Atualiza o conteúdo quando docJson mudar (ex: após pipeline)

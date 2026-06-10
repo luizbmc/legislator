@@ -1105,6 +1105,7 @@ export default function Editor() {
         setNomeArq(file.name)
         limparExcecoesDetectadas()
         setFase('editar')
+        setModoEdicaoManual(true)
         setAbaEsq('rotinas')
         setAutoExecutarRotinas(valor => valor + 1)
       }

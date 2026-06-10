@@ -15,6 +15,14 @@
 // (e múltiplos espaços) entre as duas palavras.
 export const RE_EMENDA_CONSTITUCIONAL_NOTA = /\bEmenda[\s ]+Constitucional\b/g
 
+// Remove o parêntese que o Word às vezes injeta entre dois hyperlinks
+// da mesma nota: "... 21/5/1956) e transformado ... 21/6/1965)".
+export const RE_PARENTESE_INTERMEDIARIO_NOTA = /(\d{1,2}\/\d{1,2}\/\d{4})\)([\s ]+e[\s ]+(?=[^)]*\d{1,2}\/\d{1,2}\/\d{4}\)))/g
+
+// Notas vindas do Word podem trazer "VETADO" em caixa alta. No texto final,
+// a nota editorial deve usar a capitalização normal.
+export const RE_VETADO_CAIXA_ALTA_NOTA = /\bVETADO\b/g
+
 function hasNota(node) {
   return node?.type === 'text' && (node.marks ?? []).some(m => m.type === 'nota')
 }
@@ -64,7 +72,10 @@ function replaceAcrossRun(run, re, replacement) {
     count++
     if (m.index > last) pushPreserved(last, m.index)
     // O texto substituído herda as marcas do primeiro caractere do match.
-    segs.push({ text: replacement, marks: charMarks[m.index] })
+    const replacementText = typeof replacement === 'function'
+      ? replacement(...m, m.index, joined)
+      : replacement
+    segs.push({ text: replacementText, marks: charMarks[m.index] })
     last = m.index + m[0].length
     if (m[0].length === 0) { re.lastIndex++; if (re.lastIndex > joined.length) break }
   }
