@@ -932,6 +932,53 @@ export default function Editor() {
     setModalNotaRodape(true)
   }
 
+  /**
+   * Altera a caixa do trecho selecionado preservando as marks de cada nó de texto.
+   * modo: 'alta' (MAIÚSCULAS), 'baixa' (minúsculas) ou
+   *       'cab' (caixa alta e baixa — somente a primeira letra da seleção em maiúscula).
+   */
+  function aplicarCaixaSelecao(modo) {
+    if (!editor || !modoEdicaoManual) return
+    const { state, view } = editor
+    const { from, to, empty } = state.selection
+    if (empty) return
+
+    const substituicoes = []
+    let primeiraLetra = true
+
+    state.doc.nodesBetween(from, to, (node, pos) => {
+      if (!node.isText || !node.text) return
+      const inicio = Math.max(from, pos)
+      const fim = Math.min(to, pos + node.nodeSize)
+      const trecho = node.text.slice(inicio - pos, fim - pos)
+
+      let novo = modo === 'alta'
+        ? trecho.toLocaleUpperCase('pt-BR')
+        : trecho.toLocaleLowerCase('pt-BR')
+
+      if (modo === 'cab' && primeiraLetra) {
+        const idx = novo.search(/\p{L}/u)
+        if (idx >= 0) {
+          novo = novo.slice(0, idx) + novo[idx].toLocaleUpperCase('pt-BR') + novo.slice(idx + 1)
+          primeiraLetra = false
+        }
+      }
+
+      if (novo !== trecho) {
+        substituicoes.push({ inicio, fim, novo, marks: node.marks })
+      }
+    })
+
+    if (!substituicoes.length) return
+
+    let tr = state.tr
+    substituicoes.forEach(({ inicio, fim, novo, marks }) => {
+      tr = tr.replaceWith(tr.mapping.map(inicio), tr.mapping.map(fim), state.schema.text(novo, marks))
+    })
+    view.dispatch(tr)
+    editor.commands.focus()
+  }
+
   function localizarBlocoExcecao(exc) {
     if (!editor || !exc) return null
     let linhaAtual = 0
@@ -1915,6 +1962,24 @@ export default function Editor() {
                 onClick={() => setStyleIndicatorsAtivo(v => !v)}
                 title="Exibir indicadores de estilo de parágrafo"
               >¶→</button>
+              <button
+                className="btn-ghost btn-caixa"
+                onClick={() => aplicarCaixaSelecao('alta')}
+                disabled={!modoEdicaoManual}
+                title="Caixa alta (MAIÚSCULAS) no trecho selecionado"
+              >CA</button>
+              <button
+                className="btn-ghost btn-caixa"
+                onClick={() => aplicarCaixaSelecao('baixa')}
+                disabled={!modoEdicaoManual}
+                title="Caixa baixa (minúsculas) no trecho selecionado"
+              >cb</button>
+              <button
+                className="btn-ghost btn-caixa"
+                onClick={() => aplicarCaixaSelecao('cab')}
+                disabled={!modoEdicaoManual}
+                title="Caixa alta e baixa (somente a primeira letra maiúscula) no trecho selecionado"
+              >Cab</button>
               <button
                 className={`btn-ghost btn-notas${notasAberto ? ' ativa' : ''}`}
                 onClick={() => { setNotasAberto(v => !v); setExcecoesAberto(false) }}
