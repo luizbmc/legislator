@@ -205,6 +205,69 @@ export const NotaRodape = Mark.create({
   },
 })
 
+export const Comentario = Mark.create({
+  name: 'comentario',
+  inclusive: false,
+  addAttributes() {
+    return {
+      id: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-comentario-id'),
+        renderHTML: attrs => attrs.id ? { 'data-comentario-id': attrs.id } : {},
+      },
+      autorId: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-autor-id'),
+        renderHTML: attrs => attrs.autorId ? { 'data-autor-id': attrs.autorId } : {},
+      },
+      autorNome: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-autor-nome'),
+        renderHTML: attrs => attrs.autorNome ? { 'data-autor-nome': attrs.autorNome } : {},
+      },
+      autorCor: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-autor-cor'),
+        renderHTML: attrs => attrs.autorCor ? { 'data-autor-cor': attrs.autorCor } : {},
+      },
+      texto: {
+        default: '',
+        parseHTML: element => element.getAttribute('data-texto') || '',
+        renderHTML: attrs => attrs.texto ? { 'data-texto': attrs.texto } : {},
+      },
+      respostas: {
+        default: [],
+        parseHTML: element => {
+          try { return JSON.parse(element.getAttribute('data-respostas') || '[]') }
+          catch { return [] }
+        },
+        renderHTML: attrs => ({ 'data-respostas': JSON.stringify(attrs.respostas || []) }),
+      },
+      concluido: {
+        default: false,
+        parseHTML: element => element.getAttribute('data-concluido') === 'true',
+        renderHTML: attrs => attrs.concluido ? { 'data-concluido': 'true' } : {},
+      },
+      criadoEm: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-criado-em'),
+        renderHTML: attrs => attrs.criadoEm ? { 'data-criado-em': attrs.criadoEm } : {},
+      },
+    }
+  },
+  parseHTML() { return [{ tag: 'span.leg-comentario', priority: 75 }] },
+  renderHTML({ mark, HTMLAttributes }) {
+    return [
+      'span',
+      mergeAttributes(HTMLAttributes, {
+        class: `leg-comentario${mark.attrs.concluido ? ' leg-comentario-concluido' : ''}`,
+        style: mark.attrs.autorCor ? `--comentario-cor:${mark.attrs.autorCor}` : undefined,
+      }),
+      0,
+    ]
+  },
+})
+
 export const ItalicoLight = Mark.create({
   name: 'italicoLight',
   parseHTML() { return [{ tag: 'em.leg-italico-light', priority: 70 }] },
@@ -266,7 +329,7 @@ export const ALL_EXTENSIONS = [
   TextoComumCitacao, TextoComumBullets, TextoComumAssinatura, TextoComumAssinaturaCargo,
   EstiloParagrafoCustom,
   ParagraphAlteradoAttrs,
-  Nota, NotaSobrescrito, NotaRodape, ItalicoLight, BoldArtigo, Regular, EstiloCaractereCustom,
+  Nota, NotaSobrescrito, NotaRodape, Comentario, ItalicoLight, BoldArtigo, Regular, EstiloCaractereCustom,
   HiddenChars,
   DiffHighlight,
   NotaRodapeConnector,

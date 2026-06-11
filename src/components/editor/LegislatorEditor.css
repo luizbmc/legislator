@@ -418,6 +418,17 @@
   color: #433f12;
 }
 
+.leg-comentario {
+  background: color-mix(in srgb, var(--comentario-cor, #2563eb) 18%, transparent);
+  border-bottom: 2px solid var(--comentario-cor, #2563eb);
+  border-radius: 2px;
+}
+
+.leg-comentario-concluido {
+  background: rgba(148, 163, 184, 0.16);
+  border-bottom-color: #94a3b8;
+}
+
 .leg-paragrafo-lei .leg-nota-rodape,
 .leg-paragrafo-lei .leg-nota-rodape-marker,
 .leg-paragrafo-lei .leg-nota-rodape-content {

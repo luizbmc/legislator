@@ -168,7 +168,7 @@ function lerEstadoAtual(editor, caracteres = CARACTERES) {
   }
 }
 
-export default function PainelEstilos({ editor, editable = true, tipoNorma = '' }) {
+export default function PainelEstilos({ editor, editable = true, tipoNorma = '', onAcaoRepetivel = null }) {
   const [prefsTick, setPrefsTick] = useState(0)
   const caracteresCustom = estilosCaractereConfigurados({ incluirInternos: false })
     .filter(e => e.custom && estiloAtivoNoTipo(e, tipoNorma))
@@ -232,9 +232,18 @@ export default function PainelEstilos({ editor, editable = true, tipoNorma = '' 
         cssClass: estilo.cssClass,
         format: estilo.format,
       }).run()
+      onAcaoRepetivel?.({
+        tipo: 'paragrafo',
+        custom: true,
+        styleId: estilo.id,
+        label: estilo.label,
+        cssClass: estilo.cssClass,
+        format: estilo.format,
+      })
       return
     }
     editor?.chain().focus().setNode(estilo.node).run()
+    onAcaoRepetivel?.({ tipo: 'paragrafo', node: estilo.node })
   }
 
   return (
@@ -266,7 +275,11 @@ export default function PainelEstilos({ editor, editable = true, tipoNorma = '' 
           return (
             <button key={c.id}
               className={`char-btn ${c.css}${ativo ? ' ativo' : ''}`}
-              onClick={() => editable && editor && c.toggle(editor)}
+              onClick={() => {
+                if (!editable || !editor) return
+                c.toggle(editor)
+                onAcaoRepetivel?.({ tipo: 'caractere', id: c.id, acao: ativo ? 'remove' : 'apply' })
+              }}
               disabled={!editable}
               title={c.title}>
               {c.label}

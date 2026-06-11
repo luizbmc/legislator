@@ -8,7 +8,9 @@ import PainelEstilos        from '../components/paineis/PainelEstilos.jsx'
 import PainelExcecoes       from '../components/paineis/PainelExcecoes.jsx'
 import PainelBusca          from '../components/paineis/PainelBusca.jsx'
 import PainelNotas          from '../components/paineis/PainelNotas.jsx'
+import PainelComentarios    from '../components/paineis/PainelComentarios.jsx'
 import PainelAtualizarNorma from '../components/paineis/PainelAtualizarNorma.jsx'
+import UsuarioAtualBadge    from '../components/UsuarioAtualBadge.jsx'
 import { baixarXml }        from '../services/exportarXml.js'
 import { xmlParaTiptap }     from '../services/importarXml.js'
 import { analisarClassesHtmlInDesign, htmlInDesignParaTiptap } from '../services/importarHtmlInDesign.js'
@@ -18,6 +20,7 @@ import { blocosTextoComumParaTiptap } from '../services/limpeza/index.js'
 import { detectarExcecoes } from '../services/limpeza/06_detectarExcecoes.js'
 import { isTipoTextoComum, TIPOS_NORMA }      from '../constants/normas.js'
 import { TEXTO_COMUM_WORD_STYLE_MAP } from '../constants/textoComumWord.js'
+import { carregarUsuarioComentarioAtual, iniciaisUsuario } from '../services/usuariosComentarios.js'
 
 const DOC_VAZIO = '{"type":"doc","content":[]}'
 
@@ -520,7 +523,25 @@ function contarNosAlterados(doc, mapa = {}) {
 // ─────────────────────────────────────────────────────────────────
 
 function jsonSemAlterado(value) {
-  if (Array.isArray(value)) return value.map(jsonSemAlterado)
+  if (Array.isArray(value)) {
+    const normalizados = value
+      .filter(item => !(item && typeof item === 'object' && item.type === 'comentario'))
+      .map(jsonSemAlterado)
+    const mesclados = []
+    for (const item of normalizados) {
+      const last = mesclados[mesclados.length - 1]
+      if (
+        item?.type === 'text' &&
+        last?.type === 'text' &&
+        JSON.stringify({ ...last, text: '' }) === JSON.stringify({ ...item, text: '' })
+      ) {
+        last.text = `${last.text || ''}${item.text || ''}`
+      } else {
+        mesclados.push(item)
+      }
+    }
+    return mesclados
+  }
   if (value && typeof value === 'object') {
     const out = {}
     for (const [key, val] of Object.entries(value)) {
@@ -528,6 +549,9 @@ function jsonSemAlterado(value) {
       if (key === 'attrs' && val && typeof val === 'object') {
         const attrs = jsonSemAlterado(val)
         if (Object.keys(attrs).length > 0) out[key] = attrs
+      } else if (key === 'marks') {
+        const marks = jsonSemAlterado(val)
+        if (Array.isArray(marks) && marks.length > 0) out[key] = marks
       } else {
         out[key] = jsonSemAlterado(val)
       }
@@ -604,7 +628,7 @@ function textoMarcadorNotaRodape() {
   return '[nota]'
 }
 
-export default function Editor() {
+export default function Editor({ usuarioAtual, onTrocarUsuario }) {
   const { id } = useParams()
   const nav    = useNavigate()
 
@@ -631,6 +655,7 @@ export default function Editor() {
   const [modoEdicaoManual, setModoEdicaoManual] = useState(false)
   const [buscaAberta,      setBuscaAberta]      = useState(false)
   const [notasAberto,      setNotasAberto]      = useState(false)
+  const [comentariosAberto, setComentariosAberto] = useState(false)
   const [excecoesAberto,   setExcecoesAberto]   = useState(false)
   const [modalPadronizacao, setModalPadronizacao] = useState(false)
   const [abaPadronizacao, setAbaPadronizacao] = useState('palavras')
@@ -649,10 +674,12 @@ export default function Editor() {
   const [modalAtualizarAberto,  setModalAtualizarAberto]  = useState(false)
   const [modalEditarMeta,       setModalEditarMeta]       = useState(false)
   const [modalNotaRodape,       setModalNotaRodape]       = useState(false)
+  const [modalComentario,       setModalComentario]       = useState(false)
   const [modalColarTexto,       setModalColarTexto]       = useState(false)
   const [modalClassesHtml,      setModalClassesHtml]      = useState(null)
   const [colagemTemConteudo,    setColagemTemConteudo]    = useState(false)
   const [notaRodapeForm,        setNotaRodapeForm]        = useState({ chamada: '1', texto: '' })
+  const [comentarioForm,        setComentarioForm]        = useState({ texto: '' })
   const [editForm,              setEditForm]              = useState({
     tipo: '',
     epigrafe: '',
@@ -678,10 +705,12 @@ export default function Editor() {
   const [docAnterior,  setDocAnterior]  = useState(null)
   const [abaRevisao,   setAbaRevisao]   = useState('texto')  // 'texto' | 'formatacao'
   const notaRodapeSelectionRef = useRef(null)
+  const comentarioSelectionRef = useRef(null)
   const manualBaselineRef = useRef([])
   const manualTrackingRef = useRef(false)
   const manualTrackingSuspensoRef = useRef(false)
   const baselineAposImportacaoRef = useRef(false)
+  const ultimaAcaoRepetivelRef = useRef(null)
   const ocorrenciasPadronizacao = modalPadronizacao
     ? coletarOcorrenciasPadronizacao(editor, abaPadronizacao)
     : []
@@ -719,8 +748,38 @@ export default function Editor() {
   // ── Atalhos de teclado globais ────────────────────────────────
   useEffect(() => {
     function onKeyDown(e) {
+      if (e.key === 'F4') {
+        const target = e.target
+        const tag = String(target?.tagName || '').toLowerCase()
+        const emCampo = tag === 'input' || tag === 'textarea' || tag === 'select'
+        const dentroEditor = Boolean(target?.closest?.('.legislator-editor-inner'))
+        if (!emCampo && (dentroEditor || document.activeElement?.closest?.('.legislator-editor-inner'))) {
+          e.preventDefault()
+          repetirUltimaAcao()
+        }
+        return
+      }
+
       const mod = e.ctrlKey || e.metaKey
       if (!mod) return
+      const target = e.target
+      const tag = String(target?.tagName || '').toLowerCase()
+      const emCampo = tag === 'input' || tag === 'textarea' || tag === 'select'
+      const dentroEditor = Boolean(target?.closest?.('.legislator-editor-inner')) ||
+        Boolean(document.activeElement?.closest?.('.legislator-editor-inner'))
+
+      if (
+        fase === 'editar' &&
+        editor &&
+        !emCampo &&
+        dentroEditor &&
+        ((e.key.toLowerCase() === 'z' && e.shiftKey) || e.key.toLowerCase() === 'y')
+      ) {
+        e.preventDefault()
+        editor.chain().focus().redo().run()
+        return
+      }
+
       if (e.key === 'f' && fase === 'editar' && !emRevisao) {
         e.preventDefault()
         setBuscaAberta(a => !a)
@@ -741,7 +800,7 @@ export default function Editor() {
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [fase, emRevisao])
+  }, [fase, emRevisao, editor, modoEdicaoManual])
 
   // ── Detectar modificações não salvas ──────────────────────────
   useEffect(() => {
@@ -812,6 +871,85 @@ export default function Editor() {
     setModificado(true)
   }
 
+  function registrarAcaoRepetivel(acao) {
+    if (!acao) return
+    ultimaAcaoRepetivelRef.current = acao
+  }
+
+  function aplicarCaractereRepetivel(id, acao = 'apply') {
+    if (!editor) return
+    const chain = editor.chain().focus()
+    const aplicar = acao !== 'remove'
+
+    if (id === 'bold') {
+      ;(aplicar ? chain.setBold() : chain.unsetBold()).run()
+      return
+    }
+    if (id === 'italic') {
+      ;(aplicar ? chain.setItalic() : chain.unsetItalic()).run()
+      return
+    }
+    if (id === 'bolditalic') {
+      ;(aplicar ? chain.setBold().setItalic() : chain.unsetBold().unsetItalic()).run()
+      return
+    }
+    if (id === 'superscript') {
+      ;(aplicar ? chain.setSuperscript() : chain.unsetSuperscript()).run()
+      return
+    }
+    if (id === 'subscript') {
+      ;(aplicar ? chain.setSubscript() : chain.unsetSubscript()).run()
+      return
+    }
+    if (id === 'nota') {
+      ;(aplicar ? chain.setMark('nota') : chain.unsetMark('nota')).run()
+      return
+    }
+    if (id === 'notaSobrescrito') {
+      ;(aplicar ? chain.setMark('notaSobrescrito') : chain.unsetMark('notaSobrescrito')).run()
+      return
+    }
+    if (id === 'nota-italic') {
+      ;(aplicar ? chain.setMark('nota').setItalic() : chain.unsetMark('nota').unsetItalic()).run()
+      return
+    }
+    if (id === 'boldArtigo') {
+      ;(aplicar ? chain.setMark('boldArtigo') : chain.unsetMark('boldArtigo')).run()
+      return
+    }
+    if (id === 'regular') {
+      ;(aplicar ? chain.setMark('regular') : chain.unsetMark('regular')).run()
+    }
+  }
+
+  function repetirUltimaAcao() {
+    const acao = ultimaAcaoRepetivelRef.current
+    if (!editor || !acao || !(modoEdicaoManual || emRevisao)) return
+
+    if (acao.tipo === 'paragrafo') {
+      if (acao.custom) {
+        editor.chain().focus().setNode('estiloParagrafoCustom', {
+          styleId: acao.styleId,
+          label: acao.label,
+          cssClass: acao.cssClass,
+          format: acao.format,
+        }).run()
+      } else if (acao.node) {
+        editor.chain().focus().setNode(acao.node).run()
+      }
+      return
+    }
+
+    if (acao.tipo === 'caractere') {
+      aplicarCaractereRepetivel(acao.id, acao.acao)
+      return
+    }
+
+    if (acao.tipo === 'caixa') {
+      aplicarCaixaSelecao(acao.modo, false)
+    }
+  }
+
   function marcarAlteracoesManuais() {
     if (!editor || manualTrackingRef.current || manualTrackingSuspensoRef.current) return
     manualTrackingRef.current = true
@@ -825,6 +963,7 @@ export default function Editor() {
         posicoes.push({ node, offset })
       })
       const classificados = classificarAlteracoesManuais(manualBaselineRef.current, atuais)
+      const classificadosSet = new Set(Object.keys(classificados).map(Number))
       for (const [idxTexto, diffType] of Object.entries(classificados)) {
         const idx = Number(idxTexto)
         const alvo = posicoes[idx]
@@ -839,6 +978,20 @@ export default function Editor() {
           changed = true
         } catch {}
       }
+      posicoes.forEach((alvo, idx) => {
+        if (!alvo?.node?.attrs?.alterado) return
+        if (classificadosSet.has(idx)) return
+        if (atuais[idx] !== manualBaselineRef.current[idx]) return
+        try {
+          tr = tr.setNodeMarkup(alvo.offset, null, {
+            ...alvo.node.attrs,
+            alterado: null,
+            diffType: null,
+            diffSubtype: null,
+          })
+          changed = true
+        } catch {}
+      })
       if (changed) {
         tr = tr.setMeta('addToHistory', false)
         editor.view.dispatch(tr)
@@ -932,12 +1085,28 @@ export default function Editor() {
     setModalNotaRodape(true)
   }
 
+  function abrirComentario() {
+    if (!editor) return
+    const { from, to, empty } = editor.state.selection
+    if (empty) {
+      alert('Selecione um trecho de texto antes de adicionar um comentario.')
+      return
+    }
+    if (!carregarUsuarioComentarioAtual()) {
+      alert('Selecione um usuario antes de comentar.')
+      return
+    }
+    comentarioSelectionRef.current = { from, to }
+    setComentarioForm({ texto: '' })
+    setModalComentario(true)
+  }
+
   /**
    * Altera a caixa do trecho selecionado preservando as marks de cada nó de texto.
    * modo: 'alta' (MAIÚSCULAS), 'baixa' (minúsculas) ou
    *       'cab' (caixa alta e baixa — somente a primeira letra da seleção em maiúscula).
    */
-  function aplicarCaixaSelecao(modo) {
+  function aplicarCaixaSelecao(modo, registrar = true) {
     if (!editor || !modoEdicaoManual) return
     const { state, view } = editor
     const { from, to, empty } = state.selection
@@ -977,6 +1146,7 @@ export default function Editor() {
     })
     view.dispatch(tr)
     editor.commands.focus()
+    if (registrar) registrarAcaoRepetivel({ tipo: 'caixa', modo })
   }
 
   function localizarBlocoExcecao(exc) {
@@ -1102,6 +1272,45 @@ export default function Editor() {
     setModalNotaRodape(false)
     setNotaRodapeForm({ chamada: '1', texto: '' })
     notaRodapeSelectionRef.current = null
+    setModificado(true)
+  }
+
+  function inserirComentario(e) {
+    e.preventDefault()
+    if (!editor) return
+    const texto = comentarioForm.texto.trim()
+    if (!texto) {
+      alert('Informe o texto do comentario.')
+      return
+    }
+    const usuario = carregarUsuarioComentarioAtual()
+    if (!usuario) {
+      alert('Selecione um usuario antes de comentar.')
+      return
+    }
+
+    const selection = comentarioSelectionRef.current || editor.state.selection
+    const idComentario = `c-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    editor
+      .chain()
+      .focus()
+      .setTextSelection(selection)
+      .setMark('comentario', {
+        id: idComentario,
+        autorId: usuario.id,
+        autorNome: usuario.nome,
+        autorCor: usuario.cor,
+        texto,
+        respostas: [],
+        concluido: false,
+        criadoEm: new Date().toISOString(),
+      })
+      .run()
+
+    setModalComentario(false)
+    setComentarioForm({ texto: '' })
+    comentarioSelectionRef.current = null
+    setComentariosAberto(true)
     setModificado(true)
   }
 
@@ -1982,9 +2191,20 @@ export default function Editor() {
               >Cab</button>
               <button
                 className={`btn-ghost btn-notas${notasAberto ? ' ativa' : ''}`}
-                onClick={() => { setNotasAberto(v => !v); setExcecoesAberto(false) }}
+                onClick={() => { setNotasAberto(v => !v); setExcecoesAberto(false); setComentariosAberto(false) }}
                 title="Navegador de notas"
               >Ver notas</button>
+              <button
+                className={`btn-ghost btn-comentarios${comentariosAberto ? ' ativa' : ''}`}
+                onClick={() => { setComentariosAberto(v => !v); setNotasAberto(false); setExcecoesAberto(false) }}
+                title="Navegador de comentarios"
+              >Lista 💬</button>
+              <button
+                className="btn-ghost btn-comentario-add"
+                onClick={abrirComentario}
+                disabled={!modoEdicaoManual}
+                title="Adicionar comentario ao trecho selecionado"
+              >+💬</button>
               <button
                 className="btn-ghost btn-nota-rodape"
                 onClick={abrirNotaRodape}
@@ -2051,6 +2271,7 @@ export default function Editor() {
             <button className={`btn-primary${modificado ? ' btn-salvar-modificado' : ''}`} onClick={handleSalvar} disabled={salvando}>
               {salvando ? 'Salvando…' : '💾 Salvar'}
             </button>
+            <UsuarioAtualBadge usuario={usuarioAtual} onTrocar={onTrocarUsuario} />
           </>}
 
           </div>
@@ -2341,6 +2562,14 @@ export default function Editor() {
               />
             )}
             {!emRevisao && (
+              <PainelComentarios
+                editor={editor}
+                aberto={comentariosAberto}
+                editable={modoEdicaoManual}
+                onFechar={() => setComentariosAberto(false)}
+              />
+            )}
+            {!emRevisao && (
               <PainelExcecoes
                 excecoes={excecoes}
                 editor={editor}
@@ -2370,14 +2599,24 @@ export default function Editor() {
           {/* Painel direito normal (oculto em modo revisão) */}
           {!emRevisao && (
             <div className="editor-direita">
-              <PainelEstilos editor={editor} editable={modoEdicaoManual} tipoNorma={norma?.tipo} />
+              <PainelEstilos
+                editor={editor}
+                editable={modoEdicaoManual}
+                tipoNorma={norma?.tipo}
+                onAcaoRepetivel={registrarAcaoRepetivel}
+              />
             </div>
           )}
 
           {/* Painel de estilos (direita, em modo revisão) */}
           {emRevisao && (
             <div className="editor-direita">
-              <PainelEstilos editor={editor} editable tipoNorma={norma?.tipo} />
+              <PainelEstilos
+                editor={editor}
+                editable
+                tipoNorma={norma?.tipo}
+                onAcaoRepetivel={registrarAcaoRepetivel}
+              />
             </div>
           )}
         </div>
@@ -2426,6 +2665,53 @@ export default function Editor() {
                 </button>
                 <button type="submit" className="btn-primary" disabled={!notaRodapeForm.texto.trim()}>
                   Inserir
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {modalComentario && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalComentario(false) }}>
+          <div className="modal-box modal-comentario" onMouseDown={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Adicionar comentario</h3>
+              <button className="btn-ghost modal-fechar" onClick={() => setModalComentario(false)}>x</button>
+            </div>
+            <form onSubmit={inserirComentario}>
+              <div className="comentario-autor-linha">
+                {(() => {
+                  const usuario = carregarUsuarioComentarioAtual()
+                  return usuario ? (
+                    <>
+                      <span className="usuario-badge usuario-badge-mini" style={{ backgroundColor: usuario.cor }}>
+                        {iniciaisUsuario(usuario.nome)}
+                      </span>
+                      <span>{usuario.nome}</span>
+                    </>
+                  ) : (
+                    <span>Nenhum usuario selecionado</span>
+                  )
+                })()}
+              </div>
+              <div className="campo">
+                <label>Comentario</label>
+                <textarea
+                  autoFocus
+                  rows={5}
+                  value={comentarioForm.texto}
+                  onChange={e => setComentarioForm({ texto: e.target.value })}
+                  placeholder="Digite o comentario"
+                  required
+                />
+              </div>
+              <div className="modal-acoes">
+                <button type="button" className="btn-ghost" onClick={() => setModalComentario(false)}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-primary" disabled={!comentarioForm.texto.trim()}>
+                  Comentar
                 </button>
               </div>
             </form>

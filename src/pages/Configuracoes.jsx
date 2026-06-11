@@ -17,6 +17,16 @@ import {
   slugEstilo,
   tiposNormaTexto,
 } from '../services/preferenciasEstilo.js'
+import {
+  carregarUsuarioComentarioAtual,
+  carregarUsuariosComentarios,
+  CORES_USUARIO_COMENTARIO,
+  criarUsuarioComentario,
+  iniciaisUsuario,
+  limparUsuarioComentarioAtual,
+  salvarUsuariosComentarios,
+  selecionarUsuarioComentario,
+} from '../services/usuariosComentarios.js'
 
 function tagText(valor) {
   if (!valor) return '-'
@@ -437,6 +447,91 @@ function BackupBanco() {
   )
 }
 
+function UsuariosComentarios() {
+  const [usuarios, setUsuarios] = useState(() => carregarUsuariosComentarios())
+  const [atual, setAtual] = useState(() => carregarUsuarioComentarioAtual())
+  const [nome, setNome] = useState('')
+  const [cor, setCor] = useState(CORES_USUARIO_COMENTARIO[0])
+
+  function recarregar() {
+    setUsuarios(carregarUsuariosComentarios())
+    setAtual(carregarUsuarioComentarioAtual())
+  }
+
+  function adicionar(e) {
+    e.preventDefault()
+    const usuario = criarUsuarioComentario(nome, cor)
+    if (!usuario) return
+    setNome('')
+    setCor(CORES_USUARIO_COMENTARIO[(usuarios.length + 1) % CORES_USUARIO_COMENTARIO.length])
+    selecionarUsuarioComentario(usuario)
+    recarregar()
+  }
+
+  function selecionar(usuario) {
+    selecionarUsuarioComentario(usuario)
+    recarregar()
+  }
+
+  function excluir(usuario) {
+    if (!confirm(`Excluir o usuario "${usuario.nome}"?`)) return
+    const restantes = usuarios.filter(u => u.id !== usuario.id)
+    salvarUsuariosComentarios(restantes)
+    if (atual?.id === usuario.id) limparUsuarioComentarioAtual()
+    recarregar()
+  }
+
+  return (
+    <section className="config-card config-usuarios-card">
+      <div className="config-card-header">
+        <div>
+          <h2>Usuarios de comentarios</h2>
+          <p>Cadastre os nomes usados para identificar comentarios nas normas.</p>
+        </div>
+      </div>
+
+      <form className="config-usuario-form" onSubmit={adicionar}>
+        <input
+          value={nome}
+          onChange={e => setNome(e.target.value)}
+          placeholder="Nome do usuario"
+        />
+        <select value={cor} onChange={e => setCor(e.target.value)}>
+          {CORES_USUARIO_COMENTARIO.map(c => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+        <span className="usuario-badge" style={{ backgroundColor: cor }}>{iniciaisUsuario(nome)}</span>
+        <button type="submit" className="btn-primary" disabled={!nome.trim()}>
+          Adicionar usuario
+        </button>
+      </form>
+
+      {usuarios.length === 0 ? (
+        <p className="config-vazio">Nenhum usuario cadastrado.</p>
+      ) : (
+        <div className="config-usuarios-lista">
+          {usuarios.map(usuario => (
+            <div key={usuario.id} className={`config-usuario-item${atual?.id === usuario.id ? ' ativo' : ''}`}>
+              <span className="usuario-badge" style={{ backgroundColor: usuario.cor }}>
+                {iniciaisUsuario(usuario.nome)}
+              </span>
+              <strong>{usuario.nome}</strong>
+              {atual?.id === usuario.id && <span className="config-badge config-badge-ok">Atual</span>}
+              <button type="button" className="btn-ghost btn-sm" onClick={() => selecionar(usuario)}>
+                Usar
+              </button>
+              <button type="button" className="btn-ghost btn-sm danger" onClick={() => excluir(usuario)}>
+                Excluir
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
 export default function Configuracoes() {
   const nav = useNavigate()
   const [aba, setAba] = useState('paragrafos')
@@ -529,6 +624,9 @@ export default function Configuracoes() {
           <button type="button" className={aba === 'caracteres' ? 'ativo' : ''} onClick={() => { setAba('caracteres'); setEdicao(null) }}>
             Estilos de caractere
           </button>
+          <button type="button" className={aba === 'usuarios' ? 'ativo' : ''} onClick={() => { setAba('usuarios'); setEdicao(null) }}>
+            Usuarios
+          </button>
           <button type="button" className={aba === 'backup' ? 'ativo' : ''} onClick={() => { setAba('backup'); setEdicao(null) }}>
             Backup do banco
           </button>
@@ -546,6 +644,8 @@ export default function Configuracoes() {
 
           {aba === 'backup' ? (
             <BackupBanco />
+          ) : aba === 'usuarios' ? (
+            <UsuariosComentarios />
           ) : aba === 'paragrafos' ? (
             <TabelaEstilos
               titulo="Estilos de parágrafo"

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TIPOS_NORMA } from '../constants/normas.js'
 import logoNormando from '../logo.png'
+import UsuarioAtualBadge from '../components/UsuarioAtualBadge.jsx'
 
 const STATUS_LABELS = {
   rascunho:   { label: 'Rascunho',   cor: '#f59e0b' },
@@ -86,7 +87,7 @@ function AvisoAtualizacaoPendente({ norma }) {
   return <span className="norma-pendente-icone" title="Atualização pendente">⚠️</span>
 }
 
-export default function Home() {
+export default function Home({ usuarioAtual, onTrocarUsuario }) {
   const nav = useNavigate()
   const [normas,  setNormas]  = useState([])
   const [busca,   setBusca]   = useState('')
@@ -168,7 +169,7 @@ export default function Home() {
           <img className="home-logo-img" src={logoNormando} alt="" />
           <h1 className="home-logo">Normando</h1>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="home-header-actions">
           <button className="btn-ghost" onClick={() => setAjudaAberta(true)}>
             Ajuda
           </button>
@@ -181,6 +182,7 @@ export default function Home() {
           <button className="btn-primary" onClick={() => nav('/nova')}>
             + Nova norma
           </button>
+          <UsuarioAtualBadge usuario={usuarioAtual} onTrocar={onTrocarUsuario} />
         </div>
       </header>
 

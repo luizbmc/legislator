@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import logoNormando from '../logo.png'
+import UsuarioAtualBadge from '../components/UsuarioAtualBadge.jsx'
 
 const STATUS_MAP = {
   'previsto':     { cls: 'previsto',   label: 'Previsto' },
@@ -32,7 +33,7 @@ function coverStyle(cor) {
   return { '--pub-cover-color': cor || DEFAULT_COVER_COLOR }
 }
 
-export default function PublicacoesPage() {
+export default function PublicacoesPage({ usuarioAtual, onTrocarUsuario }) {
   const nav = useNavigate()
   const [lista,    setLista]    = useState([])
   const [busca,    setBusca]    = useState('')
@@ -128,7 +129,10 @@ export default function PublicacoesPage() {
             <span>Publicações</span>
           </div>
         </div>
-        <button className="btn-primary" onClick={abrirModal}>+ Nova publicação</button>
+        <div className="home-header-actions">
+          <button className="btn-primary" onClick={abrirModal}>+ Nova publicação</button>
+          <UsuarioAtualBadge usuario={usuarioAtual} onTrocar={onTrocarUsuario} />
+        </div>
       </header>
 
       <div className="home-filtros">

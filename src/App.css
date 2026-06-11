@@ -175,6 +175,14 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   position: sticky; top: 0; background: var(--bg); z-index: 10;
 }
 
+.home-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .home-brand {
   display: flex;
   align-items: center;
@@ -1885,6 +1893,140 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   color: #fff;
 }
 
+.usuario-entrada-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f4f4ef;
+}
+
+.usuario-entrada-card {
+  width: min(440px, 100%);
+  display: grid;
+  gap: 16px;
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, .12);
+}
+
+.usuario-entrada-card h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 30px;
+}
+
+.usuario-entrada-card p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.usuario-entrada-lista {
+  display: grid;
+  gap: 8px;
+}
+
+.usuario-entrada-lista button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.usuario-entrada-lista button:hover {
+  background: var(--border-soft);
+}
+
+.usuario-entrada-form {
+  display: grid;
+  gap: 7px;
+}
+
+.usuario-entrada-form label {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.usuario-entrada-form > div {
+  display: flex;
+  gap: 8px;
+}
+
+.usuario-entrada-form input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 8px 9px;
+}
+
+.usuario-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  flex: 0 0 auto;
+}
+
+.usuario-badge-mini {
+  width: 22px;
+  height: 22px;
+  font-size: 9px;
+}
+
+.usuario-atual-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  max-width: 220px;
+  padding: 5px 8px 5px 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .94);
+  color: var(--text);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, .12);
+  cursor: pointer;
+}
+
+.usuario-atual-badge > span:not(.usuario-badge) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.usuario-atual-badge em {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.usuario-atual-badge:hover {
+  background: #fff;
+  border-color: #cbd5e1;
+}
+
 .busca-painel {
   position: absolute;
   top: 10px;
@@ -2005,6 +2147,197 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 }
 .nota-texto-italico {
   font-style: italic;
+}
+
+.comentarios-painel {
+  left: 20px;
+  width: min(430px, calc(100% - 40px));
+}
+
+.comentarios-contador {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.comentarios-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.comentarios-lista > li {
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.comentario-item {
+  border-radius: 0;
+}
+
+.comentario-item.concluido {
+  opacity: .72;
+}
+
+.comentario-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.comentario-meta strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.comentario-meta em {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: #4b5563;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.comentario-texto {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.comentario-selecao {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.comentario-respostas {
+  display: grid;
+  gap: 6px;
+  padding: 0 9px 8px 22px;
+}
+
+.comentario-resposta {
+  display: flex;
+  gap: 7px;
+  font-size: 11px;
+}
+
+.comentario-resposta strong {
+  display: block;
+  color: var(--text);
+}
+
+.comentario-resposta p {
+  margin: 1px 0 0;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.comentario-acoes {
+  display: grid;
+  gap: 6px;
+  padding: 8px 9px;
+  border-top: 1px solid var(--border-soft);
+  background: #fafafa;
+}
+
+.comentario-acoes textarea {
+  width: 100%;
+  min-height: 46px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 7px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.comentario-acoes > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.modal-comentario {
+  width: min(430px, 94vw);
+}
+
+.modal-comentario form {
+  display: grid;
+  gap: 12px;
+  padding: 14px 18px 18px;
+}
+
+.comentario-autor-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.config-usuario-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 120px auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.config-usuario-form input,
+.config-usuario-form select {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 8px 9px;
+}
+
+.config-usuarios-lista {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px 16px;
+}
+
+.config-usuario-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.config-usuario-item.ativo {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.config-usuario-item strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-vazio {
+  margin: 0;
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
 .excecoes-painel {
