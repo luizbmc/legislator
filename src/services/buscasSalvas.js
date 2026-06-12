@@ -43,6 +43,7 @@ export function coletarOcorrenciasBuscaSalva(editor, busca) {
   const filtroParags = new Set(busca.filtroParags ?? [])
   const filtroChars = new Set(busca.filtroChars ?? [])
   const found = []
+  const cruzarParagrafos = Boolean(busca.useReg && /\\n|\n/.test(busca.pat))
 
   function textBlockParts(block, blockPos) {
     const parts = []
@@ -90,6 +91,8 @@ export function coletarOcorrenciasBuscaSalva(editor, busca) {
     return parts.length ? parts[0].marks : []
   }
 
+  const blocos = []
+
   editor.state.doc.descendants((node, pos) => {
     if (!node.isTextblock) return
 
@@ -100,6 +103,10 @@ export function coletarOcorrenciasBuscaSalva(editor, busca) {
 
     const { text, parts } = textBlockParts(node, pos)
     if (!text || !parts.length) return
+
+    blocos.push({ node, pos, text, parts })
+
+    if (cruzarParagrafos) return
 
     regex.lastIndex = 0
     let match
@@ -120,6 +127,52 @@ export function coletarOcorrenciasBuscaSalva(editor, busca) {
       if (match[0].length === 0) regex.lastIndex++
     }
   })
+
+  if (cruzarParagrafos) {
+    for (let i = 0; i < blocos.length; i++) {
+      const primeiro = blocos[i]
+      if (!primeiro.text.trim()) continue
+
+      let j = i + 1
+      while (j < blocos.length && !blocos[j].text.trim()) j++
+      if (j >= blocos.length) continue
+
+      const segundo = blocos[j]
+      const sepOffset = primeiro.text.length
+      const combined = `${primeiro.text}\n${segundo.text}`
+
+      regex.lastIndex = 0
+      let match
+      while ((match = regex.exec(combined)) !== null) {
+        const start = match.index
+        const end = match.index + match[0].length
+        const cruzaSeparador = start <= sepOffset && end > sepOffset
+        if (cruzaSeparador && rangeHasCharacterFilters(primeiro.parts, 0, primeiro.text.length)) {
+          found.push({
+            tipo: 'entreParagrafos',
+            from: positionFromOffset(primeiro.parts, Math.min(start, primeiro.text.length)),
+            to: positionFromOffset(segundo.parts, Math.max(0, end - sepOffset - 1)),
+            texto: match[0],
+            fullMatch: match[0],
+            groups: Array.from(match),
+            marks: marksAtOffset(primeiro.parts, Math.min(start, primeiro.text.length)),
+            index: start,
+            combined,
+            primeiro: {
+              pos: primeiro.pos,
+              nodeSize: primeiro.node.nodeSize,
+              contentSize: primeiro.node.content.size,
+            },
+            ultimo: {
+              pos: segundo.pos,
+              nodeSize: segundo.node.nodeSize,
+            },
+          })
+        }
+        if (match[0].length === 0) regex.lastIndex++
+      }
+    }
+  }
 
   return found
 }

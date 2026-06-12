@@ -2552,6 +2552,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
                 aberto={buscaAberta}
                 onFechar={() => setBuscaAberta(false)}
                 onModificado={() => setModificado(true)}
+                tipoNorma={norma?.tipo}
               />
             )}
             {!emRevisao && (

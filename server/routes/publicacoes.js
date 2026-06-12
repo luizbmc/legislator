@@ -14,7 +14,8 @@ function buscarCompleto(id) {
 
   for (const secao of secoes) {
     secao.normas = db.prepare(`
-      SELECT pn.id, pn.ordem, n.*
+      SELECT pn.id AS pn_id, pn.norma_id, pn.ordem, pn.exportacao,
+             n.*
       FROM publicacao_normas pn
       JOIN normas n ON n.id = pn.norma_id
       WHERE pn.secao_id = ?
@@ -41,9 +42,10 @@ function salvarSecoes(publicacaoId, secoes) {
       for (let j = 0; j < secao.normas.length; j++) {
         const norma = secao.normas[j]
         const normaId = norma.norma_id || norma.id
+        const exportacao = norma.exportacao || (norma.status === 'finalizado' && !norma.atualizacao_pendente ? 'completa' : 'ignorar')
         db.prepare(`
-          INSERT INTO publicacao_normas (secao_id, norma_id, ordem) VALUES (?, ?, ?)
-        `).run(secaoId, normaId, j)
+          INSERT INTO publicacao_normas (secao_id, norma_id, ordem, exportacao) VALUES (?, ?, ?, ?)
+        `).run(secaoId, normaId, j, exportacao)
       }
     }
   }

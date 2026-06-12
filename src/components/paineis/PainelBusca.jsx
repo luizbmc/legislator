@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   BUSCAS_SALVAS_EVENT,
   buildRegexBuscaSalva,
@@ -7,6 +7,10 @@ import {
   excluirBuscaSalva,
   salvarBuscaSalva,
 } from '../../services/buscasSalvas.js'
+import {
+  estiloAtivoNoTipo,
+  estilosParagrafoConfigurados,
+} from '../../services/preferenciasEstilo.js'
 
 // ── Legenda de símbolos regex ─────────────────────────────────────
 const REGEX_LEGEND = [
@@ -93,6 +97,7 @@ const ESTILOS_PARAGRAFO = [
   { id: 'artigoTitulo',    label: 'Art. Título' },
   { id: 'corpoTratado',    label: 'Corpo tratado' },
   { id: 'paragrafLei',     label: 'Parágrafo' },
+  { id: 'nomeJuridico',    label: 'Nome jurídico' },
   { id: 'inciso',          label: 'Inciso' },
   { id: 'alinea',          label: 'Alínea' },
   { id: 'item',            label: 'Item' },
@@ -139,6 +144,24 @@ const MARCAS_APLICAVEIS = [
   { id: 'subscript',    label: 'Subscrito' },
 ]
 
+function normalizarEstiloAplicar(valor) {
+  if (!valor) return ''
+  if (/^(char|par|parcustom):/.test(valor)) return valor
+  return `char:${valor}`
+}
+
+function tipoEstiloAplicar(valor) {
+  const normalizado = normalizarEstiloAplicar(valor)
+  if (normalizado.startsWith('char:')) return 'char'
+  if (normalizado.startsWith('par:')) return 'par'
+  if (normalizado.startsWith('parcustom:')) return 'parcustom'
+  return ''
+}
+
+function idEstiloAplicar(valor) {
+  return normalizarEstiloAplicar(valor).replace(/^(char|par|parcustom):/, '')
+}
+
 /**
  * Painel flutuante de Localizar/Substituir para o editor TipTap.
  * Posicionado no canto superior-direito do .editor-principal (position:relative).
@@ -148,7 +171,7 @@ const MARCAS_APLICAVEIS = [
  *   aberto    — boolean
  *   onFechar  — callback para fechar
  */
-export default function PainelBusca({ editor, aberto, onFechar, onModificado }) {
+export default function PainelBusca({ editor, aberto, onFechar, onModificado, tipoNorma = '' }) {
   const [pat,     setPat]     = useState('')
   const [rep,     setRep]     = useState('')
   const [flagI,   setFlagI]   = useState(true)    // ignorar maiúsculas
@@ -160,7 +183,7 @@ export default function PainelBusca({ editor, aberto, onFechar, onModificado }) 
   const [filtroChars,    setFiltroChars]    = useState(new Set()) // {} = todos
 
   // Aplicar estilo de caractere
-  const [estiloAplicar, setEstiloAplicar] = useState('')  // id da marca, ou ''
+  const [estiloAplicar, setEstiloAplicar] = useState('')  // char:id, par:id, parcustom:id
 
   const [matches,    setMatches]    = useState([])  // [{from, to, fullMatch, groups, marks}]
   const [idx,        setIdx]        = useState(-1)
@@ -171,6 +194,11 @@ export default function PainelBusca({ editor, aberto, onFechar, onModificado }) 
   const [buscasSalvas, setBuscasSalvas] = useState(() => carregarBuscasSalvas())
 
   const patInputRef = useRef(null)
+  const estilosParagrafoCustom = useMemo(
+    () => estilosParagrafoConfigurados({ incluirInternos: false })
+      .filter(e => e.custom && estiloAtivoNoTipo(e, tipoNorma)),
+    [tipoNorma]
+  )
 
   // Foca o campo ao abrir
   function salvarBuscaAtual() {
@@ -362,6 +390,95 @@ export default function PainelBusca({ editor, aberto, onFechar, onModificado }) 
       .replace(/\$(\d+)/g, (_, n) => caps[+n - 1] ?? '')
   }
 
+  function marcasParaSubstituicao(baseMarks = []) {
+    if (tipoEstiloAplicar(estiloAplicar) !== 'char') return baseMarks
+    const markType = editor?.state?.schema?.marks?.[idEstiloAplicar(estiloAplicar)]
+    if (!markType) return baseMarks
+    return [
+      ...baseMarks.filter(mark => mark.type !== markType),
+      markType.create(),
+    ]
+  }
+
+  function attrsAlteracaoDoNo(node) {
+    return {
+      alterado: node?.attrs?.alterado ?? null,
+      diffType: node?.attrs?.diffType ?? null,
+      diffSubtype: node?.attrs?.diffSubtype ?? null,
+    }
+  }
+
+  function posicaoBlocoEm(tr, pos) {
+    if (!tr?.doc) return null
+    const limite = Math.max(0, Math.min(pos, tr.doc.content.size))
+    const $pos = tr.doc.resolve(limite)
+    for (let depth = $pos.depth; depth >= 0; depth--) {
+      const node = $pos.node(depth)
+      if (node?.isTextblock) {
+        return { node, pos: depth === 0 ? 0 : $pos.before(depth) }
+      }
+    }
+    return null
+  }
+
+  function aplicarEstiloParagrafoEm(tr, pos) {
+    const tipo = tipoEstiloAplicar(estiloAplicar)
+    if (tipo !== 'par' && tipo !== 'parcustom') return tr
+
+    const bloco = posicaoBlocoEm(tr, pos)
+    if (!bloco) return tr
+
+    if (tipo === 'parcustom') {
+      const estilo = estilosParagrafoCustom.find(e => e.id === idEstiloAplicar(estiloAplicar))
+      const nodeType = editor?.state?.schema?.nodes?.estiloParagrafoCustom
+      if (!estilo || !nodeType) return tr
+      return tr.setNodeMarkup(bloco.pos, nodeType, {
+        ...attrsAlteracaoDoNo(bloco.node),
+        styleId: estilo.id,
+        label: estilo.label,
+        cssClass: estilo.cssClass,
+        format: estilo.format,
+      })
+    }
+
+    const nodeType = editor?.state?.schema?.nodes?.[idEstiloAplicar(estiloAplicar)]
+    if (!nodeType) return tr
+    return tr.setNodeMarkup(bloco.pos, nodeType, attrsAlteracaoDoNo(bloco.node))
+  }
+
+  function aplicarSubstituicaoMatch(tr, match, repText) {
+    if (match?.tipo !== 'entreParagrafos') {
+      if (repText) {
+        tr = tr.replaceWith(match.from, match.to, editor.state.schema.text(repText, marcasParaSubstituicao(match.marks)))
+        return aplicarEstiloParagrafoEm(tr, tr.mapping.map(match.from))
+      }
+      tr = tr.delete(match.from, match.to)
+      return aplicarEstiloParagrafoEm(tr, tr.mapping.map(match.from))
+    }
+
+    const novoTexto = `${match.combined.slice(0, match.index)}${repText}${match.combined.slice(match.index + match.fullMatch.length)}`
+    if (/\n/.test(novoTexto)) {
+      throw new Error('A substituição entre parágrafos precisa resultar em um único parágrafo.')
+    }
+
+    const contentFrom = match.primeiro.pos + 1
+    const contentTo = match.primeiro.pos + 1 + match.primeiro.contentSize
+    const deleteFrom = match.primeiro.pos + match.primeiro.nodeSize
+    const deleteTo = match.ultimo.pos + match.ultimo.nodeSize
+
+    if (novoTexto) {
+      tr = tr.replaceWith(
+        tr.mapping.map(contentFrom),
+        tr.mapping.map(contentTo),
+        editor.state.schema.text(novoTexto, marcasParaSubstituicao(match.marks))
+      )
+    } else {
+      tr = tr.delete(tr.mapping.map(contentFrom), tr.mapping.map(contentTo))
+    }
+    tr = tr.delete(tr.mapping.map(deleteFrom), tr.mapping.map(deleteTo))
+    return aplicarEstiloParagrafoEm(tr, tr.mapping.map(match.primeiro.pos + 1))
+  }
+
   // ── Substituir ocorrência atual ──────────────────────────────────
   function substituir() {
     if (!editor || matches.length === 0 || idx < 0) return
@@ -369,11 +486,12 @@ export default function PainelBusca({ editor, aberto, onFechar, onModificado }) 
 
     const repText = useReg ? expandRep(rep, m.groups) : rep
 
-    const tr = editor.state.tr
-    if (repText) {
-      tr.replaceWith(m.from, m.to, editor.state.schema.text(repText, m.marks))
-    } else {
-      tr.delete(m.from, m.to)
+    let tr = editor.state.tr
+    try {
+      tr = aplicarSubstituicaoMatch(tr, m, repText)
+    } catch (err) {
+      setStatus(err.message || 'Substituição inválida')
+      return
     }
     editor.view.dispatch(tr)
     onModificado?.()
@@ -400,10 +518,11 @@ export default function PainelBusca({ editor, aberto, onFechar, onModificado }) 
     for (let i = lista.length - 1; i >= 0; i--) {
       const m = lista[i]
       const repText = useReg ? expandRep(rep, m.groups) : rep
-      if (repText) {
-        tr = tr.replaceWith(m.from, m.to, editor.state.schema.text(repText, m.marks))
-      } else {
-        tr = tr.delete(m.from, m.to)
+      try {
+        tr = aplicarSubstituicaoMatch(tr, m, repText)
+      } catch (err) {
+        setStatus(err.message || 'Substituição inválida')
+        return
       }
     }
     editor.view.dispatch(tr)
@@ -419,12 +538,25 @@ export default function PainelBusca({ editor, aberto, onFechar, onModificado }) 
   function aplicarEstiloUm() {
     if (!editor || !estiloAplicar || idx < 0 || !matches.length) return
     const m       = matches[idx]
-    const markType = editor.state.schema.marks[estiloAplicar]
+
+    if (tipoEstiloAplicar(estiloAplicar) !== 'char') {
+      const tr = aplicarEstiloParagrafoEm(editor.state.tr, m.from)
+      editor.view.dispatch(tr)
+      onModificado?.()
+      const next = (idx + 1) % matches.length
+      setIdx(next)
+      navTo(matches[next])
+      setStatus(`${next + 1} / ${matches.length}`)
+      return
+    }
+
+    const markType = editor.state.schema.marks[idEstiloAplicar(estiloAplicar)]
     if (!markType) return
 
     editor.view.dispatch(
       editor.state.tr.addMark(m.from, m.to, markType.create())
     )
+    onModificado?.()
 
     // Avança para a próxima ocorrência
     const next = (idx + 1) % matches.length
@@ -439,16 +571,34 @@ export default function PainelBusca({ editor, aberto, onFechar, onModificado }) 
     const lista = collectMatches()
     if (!lista.length) { setStatus('0 ocorrências'); return }
 
-    const markType = editor.state.schema.marks[estiloAplicar]
+    let tr = editor.state.tr
+
+    if (tipoEstiloAplicar(estiloAplicar) !== 'char') {
+      const visitados = new Set()
+      for (let i = lista.length - 1; i >= 0; i--) {
+        const bloco = posicaoBlocoEm(tr, tr.mapping.map(lista[i].from))
+        const chave = bloco ? String(bloco.pos) : ''
+        if (!bloco || visitados.has(chave)) continue
+        visitados.add(chave)
+        tr = aplicarEstiloParagrafoEm(tr, bloco.pos + 1)
+      }
+      editor.view.dispatch(tr)
+      onModificado?.()
+      const n = visitados.size
+      setStatus(`${n} parágrafo${n !== 1 ? 's' : ''} formatado${n !== 1 ? 's' : ''}`)
+      return
+    }
+
+    const markType = editor.state.schema.marks[idEstiloAplicar(estiloAplicar)]
     if (!markType) return
 
     const mark = markType.create()
-    let tr = editor.state.tr
     // Aplica de trás para frente para preservar posições
     for (let i = lista.length - 1; i >= 0; i--) {
       tr = tr.addMark(lista[i].from, lista[i].to, mark)
     }
     editor.view.dispatch(tr)
+    onModificado?.()
 
     const n = lista.length
     setStatus(`${n} trecho${n !== 1 ? 's' : ''} formatado${n !== 1 ? 's' : ''}`)
@@ -567,18 +717,32 @@ export default function PainelBusca({ editor, aberto, onFechar, onModificado }) 
         </button>
       </div>
 
-      {/* ── Linha 3: Aplicar estilo de caractere ───────────── */}
+      {/* ── Linha 3: Aplicar estilo ─────────────────────────── */}
       <div className="busca-linha">
         <span className="busca-estilo-label">Aplicar estilo</span>
         <select
           className="busca-estilo-select"
-          value={estiloAplicar}
+          value={normalizarEstiloAplicar(estiloAplicar)}
           onChange={e => setEstiloAplicar(e.target.value)}
         >
           <option value="">— nenhum —</option>
-          {MARCAS_APLICAVEIS.map(m => (
-            <option key={m.id} value={m.id}>{m.label}</option>
-          ))}
+          <optgroup label="Caractere">
+            {MARCAS_APLICAVEIS.map(m => (
+              <option key={m.id} value={`char:${m.id}`}>{m.label}</option>
+            ))}
+          </optgroup>
+          <optgroup label="Parágrafo">
+            {ESTILOS_PARAGRAFO.map(e => (
+              <option key={e.id} value={`par:${e.id}`}>{e.label}</option>
+            ))}
+          </optgroup>
+          {estilosParagrafoCustom.length > 0 && (
+            <optgroup label="Parágrafo personalizado">
+              {estilosParagrafoCustom.map(e => (
+                <option key={e.id} value={`parcustom:${e.id}`}>{e.label}</option>
+              ))}
+            </optgroup>
+          )}
         </select>
         <button
           className="busca-btn-subst"

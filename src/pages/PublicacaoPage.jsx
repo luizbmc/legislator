@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { isTipoTextoComum, TIPOS_NORMA } from '../constants/normas.js'
+import { isTipoTextoComum, isTipoTratado, TIPOS_NORMA } from '../constants/normas.js'
 
 const COVER_COLORS = [
   'hsl(0 42% 78%)',
@@ -59,6 +59,10 @@ function exportacaoBloqueada(norma) {
 function exportacaoEfetiva(norma) {
   if (exportacaoBloqueada(norma)) return 'ignorar'
   return norma?.exportacao || 'completa'
+}
+
+function idNormaPublicacao(norma) {
+  return norma?.norma_id ?? norma?.normaId ?? norma?.id ?? null
 }
 
 function normalizarTag(valor) {
@@ -189,7 +193,7 @@ function normalizarTextoRecorte(valor) {
 
 function numeroArtigoNode(node) {
   const texto = textoBlocoRecorte(node)
-  const match = texto.match(/^Art(?:s)?\.\s*((?:\d{1,3}(?:\.\d{3})+|\d+)(?:-[A-Z])?)/i)
+  const match = texto.match(/^(?:Art(?:s)?\.?|Artigos?)\s*((?:\d{1,3}(?:\.\d{3})+|\d+)(?:-[A-Z])?)/i)
   return match ? normalizarNumeroArtigo(match[1]) : ''
 }
 
@@ -251,7 +255,8 @@ function normalizarParagrafoDispositivo(valor) {
   return match ? match[1] : texto.toUpperCase()
 }
 
-function nodeEhArtigo(node) {
+function nodeEhArtigo(node, tipoNorma = '') {
+  if (isTipoTratado(tipoNorma)) return node?.type === 'artigoTitulo'
   return node?.type === 'artigo' || node?.type === 'artigoTitulo'
 }
 
@@ -281,15 +286,15 @@ function blocosDaNorma(doc) {
   return Array.isArray(doc?.content) ? doc.content : []
 }
 
-function montarIndiceArtigos(blocos) {
+function montarIndiceArtigos(blocos, tipoNorma = '') {
   const artigos = []
   for (let i = 0; i < blocos.length; i++) {
-    if (!nodeEhArtigo(blocos[i])) continue
+    if (!nodeEhArtigo(blocos[i], tipoNorma)) continue
     const numero = numeroArtigoNode(blocos[i])
     if (!numero) continue
     let fim = blocos.length
     for (let j = i + 1; j < blocos.length; j++) {
-      if (nodeEhArtigo(blocos[j]) || nodeEhHeadingRecorte(blocos[j])) {
+      if (nodeEhArtigo(blocos[j], tipoNorma) || nodeEhHeadingRecorte(blocos[j])) {
         fim = j
         break
       }
@@ -644,9 +649,9 @@ function extrairGrupoArtigo(blocosArtigo, itens) {
   return selecionados
 }
 
-function extrairRecortesDaNorma(doc, especificacao) {
+function extrairRecortesDaNorma(doc, especificacao, tipoNorma = '') {
   const blocos = blocosDaNorma(doc)
-  const indice = montarIndiceArtigos(blocos)
+  const indice = montarIndiceArtigos(blocos, tipoNorma)
   const entradas = dividirEntradasRecorte(especificacao)
 
   return entradas.map(entrada => {
@@ -952,7 +957,7 @@ export default function PublicacaoPage() {
   }
 
   function normaJaNaPublicacao(normaId) {
-    return secoes.some(s => s.normas.some(n => n.norma_id === normaId))
+    return secoes.some(s => s.normas.some(n => idNormaPublicacao(n) === normaId))
   }
 
   function adicionarNorma(norma) {
@@ -1020,7 +1025,7 @@ export default function PublicacaoPage() {
       const norma = await window.legislator.normas.buscar(parseInt(recorteNormaId, 10))
       if (!norma) throw new Error('Norma de origem não encontrada.')
       const doc = norma.conteudo_doc ? JSON.parse(norma.conteudo_doc) : { type: 'doc', content: [] }
-      const itens = extrairRecortesDaNorma(doc, recorteDispositivos)
+      const itens = extrairRecortesDaNorma(doc, recorteDispositivos, norma.tipo)
       setModalResultadoRecorte({
         norma,
         especificacao: recorteDispositivos,
@@ -1117,6 +1122,12 @@ export default function PublicacaoPage() {
 
   const normasFiltradas = normasDisponiveis.filter(n =>
     !normaJaNaPublicacao(n.id) &&
+    (!somenteVm || normaTemTagVm(n)) &&
+    (!somenteTextoComum || isTipoTextoComum(n.tipo)) &&
+    (n.epigrafe.toLowerCase().includes(buscaNorma.toLowerCase()) ||
+     (n.apelido ?? '').toLowerCase().includes(buscaNorma.toLowerCase()))
+  )
+  const normasFiltradasRecorte = normasDisponiveis.filter(n =>
     (!somenteVm || normaTemTagVm(n)) &&
     (!somenteTextoComum || isTipoTextoComum(n.tipo)) &&
     (n.epigrafe.toLowerCase().includes(buscaNorma.toLowerCase()) ||
@@ -1333,7 +1344,14 @@ export default function PublicacaoPage() {
                       <div
                         className="pub-norma-info pub-norma-info-link"
                         title="Abrir no editor"
-                        onClick={() => nav(`/editor/${n.norma_id}`)}
+                        onClick={() => {
+                          const normaId = idNormaPublicacao(n)
+                          if (!normaId) {
+                            alert('Nao foi possivel identificar a norma selecionada. Atualize a pagina e tente novamente.')
+                            return
+                          }
+                          nav(`/editor/${normaId}`)
+                        }}
                       >
                         <span className="pub-norma-epigrafe"><AvisoAtualizacaoPendente norma={n} />{n.epigrafe}</span>
                         {n.apelido && <span className="pub-norma-apelido">{n.apelido}</span>}
@@ -1455,17 +1473,55 @@ export default function PublicacaoPage() {
                 <form className="modal-recorte-norma-form" onSubmit={testarRecorteNorma}>
                   <div className="campo">
                     <label>Norma de origem *</label>
-                    <select
-                      value={recorteNormaId}
-                      onChange={e => setRecorteNormaId(e.target.value)}
-                    >
-                      <option value="">Selecione uma norma...</option>
-                      {normasDisponiveis.map(n => (
-                        <option key={n.id} value={n.id}>
-                          {n.atualizacao_pendente ? '⚠️ ' : ''}{n.epigrafe}{n.apelido ? ` (${n.apelido})` : ''}{textoTagsNorma(n)}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="modal-norma-filtros">
+                      <input
+                        className="input-busca"
+                        autoFocus
+                        placeholder="Buscar por epígrafe ou apelido..."
+                        value={buscaNorma}
+                        onChange={e => setBuscaNorma(e.target.value)}
+                      />
+                      <label className={`home-check${somenteVm ? ' ativo' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={somenteVm}
+                          onChange={e => setSomenteVm(e.target.checked)}
+                        />
+                        <span>Vade mecum</span>
+                      </label>
+                      <label className={`home-check${somenteTextoComum ? ' ativo' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={somenteTextoComum}
+                          onChange={e => setSomenteTextoComum(e.target.checked)}
+                        />
+                        <span>Texto comum</span>
+                      </label>
+                    </div>
+                    <div className="modal-norma-lista modal-recorte-norma-lista">
+                      {loadingNormas ? (
+                        <p className="pub-vazio">Carregando...</p>
+                      ) : normasFiltradasRecorte.length === 0 ? (
+                        <p className="pub-vazio">Nenhuma norma disponível.</p>
+                      ) : normasFiltradasRecorte.map(n => {
+                        const st = statusNormaInfo(n.status)
+                        const selecionada = String(recorteNormaId) === String(n.id)
+                        return (
+                          <button
+                            key={n.id}
+                            type="button"
+                            className={`modal-norma-item${selecionada ? ' selecionada' : ''}`}
+                            onClick={() => setRecorteNormaId(String(n.id))}
+                          >
+                            <span className="pub-norma-tipo">{n.tipo}</span>
+                            <span className={`pub-norma-status pub-norma-status-${st.cls}`}>{st.label}</span>
+                            <span className="pub-norma-epigrafe"><AvisoAtualizacaoPendente norma={n} />{n.epigrafe}</span>
+                            {n.apelido && <span className="pub-norma-apelido">{n.apelido}</span>}
+                            {textoTagsNorma(n) && <span className="pub-norma-tags">{textoTagsNorma(n).trim()}</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
 
                   <div className="campo">

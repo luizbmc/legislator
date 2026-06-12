@@ -101,7 +101,8 @@ CREATE TABLE IF NOT EXISTS publicacao_normas (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,
   secao_id INTEGER NOT NULL REFERENCES publicacao_secoes(id) ON DELETE CASCADE,
   norma_id INTEGER NOT NULL REFERENCES normas(id) ON DELETE CASCADE,
-  ordem    INTEGER DEFAULT 0
+  ordem    INTEGER DEFAULT 0,
+  exportacao TEXT DEFAULT 'completa'
 );
 
 CREATE TABLE IF NOT EXISTS coletaneas (
@@ -258,6 +259,12 @@ async function init() {
   if (!colsPub.includes('caminho_rede')) {
     _sqlDb.exec('ALTER TABLE publicacoes ADD COLUMN caminho_rede TEXT')
     console.log('Migration: coluna caminho_rede adicionada a publicacoes')
+  }
+
+  const colsPubNormas = (_sqlDb.exec('PRAGMA table_info(publicacao_normas)')[0]?.values ?? []).map(v => v[1])
+  if (!colsPubNormas.includes('exportacao')) {
+    _sqlDb.exec("ALTER TABLE publicacao_normas ADD COLUMN exportacao TEXT DEFAULT 'completa'")
+    console.log('Migration: coluna exportacao adicionada a publicacao_normas')
   }
 
   flush()
