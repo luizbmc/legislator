@@ -192,12 +192,18 @@ export default function PainelBusca({ editor, aberto, onFechar, onModificado, ti
   const [modalSalvarBusca, setModalSalvarBusca] = useState(false)
   const [nomeBuscaSalva, setNomeBuscaSalva] = useState('')
   const [buscasSalvas, setBuscasSalvas] = useState(() => carregarBuscasSalvas())
+  const [prefsTick, setPrefsTick] = useState(0)
 
   const patInputRef = useRef(null)
+  const estilosParagrafoBase = useMemo(
+    () => estilosParagrafoConfigurados({ incluirInternos: true })
+      .filter(e => !e.custom && estiloAtivoNoTipo(e, tipoNorma)),
+    [tipoNorma, prefsTick]
+  )
   const estilosParagrafoCustom = useMemo(
-    () => estilosParagrafoConfigurados({ incluirInternos: false })
+    () => estilosParagrafoConfigurados({ incluirInternos: true })
       .filter(e => e.custom && estiloAtivoNoTipo(e, tipoNorma)),
-    [tipoNorma]
+    [tipoNorma, prefsTick]
   )
 
   // Foca o campo ao abrir
@@ -277,6 +283,16 @@ export default function PainelBusca({ editor, aberto, onFechar, onModificado, ti
     return () => {
       window.removeEventListener(BUSCAS_SALVAS_EVENT, recarregar)
       window.removeEventListener('storage', recarregar)
+    }
+  }, [])
+
+  useEffect(() => {
+    const recarregarPrefs = () => setPrefsTick(t => t + 1)
+    window.addEventListener('legislator:preferencias-estilo', recarregarPrefs)
+    window.addEventListener('storage', recarregarPrefs)
+    return () => {
+      window.removeEventListener('legislator:preferencias-estilo', recarregarPrefs)
+      window.removeEventListener('storage', recarregarPrefs)
     }
   }, [])
 
@@ -732,14 +748,14 @@ export default function PainelBusca({ editor, aberto, onFechar, onModificado, ti
             ))}
           </optgroup>
           <optgroup label="Parágrafo">
-            {ESTILOS_PARAGRAFO.map(e => (
-              <option key={e.id} value={`par:${e.id}`}>{e.label}</option>
+            {estilosParagrafoBase.map(e => (
+              <option key={e.node} value={`par:${e.node}`}>{e.painelLabel || e.label}</option>
             ))}
           </optgroup>
           {estilosParagrafoCustom.length > 0 && (
             <optgroup label="Parágrafo personalizado">
               {estilosParagrafoCustom.map(e => (
-                <option key={e.id} value={`parcustom:${e.id}`}>{e.label}</option>
+                <option key={e.id} value={`parcustom:${e.id}`}>{e.painelLabel || e.label}</option>
               ))}
             </optgroup>
           )}
@@ -790,15 +806,27 @@ export default function PainelBusca({ editor, aberto, onFechar, onModificado, ti
           <div className="busca-filtro-grupo">
             <span className="busca-filtro-label">Parágrafo</span>
             <div className="busca-chips">
-              {ESTILOS_PARAGRAFO.map(e => (
+              {estilosParagrafoBase.map(e => (
                 <button
-                  key={e.id}
-                  className={`busca-chip${filtroParags.has(e.id) ? ' ativa' : ''}`}
-                  onClick={() => toggleChip(setFiltroParags, e.id)}
+                  key={e.node}
+                  className={`busca-chip${filtroParags.has(e.node) ? ' ativa' : ''}`}
+                  onClick={() => toggleChip(setFiltroParags, e.node)}
                 >
-                  {e.label}
+                  {e.painelLabel || e.label}
                 </button>
               ))}
+              {estilosParagrafoCustom.map(e => {
+                const idFiltro = `custom:${e.id}`
+                return (
+                  <button
+                    key={e.id}
+                    className={`busca-chip${filtroParags.has(idFiltro) ? ' ativa' : ''}`}
+                    onClick={() => toggleChip(setFiltroParags, idFiltro)}
+                  >
+                    {e.painelLabel || e.label}
+                  </button>
+                )
+              })}
             </div>
           </div>
 

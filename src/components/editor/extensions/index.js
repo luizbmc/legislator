@@ -17,6 +17,7 @@ function criarNo(name, cssClass, atalho = null, extraAttrs = {}) {
         alterado: { default: null },
         diffType: { default: null },
         diffSubtype: { default: null },
+        vmRole: { default: null },
         ...Object.fromEntries(
           Object.entries(extraAttrs).map(([k, v]) => [k, { default: v }])
         ),
@@ -109,6 +110,7 @@ export const EstiloParagrafoCustom = Node.create({
       alterado: { default: null },
       diffType: { default: null },
       diffSubtype: { default: null },
+      vmRole: { default: null },
     }
   },
 
@@ -124,6 +126,7 @@ export const EstiloParagrafoCustom = Node.create({
       style: cssFormatoParagrafo(node.attrs.format || {}),
     }
     if (node.attrs.label) attrs['data-style-label'] = node.attrs.label
+    if (node.attrs.vmRole) attrs['data-vm-role'] = node.attrs.vmRole
     return ['p', mergeAttributes(HTMLAttributes, attrs), 0]
   },
 })
@@ -150,6 +153,11 @@ export const ParagraphAlteradoAttrs = Extension.create({
             default: null,
             parseHTML: element => element.getAttribute('data-diff-subtype'),
             renderHTML: attrs => attrs.diffSubtype ? { 'data-diff-subtype': attrs.diffSubtype } : {},
+          },
+          vmRole: {
+            default: null,
+            parseHTML: element => element.getAttribute('data-vm-role'),
+            renderHTML: attrs => attrs.vmRole ? { 'data-vm-role': attrs.vmRole } : {},
           },
         },
       },

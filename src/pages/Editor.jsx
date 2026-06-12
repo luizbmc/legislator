@@ -628,6 +628,50 @@ function textoMarcadorNotaRodape() {
   return '[nota]'
 }
 
+function documentoTemVersoesVadeMecum(doc) {
+  let tem = false
+  function walk(node) {
+    if (!node || tem) return
+    if (node.attrs?.vmRole === 'vm') {
+      tem = true
+      return
+    }
+    ;(node.content || []).forEach(walk)
+  }
+  walk(doc)
+  return tem
+}
+
+function filtrarNoPorModoVadeMecum(no, modoVadeMecum = false) {
+  if (!no || typeof no !== 'object') return no
+  const role = no.attrs?.vmRole
+  if (role === 'vm' && !modoVadeMecum) return null
+  if (role === 'original' && modoVadeMecum) return null
+
+  const out = { ...no }
+  if (out.attrs) {
+    const attrs = { ...out.attrs }
+    delete attrs.vmRole
+    if (Object.keys(attrs).length) out.attrs = attrs
+    else delete out.attrs
+  }
+  if (Array.isArray(out.content)) {
+    out.content = out.content
+      .map(filho => filtrarNoPorModoVadeMecum(filho, modoVadeMecum))
+      .filter(Boolean)
+  }
+  return out
+}
+
+function docPorModoVadeMecum(doc, modoVadeMecum = false) {
+  return {
+    ...(doc || { type: 'doc' }),
+    content: (doc?.content || [])
+      .map(no => filtrarNoPorModoVadeMecum(no, modoVadeMecum))
+      .filter(Boolean),
+  }
+}
+
 export default function Editor({ usuarioAtual, onTrocarUsuario }) {
   const { id } = useParams()
   const nav    = useNavigate()
@@ -655,6 +699,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
   const [modoEdicaoManual, setModoEdicaoManual] = useState(false)
   const [buscaAberta,      setBuscaAberta]      = useState(false)
   const [notasAberto,      setNotasAberto]      = useState(false)
+  const [modoVadeMecumAtivo, setModoVadeMecumAtivo] = useState(false)
   const [comentariosAberto, setComentariosAberto] = useState(false)
   const [excecoesAberto,   setExcecoesAberto]   = useState(false)
   const [modalPadronizacao, setModalPadronizacao] = useState(false)
@@ -725,6 +770,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
       setStatus(n.status ?? 'rascunho')
       setFase('editar')
       setModoEdicaoManual(textoComum)
+      setModoVadeMecumAtivo(false)
       setMarcasAtualizacaoVisiveis(!textoComum)
       if (n.conteudo_doc && n.conteudo_doc !== DOC_VAZIO) {
         setDocJson(JSON.parse(n.conteudo_doc))
@@ -1704,6 +1750,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
         baixarXml(editor.getJSON(), { tipo: norma.tipo, epigrafe: norma.epigrafe }, nomeBaseNorma(), {
           modo: 'completo',
           incluirAlterado: false,
+          modoVadeMecum: modoVadeMecumAtivo,
         })
         return
       }
@@ -1713,6 +1760,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
         baixarXml(doc, { tipo: norma.tipo, epigrafe: norma.epigrafe }, nomeBaseNorma('legacy'), {
           modo: 'legacy',
           incluirAlterado: true,
+          modoVadeMecum: modoVadeMecumAtivo,
         })
         return
       }
@@ -1727,12 +1775,27 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
           modo: 'atualizacao',
           alteracoes: nodesAlteradosRef.current,
           diffs,
+          modoVadeMecum: modoVadeMecumAtivo,
         })
         return
       }
       await handleSalvar()
-      if (formato === 'docx') await window.legislator.exportar.docx(parseInt(id))
-      if (formato === 'html') await window.legislator.exportar.html(parseInt(id))
+      if (formato === 'docx' || formato === 'html') {
+        if (!modoVadeMecumAtivo) {
+          if (formato === 'docx') await window.legislator.exportar.docx(parseInt(id))
+          if (formato === 'html') await window.legislator.exportar.html(parseInt(id))
+          return
+        }
+        const doc = docPorModoVadeMecum(editor.getJSON(), modoVadeMecumAtivo)
+        const payload = {
+          norma_id: parseInt(id),
+          epigrafe: norma.epigrafe,
+          nomeBase: nomeBaseNorma(),
+          conteudo_doc: JSON.stringify(doc),
+        }
+        if (formato === 'docx') await window.legislator.exportar.docxSelecao(payload)
+        if (formato === 'html') await window.legislator.exportar.htmlSelecao(payload)
+      }
     } catch (err) {
       alert(err?.message || 'Não foi possível exportar a norma.')
     }
@@ -1742,12 +1805,13 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
     try {
       if (exportacaoBloqueadaPorAtualizacaoPendente()) return
 
-      const doc = docJsonDaSelecao()
-      if (!doc) {
+      const docSelecionado = docJsonDaSelecao()
+      if (!docSelecionado) {
         alert('Selecione um trecho da norma antes de exportar a seleção.')
         return
       }
 
+      const doc = docPorModoVadeMecum(docSelecionado, modoVadeMecumAtivo)
       const nomeBase = nomeBaseNorma('selecao')
       const payload = {
         norma_id: parseInt(id),
@@ -1757,7 +1821,9 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
       }
 
       if (formato === 'xml') {
-        baixarXml(doc, { tipo: norma.tipo, epigrafe: norma.epigrafe }, nomeBase)
+        baixarXml(doc, { tipo: norma.tipo, epigrafe: norma.epigrafe }, nomeBase, {
+          modoVadeMecum: modoVadeMecumAtivo,
+        })
         return
       }
       if (formato === 'docx') await window.legislator.exportar.docxSelecao(payload)
@@ -2072,7 +2138,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
   if (!norma) return <div className="loading">Carregando…</div>
 
   return (
-    <div className="editor-page">
+    <div className={`editor-page${modoVadeMecumAtivo ? ' modo-vm-ativo' : ''}`}>
 
       {/* ── Topbar ───────────────────────────────────────────────── */}
       <header className="editor-topbar">
@@ -2194,6 +2260,17 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
                 onClick={() => { setNotasAberto(v => !v); setExcecoesAberto(false); setComentariosAberto(false) }}
                 title="Navegador de notas"
               >Ver notas</button>
+              <button
+                className={`btn-ghost btn-modo-vm${modoVadeMecumAtivo ? ' ativa' : ''}`}
+                onClick={() => {
+                  if (!documentoTemVersoesVadeMecum(editor?.getJSON?.())) {
+                    alert('Ainda não há notas em Modo VM nesta norma. Execute a rotina Notas Vade Mecum primeiro.')
+                    return
+                  }
+                  setModoVadeMecumAtivo(v => !v)
+                }}
+                title={modoVadeMecumAtivo ? 'Exibir notas originais' : 'Exibir notas no formato Vade Mecum'}
+              >Modo VM</button>
               <button
                 className={`btn-ghost btn-comentarios${comentariosAberto ? ' ativa' : ''}`}
                 onClick={() => { setComentariosAberto(v => !v); setNotasAberto(false); setExcecoesAberto(false) }}
@@ -2536,6 +2613,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
                     autoExecutarKey={autoExecutarRotinas}
                     onExcecoes={receberExcecoesDetectadas}
                     onModificado={concluirImportacaoDocxEmModoEdicao}
+                    onModoVadeMecum={setModoVadeMecumAtivo}
                   />
                 </div>
               ) : (
@@ -2559,6 +2637,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
               <PainelNotas
                 editor={editor}
                 aberto={notasAberto}
+                modoVadeMecum={modoVadeMecumAtivo}
                 onFechar={() => setNotasAberto(false)}
               />
             )}
@@ -2575,6 +2654,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
                 excecoes={excecoes}
                 editor={editor}
                 aberto={excecoesAberto}
+                modoVadeMecum={modoVadeMecumAtivo}
                 onFechar={() => setExcecoesAberto(false)}
                 onResolver={idx =>
                   setExcecoes(prev => prev.map((e, i) =>

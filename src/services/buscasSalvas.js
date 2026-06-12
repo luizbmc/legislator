@@ -91,15 +91,23 @@ export function coletarOcorrenciasBuscaSalva(editor, busca) {
     return parts.length ? parts[0].marks : []
   }
 
+  function paragraphMatchesFilter(node) {
+    if (filtroParags.size === 0) return true
+    const tipo = node?.type?.name ?? ''
+    if (filtroParags.has(tipo)) return true
+    if (tipo === 'estiloParagrafoCustom') {
+      const styleId = node?.attrs?.styleId
+      return filtroParags.has(`custom:${styleId}`) || filtroParags.has(styleId)
+    }
+    return false
+  }
+
   const blocos = []
 
   editor.state.doc.descendants((node, pos) => {
     if (!node.isTextblock) return
 
-    if (filtroParags.size > 0) {
-      const tipo = node?.type?.name ?? ''
-      if (!filtroParags.has(tipo)) return
-    }
+    if (!paragraphMatchesFilter(node)) return
 
     const { text, parts } = textBlockParts(node, pos)
     if (!text || !parts.length) return

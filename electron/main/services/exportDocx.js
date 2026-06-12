@@ -36,6 +36,36 @@ const NODE_CONFIG = {
 
 const DEFAULT_CONFIG = { style: 'Normal', align: AlignmentType.JUSTIFIED }
 
+function filtrarNoPorModoVadeMecum(no, modoVadeMecum = false) {
+  if (!no || typeof no !== 'object') return no
+  const role = no.attrs?.vmRole
+  if (role === 'vm' && !modoVadeMecum) return null
+  if (role === 'original' && modoVadeMecum) return null
+
+  const out = { ...no }
+  if (out.attrs) {
+    const attrs = { ...out.attrs }
+    delete attrs.vmRole
+    if (Object.keys(attrs).length) out.attrs = attrs
+    else delete out.attrs
+  }
+  if (Array.isArray(out.content)) {
+    out.content = out.content
+      .map(filho => filtrarNoPorModoVadeMecum(filho, modoVadeMecum))
+      .filter(Boolean)
+  }
+  return out
+}
+
+function docPorModoVadeMecum(doc, modoVadeMecum = false) {
+  return {
+    ...(doc || { type: 'doc' }),
+    content: (doc?.content || [])
+      .map(no => filtrarNoPorModoVadeMecum(no, modoVadeMecum))
+      .filter(Boolean),
+  }
+}
+
 // ── Extrai texto plano de um nó TipTap ───────────────────────────
 function extrairTexto(node) {
   if (node.type === 'text') return node.text ?? ''
@@ -98,6 +128,7 @@ export async function gerarDocx(norma) {
   } catch {
     doc = { type: 'doc', content: [] }
   }
+  doc = docPorModoVadeMecum(doc, norma.modoVadeMecum === true)
 
   const paragrafos = (doc.content ?? []).map(nodeToParagraph)
 
@@ -152,6 +183,7 @@ export async function gerarDocxPublicacao(pub, db) {
       let doc
       try   { doc = JSON.parse(norma.conteudo_doc) }
       catch { doc = { type: 'doc', content: [] } }
+      doc = docPorModoVadeMecum(doc, item.modoVadeMecum === true)
       ;(doc.content ?? []).forEach(n => paragrafos.push(nodeToParagraph(n)))
       // Separador entre normas
       paragrafos.push(new Paragraph({ children: [new TextRun({ text: '' })], spacing: { after: 200 } }))

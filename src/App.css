@@ -859,6 +859,16 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   justify-content: flex-end;
 }
 
+.editor-page:not(.modo-vm-ativo) [data-vm-role="vm"],
+.editor-page.modo-vm-ativo [data-vm-role="original"] {
+  display: none !important;
+}
+
+.btn-modo-vm.ativa {
+  background: #e0f2fe;
+  color: #075985;
+}
+
 /* ── Fases centralizadas ─────────────────────────────────────────── */
 .fase-colar, .fase-loading, .fase-confirmar {
   flex: 1; overflow-y: auto;
@@ -2058,6 +2068,15 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   flex-direction: column;
   overflow: hidden;
 }
+.notas-navegador-painel {
+  position: fixed;
+  top: calc(var(--topbar-h) + 10px);
+  left: 6px;
+  width: min(520px, calc(100vw - 20px));
+  max-width: 520px;
+  max-height: calc(100vh - var(--topbar-h) - 24px);
+  z-index: 220;
+}
 .notas-topo {
   display: flex;
   align-items: center;
@@ -2147,6 +2166,36 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 }
 .nota-texto-italico {
   font-style: italic;
+}
+.nota-vm-preview {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px dotted #d7deea;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.nota-vm-label {
+  flex: 0 0 auto;
+  color: #075985;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.nota-vm-texto {
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.nota-vm-excluida {
+  color: #b91c1c;
+  font-weight: 400;
 }
 
 .comentarios-painel {
@@ -2341,7 +2390,13 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 }
 
 .excecoes-painel {
-  left: 20px;
+  position: fixed;
+  top: calc(var(--topbar-h) + 10px);
+  left: 6px;
+  width: min(520px, calc(100vw - 20px));
+  max-width: 520px;
+  max-height: calc(100vh - var(--topbar-h) - 24px);
+  z-index: 220;
 }
 
 .excecoes-contador {

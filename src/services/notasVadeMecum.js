@@ -85,6 +85,79 @@ function stripVadeMeta(node) {
   return { ...rest, content: rest.content.map(stripVadeMeta) }
 }
 
+function limparVmRole(node) {
+  if (!node || typeof node !== 'object') return node
+  const attrs = node.attrs ? { ...node.attrs } : null
+  if (attrs) delete attrs.vmRole
+  const next = attrs ? { ...node, attrs } : { ...node }
+  if (next.attrs && Object.values(next.attrs).every(v => v == null)) delete next.attrs
+  if (Array.isArray(next.content)) next.content = next.content.map(limparVmRole)
+  return next
+}
+
+function marcarVmRole(node, role) {
+  const clean = limparVmRole(stripVadeMeta(node))
+  return {
+    ...clean,
+    attrs: {
+      ...(clean.attrs || {}),
+      vmRole: role,
+    },
+  }
+}
+
+function jsonSemVmMeta(node) {
+  return JSON.stringify(limparVmRole(stripVadeMeta(node)))
+}
+
+function prepararConteudoBaseParaVm(doc) {
+  return (doc.content || [])
+    .filter(node => node?.attrs?.vmRole !== 'vm')
+    .map(limparVmRole)
+}
+
+function calcularNotasVadeMecum(doc) {
+  let removidas = 0
+  let simplificadas = 0
+  let datasFormatadas = 0
+  let cfAbreviadas = 0
+  let nrRemovidos = 0
+  let assinaturasRemovidas = 0
+
+  function onLog(tipo, n = 1) {
+    if (tipo === 'removida')     removidas++
+    if (tipo === 'simplificada') simplificadas++
+    if (tipo === 'data')         datasFormatadas += n
+    if (tipo === 'cf')           cfAbreviadas += n
+    if (tipo === 'nr')           nrRemovidos += n
+    if (tipo === 'assinatura')   assinaturasRemovidas += n
+  }
+
+  const contentInicial = prepararConteudoBaseParaVm(doc).map((node, index) => ({ ...node, __vmId: `vm-${index}` }))
+  const beforeItems = contentInicial.map((node, index) => snapshotNode(node, index))
+
+  let newContent = contentInicial.map(node => processarNo(node, onLog)).filter(Boolean)
+  newContent = formatarDataNoDoc(newContent, onLog)
+  newContent = abreviarCFNoDoc(newContent, onLog)
+  newContent = removerNrNoDoc(newContent, onLog)
+  newContent = manterPrimeiraAssinatura(newContent, onLog)
+  newContent = normalizarEspacosConteudo(newContent)
+  newContent = limparParagrafos(newContent)
+
+  const relatorio = montarRelatorioNotasVade(beforeItems, newContent)
+  const log = []
+  if (removidas)      log.push(`${removidas} nota(s) após texto removida(s)`)
+  if (simplificadas)  log.push(`${simplificadas} nota(s) de revogação simplificada(s)`)
+  if (datasFormatadas) log.push(`data abreviada em ${datasFormatadas} parágrafo(s)`)
+  if (cfAbreviadas)   log.push(`"Constituição Federal" abreviada em ${cfAbreviadas} parágrafo(s)`)
+  if (nrRemovidos)    log.push(`"nº" removido antes de número em ${nrRemovidos} parágrafo(s)`)
+  if (assinaturasRemovidas) log.push(`${assinaturasRemovidas} assinatura(s) excedente(s) removida(s)`)
+  if (!removidas && !simplificadas && !datasFormatadas && !cfAbreviadas && !nrRemovidos && !assinaturasRemovidas)
+    log.push('Nenhuma nota alterada')
+
+  return { contentInicial, newContent, log, relatorio }
+}
+
 function montarRelatorioNotasVade(beforeItems, finalContent) {
   const afterById = {}
   const finalIndexById = {}
@@ -551,57 +624,50 @@ function manterPrimeiraAssinatura(docContent, onLog) {
  * @returns {{ doc: object, log: string[] }}
  */
 export function aplicarNotasVadeMecum(doc) {
-  let removidas = 0
-  let simplificadas = 0
-  let datasFormatadas = 0
-  let cfAbreviadas = 0
-  let nrRemovidos = 0
-  let assinaturasRemovidas = 0
-
-  function onLog(tipo, n = 1) {
-    if (tipo === 'removida')     removidas++
-    if (tipo === 'simplificada') simplificadas++
-    if (tipo === 'data')         datasFormatadas += n
-    if (tipo === 'cf')           cfAbreviadas += n
-    if (tipo === 'nr')           nrRemovidos += n
-    if (tipo === 'assinatura')   assinaturasRemovidas += n
-  }
-
-  const contentInicial = (doc.content || []).map((node, index) => ({ ...node, __vmId: `vm-${index}` }))
-  const beforeItems = contentInicial.map((node, index) => snapshotNode(node, index))
-
-  // 1. Processa notas (remove / simplifica)
-  let newContent = contentInicial.map(node => processarNo(node, onLog)).filter(Boolean)
-
-  // 2. Formata datas: "nº X, de DD/MM/AAAA" → "nº X/AAAA"
-  newContent = formatarDataNoDoc(newContent, onLog)
-
-  // 3. Abrevia "Constituição Federal de AAAA" → "CF/AAAA"
-  newContent = abreviarCFNoDoc(newContent, onLog)
-
-  // 4. Remove "nº" antes de números dentro de nós nota
-  newContent = removerNrNoDoc(newContent, onLog)
-
-  // 5. Mantém somente a primeira assinatura após a data.
-  newContent = manterPrimeiraAssinatura(newContent, onLog)
-
-  // 6. Colapsa espaços múltiplos (regular ou NBSP) em todos os nós
-  newContent = normalizarEspacosConteudo(newContent)
-
-  // 7. Remove trailing whitespace e parágrafos vazios
-  newContent = limparParagrafos(newContent)
-  const relatorio = montarRelatorioNotasVade(beforeItems, newContent)
+  const { newContent, log, relatorio } = calcularNotasVadeMecum(doc)
   const cleanContent = newContent.map(stripVadeMeta)
 
-  const log = []
-  if (removidas)      log.push(`${removidas} nota(s) após texto removida(s)`)
-  if (simplificadas)  log.push(`${simplificadas} nota(s) de revogação simplificada(s)`)
-  if (datasFormatadas) log.push(`data abreviada em ${datasFormatadas} parágrafo(s)`)
-  if (cfAbreviadas)   log.push(`"Constituição Federal" abreviada em ${cfAbreviadas} parágrafo(s)`)
-  if (nrRemovidos)    log.push(`"nº" removido antes de número em ${nrRemovidos} parágrafo(s)`)
-  if (assinaturasRemovidas) log.push(`${assinaturasRemovidas} assinatura(s) excedente(s) removida(s)`)
-  if (!removidas && !simplificadas && !datasFormatadas && !cfAbreviadas && !nrRemovidos && !assinaturasRemovidas)
-    log.push('Nenhuma nota alterada')
-
   return { doc: { ...doc, content: cleanContent }, log, relatorio }
+}
+
+/**
+ * Aplica as regras de Notas Vade Mecum preservando a versão original.
+ * Blocos alterados recebem uma versão original e uma versão VM lado a lado.
+ */
+export function aplicarNotasVadeMecumAlternavel(doc) {
+  const { contentInicial, newContent, log, relatorio } = calcularNotasVadeMecum(doc)
+  const vmPorId = {}
+  newContent.forEach(node => {
+    if (node.__vmId) vmPorId[node.__vmId] = node
+  })
+
+  const alternado = []
+  let alterados = 0
+
+  for (const original of contentInicial) {
+    const vm = vmPorId[original.__vmId] || null
+    const originalClean = limparVmRole(stripVadeMeta(original))
+    const vmClean = vm ? limparVmRole(stripVadeMeta(vm)) : null
+    const mudou = !vmClean || jsonSemVmMeta(originalClean) !== jsonSemVmMeta(vmClean)
+
+    if (!mudou) {
+      alternado.push(originalClean)
+      continue
+    }
+
+    alterados++
+    alternado.push(marcarVmRole(originalClean, 'original'))
+    if (vmClean) alternado.push(marcarVmRole(vmClean, 'vm'))
+  }
+
+  const logFinal = alterados
+    ? [...log, `${alterados} bloco(s) com versão original/VM alternável`]
+    : log
+
+  return {
+    doc: { ...doc, content: alternado },
+    log: logFinal,
+    relatorio,
+    alterados,
+  }
 }

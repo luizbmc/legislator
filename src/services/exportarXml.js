@@ -279,11 +279,42 @@ function limparAttrsInternos(no) {
   if (out.attrs) {
     const attrs = { ...out.attrs }
     delete attrs.local
+    delete attrs.vmRole
     if (Object.keys(attrs).length) out.attrs = attrs
     else delete out.attrs
   }
   if (out.content) out.content = out.content.map(limparAttrsInternos)
   return out
+}
+
+function filtrarNoPorModoVadeMecum(no, modoVadeMecum = false) {
+  if (!no || typeof no !== 'object') return no
+  const role = no.attrs?.vmRole
+  if (role === 'vm' && !modoVadeMecum) return null
+  if (role === 'original' && modoVadeMecum) return null
+
+  const out = { ...no }
+  if (out.attrs) {
+    const attrs = { ...out.attrs }
+    delete attrs.vmRole
+    if (Object.keys(attrs).length) out.attrs = attrs
+    else delete out.attrs
+  }
+  if (Array.isArray(out.content)) {
+    out.content = out.content
+      .map(filho => filtrarNoPorModoVadeMecum(filho, modoVadeMecum))
+      .filter(Boolean)
+  }
+  return out
+}
+
+function prepararDocModoVadeMecum(doc, modoVadeMecum = false) {
+  return {
+    ...(doc || { type: 'doc' }),
+    content: (doc?.content || [])
+      .map(no => filtrarNoPorModoVadeMecum(no, modoVadeMecum))
+      .filter(Boolean),
+  }
 }
 
 function prepararDocAtualizacao(doc, alteracoes = {}, diffs = []) {
@@ -384,9 +415,10 @@ function alteracoesParaXml(operacoes, opcoes = {}) {
  * @param {object} opcoes    - { modo, alteracoes, incluirAlterado, incluirLocal }
  */
 export function tiptapParaXml(doc, metadados = {}, opcoes = {}) {
+  const docModoVade = prepararDocModoVadeMecum(doc, opcoes.modoVadeMecum === true)
   const preparado = opcoes.modo === 'atualizacao'
-    ? prepararDocAtualizacao(doc, opcoes.alteracoes || {}, opcoes.diffs || [])
-    : { doc, operacoes: [] }
+    ? prepararDocAtualizacao(docModoVade, opcoes.alteracoes || {}, opcoes.diffs || [])
+    : { doc: docModoVade, operacoes: [] }
   const docExport = preparado.doc || { type: 'doc', content: [] }
 
   const exportOptions = {

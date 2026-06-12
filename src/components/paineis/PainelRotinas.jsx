@@ -9,7 +9,7 @@ import { detectarExcecoes }    from '../../services/limpeza/06_detectarExcecoes.
 import { aplicarMarcas }       from '../../services/limpeza/07_aplicarMarcas.js'
 import { corrigirPontuacaoEnumeracoes } from '../../services/limpeza/08_corrigirPontuacaoEnumeracoes.js'
 import { linhasParaTiptap, mergeComHtml, normalizarDocNotas } from '../../services/limpeza/index.js'
-import { aplicarNotasVadeMecum }          from '../../services/notasVadeMecum.js'
+import { aplicarNotasVadeMecumAlternavel } from '../../services/notasVadeMecum.js'
 import { aplicarCitacoes }               from '../../services/aplicarCitacoes.js'
 
 // ── Helpers para o modo seleção ────────────────────────────────────
@@ -200,7 +200,66 @@ const STYLE_TO_NODE_DIRETO = {
   'texto-comum-assinatura-cargo': 'textoComumAssinaturaCargo',
 }
 
+const EXPORTABLE_BLOCK_TYPES_ROTINAS = new Set([
+  ...Object.keys(NODE_TO_STYLE),
+  'paragraph',
+  'table',
+  'estiloParagrafoCustom',
+])
+
 const ROTINAS_INDIVIDUAIS = new Set([4, 5, 6, 7, 8, 9])
+
+function docJsonDaSelecaoEditor(editor, range) {
+  if (!editor || !range || range.to <= range.from) return null
+  const { state } = editor
+  const slice = state.doc.slice(range.from, range.to)
+
+  try {
+    const node = state.schema.topNodeType.createAndFill(null, slice.content)
+    const json = node?.toJSON()
+    if (json?.content?.length) return json
+  } catch {}
+
+  let content = slice.content?.toJSON?.() ?? []
+  if (!Array.isArray(content)) content = content ? [content] : []
+  if (!content.length) return null
+
+  const hasOnlyBlocks = content.every(no => EXPORTABLE_BLOCK_TYPES_ROTINAS.has(no?.type))
+  if (hasOnlyBlocks) return { type: 'doc', content }
+
+  const parent = state.doc.resolve(range.from).parent
+  return {
+    type: 'doc',
+    content: [{
+      type: parent?.type?.name || 'paragrafLei',
+      attrs: parent?.attrs ?? {},
+      content,
+    }],
+  }
+}
+
+function indiceBlocoPorPosicao(editor, pos) {
+  if (!editor || !Number.isFinite(pos)) return 0
+  let indice = 0
+  let encontrado = null
+  editor.state.doc.forEach((node, offset, idx) => {
+    if (encontrado != null) return
+    const inicio = offset
+    const fim = offset + node.nodeSize
+    if (pos >= inicio && pos <= fim) encontrado = idx
+    else if (pos > fim) indice = idx + 1
+  })
+  return encontrado ?? indice
+}
+
+function ajustarRelatorioPorOffset(relatorio = [], offset = 0) {
+  if (!offset) return relatorio
+  return relatorio.map(item => ({
+    ...item,
+    targetIndex: Number.isFinite(item.targetIndex) ? item.targetIndex + offset : item.targetIndex,
+    originalIndex: Number.isFinite(item.originalIndex) ? item.originalIndex + offset : item.originalIndex,
+  }))
+}
 
 function textoInline(content) {
   return (content ?? []).map(node => {
@@ -397,6 +456,7 @@ export default function PainelRotinas({
   autoExecutarKey = 0,
   onExcecoes,
   onModificado,
+  onModoVadeMecum,
 }) {
   const [resultados, setResultados] = useState([])  // indexed by step id
   const [rodando,    setRodando]    = useState(false)
@@ -528,8 +588,9 @@ export default function PainelRotinas({
     if (ultimo) {
       let doc = resultadoParaDoc(ultimo, ultimoIdx)
       if (temTagVm && doc?.content?.length) {
-        const { doc: docVM, relatorio } = aplicarNotasVadeMecum(doc)
+        const { doc: docVM, relatorio, alterados } = aplicarNotasVadeMecumAlternavel(doc)
         doc = docVM
+        if (alterados) onModoVadeMecum?.(true)
         abrirRelatorioNotasVade(relatorio)
       }
       if (doc?.content?.length) {
@@ -606,7 +667,6 @@ export default function PainelRotinas({
     setRelatorioVadeAtivo(-1)
     if (lista.length) {
       setModalRelatorioVade(true)
-      salvarRelatorioNotasVade(lista)
     }
   }
 
@@ -622,10 +682,27 @@ export default function PainelRotinas({
 
   function rodarNotasVadeMecum() {
     if (!editor || rodando) return
-    const { doc, log, relatorio } = aplicarNotasVadeMecum(editor.getJSON())
-    editor.commands.setContent(doc, false)
+
+    const range = modoSelecao ? { ...selRangeRef.current } : null
+    const docOrigem = range
+      ? docJsonDaSelecaoEditor(editor, range)
+      : editor.getJSON()
+
+    if (!docOrigem?.content?.length) return
+
+    const { doc, log, relatorio, alterados } = aplicarNotasVadeMecumAlternavel(docOrigem)
+
+    if (range) {
+      editor.commands.insertContentAt({ from: range.from, to: range.to }, doc.content)
+    } else {
+      editor.commands.setContent(doc, false)
+    }
+
+    if (alterados) onModoVadeMecum?.(true)
     setLogVadeMecum(log)
-    abrirRelatorioNotasVade(relatorio)
+    abrirRelatorioNotasVade(range
+      ? ajustarRelatorioPorOffset(relatorio, indiceBlocoPorPosicao(editor, range.from))
+      : relatorio)
     onModificado?.()
   }
 
