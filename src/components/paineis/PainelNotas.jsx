@@ -12,6 +12,10 @@ function isItalic(node) {
   return hasMark(node, 'italic') || hasMark(node, 'italicoLight')
 }
 
+function notaMark(node) {
+  return (node.marks || []).find(mark => mark.type.name === 'nota')
+}
+
 function normalizeSegments(segments) {
   const normalized = []
   for (const seg of segments) {
@@ -81,7 +85,8 @@ function collectNotesFromBlock(node, pos) {
   node.descendants((child, childPos) => {
     if (!child.isText) return true
 
-    const tipo = hasMark(child, 'nota') ? 'nota' : null
+    const markNota = notaMark(child)
+    const tipo = markNota ? 'nota' : null
 
     const from = blockStart + 1 + childPos
     const to = from + child.text.length
@@ -94,16 +99,39 @@ function collectNotesFromBlock(node, pos) {
       return true
     }
 
+    if (markNota?.attrs?.vmHidden && current?.vmSegments) {
+      current.vmStatus = 'excluida'
+    }
+
     const texto = child.text
     const segment = { text: texto, italic: isItalic(child) }
+    let vmSegment = null
+    if (markNota?.attrs?.vmText != null) {
+      vmSegment = { text: markNota.attrs.vmText, italic: false }
+    } else if (markNota?.attrs?.vmHidden) {
+      vmSegment = null
+    } else {
+      vmSegment = { text: texto, italic: isItalic(child) }
+    }
 
     if (current && current.tipo === tipo && current.to === from) {
       current.texto += texto
       current.segments.push(segment)
+      if (vmSegment) current.vmSegments.push(vmSegment)
+      if (markNota?.attrs?.vmHidden || markNota?.attrs?.vmText != null) current.temVm = true
       current.to = to
     } else {
       if (current) runs.push(current)
-      current = { tipo, texto, segments: [segment], from, to, contexto }
+      current = {
+        tipo,
+        texto,
+        segments: [segment],
+        vmSegments: vmSegment ? [vmSegment] : [],
+        temVm: markNota?.attrs?.vmHidden || markNota?.attrs?.vmText != null,
+        from,
+        to,
+        contexto,
+      }
     }
 
     return true
@@ -119,6 +147,13 @@ function collectNotesFromBlock(node, pos) {
       tipo: run.tipo,
       texto,
       segments: normalizedSegments,
+      vmPreview: run.temVm
+        ? (() => {
+            const vmSegments = normalizeSegments(run.vmSegments || [])
+            if (!vmSegments.length) return { status: 'excluida', texto: 'excluída', segments: [] }
+            return { status: 'alterada', texto: segmentsText(vmSegments), segments: vmSegments }
+          })()
+        : null,
       contexto: run.contexto,
       from: run.from,
       to: run.to,
@@ -155,28 +190,18 @@ function collectNotes(editor, modoVadeMecum = false) {
     const { node, pos } = blocos[i]
     if (ocultoPorModoVm(node, modoVadeMecum)) continue
 
-    const role = node?.attrs?.vmRole
     const notasBloco = collectNotesFromBlock(node, pos)
     if (!notasBloco.length) continue
 
     if (modoVadeMecum) {
-      notas.push(...notasBloco)
-      continue
-    }
-
-    if (role === 'original') {
-      const prox = blocos[i + 1]
-      const vmNotas = prox?.node?.attrs?.vmRole === 'vm'
-        ? collectNotesFromBlock(prox.node, prox.pos)
-        : []
-      notasBloco.forEach((nota, idx) => {
-        notas.push({ ...nota, vmPreview: vmPreviewParaNota(nota, vmNotas, idx) })
-      })
+      notas.push(...notasBloco.map(nota => nota.vmPreview?.status === 'alterada'
+        ? { ...nota, texto: nota.vmPreview.texto, segments: nota.vmPreview.segments }
+        : nota).filter(nota => nota.vmPreview?.status !== 'excluida'))
       continue
     }
 
     notasBloco.forEach(nota => {
-      notas.push({ ...nota, vmPreview: vmPreviewParaNota(nota, null, 0, true) })
+      notas.push(nota.vmPreview ? nota : { ...nota, vmPreview: vmPreviewParaNota(nota, null, 0, true) })
     })
   }
 

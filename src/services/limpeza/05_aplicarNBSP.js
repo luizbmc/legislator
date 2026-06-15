@@ -6,7 +6,7 @@
 const NBSP = ' '
 
 const REGRAS = [
-  [/§ /g,                              `§${NBSP}`],
+  [/§[ \u00a0]*(?=\d)/g,               `§${NBSP}`],
   [/\bart\. (\d)/g,                    `art.${NBSP}$1`],
   [/\barts\. (\d)/g,                   `arts.${NBSP}$1`],
   [/\bArt\. (\d)/g,                    `Art.${NBSP}$1`],

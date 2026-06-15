@@ -68,10 +68,13 @@
   };
   var INDESIGN_PARAGRAPH_CLASS_TO_LEGISLATOR = {
     "tit-subtit_epigrafe": "Epigrafe",
+    "tit-subtit_epigrafe-emenda": "Epigrafe",
+    "tit-substit_epigrafe-emenda": "Epigrafe",
     "tit-subtit_epigrafe-apelido": "EpigrafeApelido",
     "corpo-legis_nota-titulos": "NotaTitulo",
     "corpo-legis_nota-titulos-transp": "NotaTitulo",
     "corpo-legis_ementa": "Ementa",
+    "corpo-legis_emenda-ementa": "Ementa",
     "corpo-legis_texto-lei-sem-indent": "ParagrafoAbertura",
     "corpo-legis_texto-lei-faco-saber": "ParagrafoFacoSaber",
     "tit-subtit_abertura-cap": "AberturaCapitulo",

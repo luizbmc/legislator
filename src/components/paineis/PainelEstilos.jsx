@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react'
-import { isTipoFacoSaber, isTipoTextoComum, isTipoTratado } from '../../constants/normas.js'
+import { isTipoEmendaConstitucional, isTipoFacoSaber, isTipoTextoComum, isTipoTratado } from '../../constants/normas.js'
+import {
+  ajustarEstiloParagrafoPorTipo,
+  ESTILOS_EMENDA_CONSTITUCIONAL_OCULTOS,
+} from '../../constants/estilosLegislator.js'
 import {
   estilosCaractereConfigurados,
   estilosParagrafoConfigurados,
@@ -210,18 +214,21 @@ export default function PainelEstilos({ editor, editable = true, tipoNorma = '',
   }, [editor, prefsTick, tipoNorma])
 
   const { node: ativoAtual, customStyleId, marks } = estado
-  const estilosConfigurados = estilosParagrafoConfigurados({ incluirInternos: false })
+  const estilosConfigurados = estilosParagrafoConfigurados({ incluirInternos: false, tipoNorma })
   const estilosBaseDisponiveis = isTipoTextoComum(tipoNorma)
     ? ESTILOS.filter(e => ESTILOS_TEXTO_COMUM.has(e.node))
     : isTipoTratado(tipoNorma)
       ? ESTILOS.filter(e => ESTILOS_TRATADO.has(e.node))
-      : ESTILOS.filter(e => !ESTILOS_TEXTO_COMUM.has(e.node) && (!e.apenasFacoSaber || isTipoFacoSaber(tipoNorma)))
+      : ESTILOS
+        .filter(e => !ESTILOS_TEXTO_COMUM.has(e.node) && (!e.apenasFacoSaber || isTipoFacoSaber(tipoNorma)))
+        .filter(e => !isTipoEmendaConstitucional(tipoNorma) || !ESTILOS_EMENDA_CONSTITUCIONAL_OCULTOS.has(e.node))
+        .map(e => ajustarEstiloParagrafoPorTipo(e, tipoNorma))
   const estilosCustomDisponiveis = estilosConfigurados
     .filter(e => e.custom && estiloAtivoNoTipo(e, tipoNorma))
   const estilosDisponiveis = [...estilosBaseDisponiveis, ...estilosCustomDisponiveis]
   const labelAtivo = ativoAtual === 'estiloParagrafoCustom'
     ? estilosCustomDisponiveis.find(e => e.id === customStyleId)?.label
-    : ESTILOS.find(e => e.node === ativoAtual)?.label
+    : estilosBaseDisponiveis.find(e => e.node === ativoAtual)?.label
 
   function aplicarNo(estilo) {
     if (!editable) return

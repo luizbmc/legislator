@@ -85,7 +85,7 @@ const ESTILOS_SEM_MARCAS = new Set(['epigrafe', 'epigrafe-apelido'])
 // ── Padrões de marcas de caractere ───────────────────────────────
 
 // Rótulo de artigo: "Art. 1º", "Art. 1.", "Art. 1º-A.", "Arts. 2º a 5."
-const RE_BOLD_ARTIGO = /^Arts?\.\s\d[\d.]*[ºª]?(-[A-Z])?\.?(\sa\s\d[\d.]*\.?)?/
+const RE_BOLD_ARTIGO = /^Arts?\.?\s\d[\d.]*[ºª]?(-[A-Z])?\.?(\sa\s\d[\d.]*\.?)?/
 
 // Rótulos com bold normal — três alternativas:
 //   1. Uma ou mais letras maiúsculas, com sufixo opcional "-X" ou "-1",
@@ -417,7 +417,7 @@ export function aplicarMarcas(linhas, { estiloVadeMecum = false, somenteEstiloVa
     }
 
     // ── Regra 2: bold — maiúsculas+travessão, "Pena –", "§ N" ──
-    // Estilo Vade Mecum: opcional, salvo quando a norma tem tag "vm".
+    // Estilo Vade Mecum: uso explícito; não é mais acionado pela tag "vm".
     if (estiloVadeMecum) {
       const m = RE_BOLD_NORMAL.exec(result.text)
       if (m && m[0].length > 0) {
@@ -431,7 +431,7 @@ export function aplicarMarcas(linhas, { estiloVadeMecum = false, somenteEstiloVa
     }
 
     // ── Regra 3: italic — rótulo de alínea ("a)", "b)" …) ────
-    // Estilo Vade Mecum: opcional, salvo quando a norma tem tag "vm".
+    // Estilo Vade Mecum: uso explícito; não é mais acionado pela tag "vm".
     if (estiloVadeMecum && result.style === 'alinea') {
       const m = RE_ITALIC_ALINEA.exec(result.text)
       if (m && m[0].length > 0) {

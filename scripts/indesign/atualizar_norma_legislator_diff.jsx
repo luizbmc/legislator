@@ -25,6 +25,8 @@
   };
   var DEFAULTS = {
     paragraph: {
+      Epigrafe: "tit-subtit/epigrafe",
+      EpigrafeApelido: "tit-subtit/epigrafe-apelido",
       Ementa: "corpo-legis/ementa",
       NotaTitulo: "corpo-legis/nota-titulos",
       NotaRodape: "corpo-legis/nota-rodape",
@@ -124,6 +126,38 @@
     } catch (e) {
       return "";
     }
+  }
+
+  function normalizeTipoNorma(s) {
+    return String(s || "")
+      .toLowerCase()
+      .replace(/[áàâãä]/g, "a")
+      .replace(/[éèêë]/g, "e")
+      .replace(/[íìîï]/g, "i")
+      .replace(/[óòôõö]/g, "o")
+      .replace(/[úùûü]/g, "u")
+      .replace(/ç/g, "c")
+      .replace(/\s+/g, " ")
+      .replace(/^\s+|\s+$/g, "");
+  }
+
+  function isEmendaConstitucionalXml(xmlText) {
+    var xml, tipo;
+    try {
+      XML.ignoreWhitespace = false;
+      XML.prettyPrinting = false;
+      xml = new XML(prepareXmlText(xmlText));
+      tipo = String(xml.attribute("tipo"));
+      return normalizeTipoNorma(tipo) === "emenda constitucional";
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function applyEmendaConstitucionalFields(pFields) {
+    if (!pFields) return;
+    if (pFields.Epigrafe) pFields.Epigrafe.text = "tit-subtit/epigrafe-emenda";
+    if (pFields.Ementa) pFields.Ementa.text = "corpo-legis/emenda-ementa";
   }
 
   function ensureCondition(doc, name, color, method) {
@@ -1954,6 +1988,9 @@
       selectedFile = File.openDialog("Selecione o XML exportado pelo Legislator", "*.xml");
       if (selectedFile) {
         status.text = "Arquivo pronto para comparacao: " + selectedFile.name;
+        if (isEmendaConstitucionalXml(readFile(selectedFile))) {
+          applyEmendaConstitucionalFields(pFields);
+        }
         ok.enabled = true;
       }
     };

@@ -1,0 +1,237 @@
+#1
+tipo: dispositivo
+tag: Paragrafo
+local: TÍTULO I – DISPOSIÇÕES PRELIMINARES > CAPÍTULO III – DAS SESSÕES PREPARATÓRIAS > Seção II – Da Eleição da Mesa > Art. 6º > § 1º
+rotulo: § 1º
+texto: § 1º (Revogado)
+
+#2
+tipo: dispositivo
+tag: Paragrafo
+local: TÍTULO I – DISPOSIÇÕES PRELIMINARES > CAPÍTULO III – DAS SESSÕES PREPARATÓRIAS > Seção II – Da Eleição da Mesa > Art. 6º > § 2º
+rotulo: § 2º
+texto: § 2º (Revogado)
+
+#3
+tipo: dispositivo
+tag: Paragrafo
+local: TÍTULO I – DISPOSIÇÕES PRELIMINARES > CAPÍTULO III – DAS SESSÕES PREPARATÓRIAS > Seção II – Da Eleição da Mesa > Art. 6º > § 3º
+rotulo: § 3º
+texto: § 3º Enquanto não for eleito o novo Presidente, dirigirá os trabalhos da Câmara dos Deputados a Mesa da sessão legislativa anterior. (Artigo com redação dada pela Resolução nº 19 de 2012)
+
+#4
+tipo: artigo
+tag: Artigo
+local: TÍTULO I – DISPOSIÇÕES PRELIMINARES > CAPÍTULO III – DAS SESSÕES PREPARATÓRIAS > Seção II – Da Eleição da Mesa
+rotulo: Art. 6º
+texto: Art. 6º No terceiro ano de cada legislatura, em data e hora previamente designadas pelo Presidente da Câmara dos Deputados, antes de inaugurada a sessão legislativa e sob a direção da Mesa da sessão anterior, realizar-se-á a eleição do Presidente, dos demais membros da Mesa e dos Suplentes dos Secretários.
+
+#5
+tipo: artigo
+tag: Artigo
+local: TÍTULO I – DISPOSIÇÕES PRELIMINARES > CAPÍTULO III – DAS SESSÕES PREPARATÓRIAS > Seção II – Da Eleição da Mesa
+rotulo: Art. 7º
+texto: Art. 7º A eleição dos membros da Mesa far-se-á em votação por escrutínio secreto e pelo sistema eletrônico, exigido maioria absoluta de votos, em primeiro escrutínio, e maioria simples, em segundo escrutínio, presente a maioria absoluta dos Deputados, observadas as seguintes exigências e formalidades:
+
+#6
+tipo: heading
+tag: Divisao
+local: TÍTULO I – DISPOSIÇÕES PRELIMINARES > CAPÍTULO IV – DOS LÍDERES
+rotulo: CAPÍTULO IV – DOS LÍDERES
+texto: CAPÍTULO IV – DOS LÍDERES
+
+#7
+tipo: dispositivo
+tag: Paragrafo
+local: TÍTULO I – DISPOSIÇÕES PRELIMINARES > CAPÍTULO IV – DOS LÍDERES > Art. 9º > § 5º
+rotulo: § 5º
+texto: § 5º (Revogado pela Resolução nº 33 de 2026)
+
+#8
+tipo: dispositivo
+tag: Paragrafo
+local: TÍTULO I – DISPOSIÇÕES PRELIMINARES > CAPÍTULO IV – DOS LÍDERES > Art. 9º > § 6º
+rotulo: § 6º
+texto: § 6º O quantitativo mínimo de Vice-Líderes previsto no § 1º será calculado com base no resultado final das eleições para a Câmara dos Deputados proclamado pelo Tribunal Superior Eleitoral. (Parágrafo acrescido pela Resolução nº 1 de 2011)
+
+#9
+tipo: artigo
+tag: Artigo
+local: TÍTULO I – DISPOSIÇÕES PRELIMINARES > CAPÍTULO IV – DOS LÍDERES
+rotulo: Art. 9º
+texto: Art. 9º Os Deputados são agrupados por representações partidárias ou de Blocos Parlamentares, cabendo-lhes escolher o Líder quando a representação atender os requisitos estabelecidos no § 3º do art. 17 da Constituição Federal. (Caput do artigo com redação dada pela Resolução nº 30 de 2018, em vigor em 1º/2/2019, aplicando-se nos termos do art. 6º da Resolução nº 30 de 2018)
+
+#10
+tipo: dispositivo
+tag: Paragrafo
+local: TÍTULO I – DISPOSIÇÕES PRELIMINARES > CAPÍTULO VI > Art. 13-A > § 1º
+rotulo: § 1º
+texto: § 1º As Vices-Coordenadorias terão a designação de Primeira, Segunda e Terceira e, nessa ordem, substituirão a Coordenação-Geral em casos de impedimentos ou ausência do titular.
+
+#11
+tipo: dispositivo
+tag: Paragrafo
+local: TÍTULO I – DISPOSIÇÕES PRELIMINARES > CAPÍTULO VI > Art. 13-A > § 2º
+rotulo: § 2º
+texto: § 2º A eleição da Coordenação-Geral e das respectivas Vices-Coordenadorias ocorrerá no dia 6 de fevereiro de cada sessão legislativa, observado o disposto no § 1º do art. 2º deste Regimento, e será realizada por meio de reunião presencial convocada especificamente para essa finalidade. (Parágrafo acrescido pela Resolução nº 6 de 2023 e com redação dada pela Resolução nº 33 de 2026)
+
+#12
+tipo: dispositivo
+tag: Paragrafo
+local: TÍTULO I – DISPOSIÇÕES PRELIMINARES > CAPÍTULO VI > Art. 13-A > § 2º-A
+rotulo: § 2º-A
+texto: § 2º-A. A eleição de que trata o § 2º deste artigo far-se-á, preferencialmente, por meio de escrutínio secreto, exigida a maioria simples de votos dos membros da Bancada Negra presentes na reunião, admitida a eleição por aclamação quando houver consenso entre os presentes. (Parágrafo acrescido pela Resolução nº 33 de 2026)
+
+#13
+tipo: dispositivo
+tag: Paragrafo
+local: TÍTULO I – DISPOSIÇÕES PRELIMINARES > CAPÍTULO VI > Art. 13-A > § 3º
+rotulo: § 3º
+texto: § 3º Para fins do disposto neste artigo, será considerada a autodeclaração racial lançada no formulário do registro de candidatura da eleição geral que precede o início da legislatura. (Artigo acrescido pela Resolução nº 6 de 2023)
+
+#14
+tipo: artigo
+tag: Artigo
+local: TÍTULO I – DISPOSIÇÕES PRELIMINARES > CAPÍTULO VI
+rotulo: Art. 13-A
+texto: Art. 13-A. A Bancada Negra, composta de parlamentares negros e negras, é constituída de 1 (uma) Coordenação-Geral e 3 (três) Vices-Coordenadorias, para mandato de 1 (um) ano, até a posse dos novos integrantes, salvo na última sessão legislativa da legislatura, cujo encerramento fará cessar os mandatos na Bancada, permitida uma única recondução, por igual período, durante a mesma legislatura. (Caput do artigo acrescido pela Resolução nº 6 de 2023 e com redação dada pela Resolução nº 33 de 2026)
+
+#15
+tipo: dispositivo
+tag: Paragrafo
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO I – DA MESA > Seção I – Disposições Gerais > Art. 14 > § 5º
+rotulo: § 5º
+texto: § 5º Os membros da Mesa que exerçam atribuições de gestão, superintendência, supervisão e gerenciamento não poderão exercer a função de Líder ou Vice-líder nem fazer parte de Comissão Parlamentar de Inquérito e do Conselho de Ética e Decoro Parlamentar, na forma disciplinada em Ato da Mesa Diretora. (Parágrafo com redação dada pela Resolução nº 33 de 2026)
+
+#16
+tipo: dispositivo
+tag: Paragrafo
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO I – DA MESA > Seção I – Disposições Gerais > Art. 14 > § 6º
+rotulo: § 6º
+texto: § 6º A Mesa, em ato que deverá ser publicado dentro de trinta sessões após a sua constituição, fixará a competência de cada um dos seus membros, prevalecendo a da sessão legislativa anterior enquanto não modificada.
+
+#17
+tipo: dispositivo
+tag: Paragrafo
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO I – DA MESA > Seção I – Disposições Gerais > Art. 14 > § 7º
+rotulo: § 7º
+texto: § 7º À exceção do Presidente, os membros da Mesa poderão integrar Comissão Permanente ou Temporária, vedado o exercício da Presidência ou da Vice-Presidência da Comissão. (Parágrafo acrescido pela Resolução nº 33 de 2026)
+
+#18
+tipo: artigo
+tag: Artigo
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO I – DA MESA > Seção I – Disposições Gerais
+rotulo: Art. 15
+texto: Art. 15. À Mesa compete, dentre outras atribuições estabelecidas em lei, neste Regimento ou por resolução da Câmara, ou delas implicitamente resultantes:
+
+#19
+tipo: heading
+tag: Divisao
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO III-K – DA SECRETARIA DE MONITORAMENTO E FISCALIZAÇÃO DAS DECISÕES DO SISTEMA INTERAMERICANO DE DIREITOS HUMANOS
+rotulo: CAPÍTULO III-K – DA SECRETARIA DE MONITORAMENTO E FISCALIZAÇÃO DAS DECISÕES DO SISTEMA INTERAMERICANO DE DIREITOS HUMANOS
+texto: CAPÍTULO III-K – DA SECRETARIA DE MONITORAMENTO E FISCALIZAÇÃO DAS DECISÕES DO SISTEMA INTERAMERICANO DE DIREITOS HUMANOS
+
+#20
+tipo: dispositivo
+tag: Inciso
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO III-K – DA SECRETARIA DE MONITORAMENTO E FISCALIZAÇÃO DAS DECISÕES DO SISTEMA INTERAMERICANO DE DIREITOS HUMANOS > Art. 21-V > I
+rotulo: I
+texto: I – monitorar a implementação das decisões e das recomendações emanadas do Sistema Interamericano de Direitos Humanos proferidas em relação à República Federativa do Brasil, bem como atuar para o seu efetivo cumprimento e para a prevenção de novas violações das obrigações internacionais;
+
+#21
+tipo: dispositivo
+tag: Inciso
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO III-K – DA SECRETARIA DE MONITORAMENTO E FISCALIZAÇÃO DAS DECISÕES DO SISTEMA INTERAMERICANO DE DIREITOS HUMANOS > Art. 21-V > II
+rotulo: II
+texto: II – acompanhar a implementação de parâmetros de direitos humanos estabelecidos pelo Sistema Interamericano de Direitos Humanos nos processos legislativos da Câmara dos Deputados;
+
+#22
+tipo: dispositivo
+tag: Inciso
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO III-K – DA SECRETARIA DE MONITORAMENTO E FISCALIZAÇÃO DAS DECISÕES DO SISTEMA INTERAMERICANO DE DIREITOS HUMANOS > Art. 21-V > III
+rotulo: III
+texto: III – zelar pela observância, pelo poder público, das decisões emanadas dos órgãos do Sistema Interamericano de Direitos Humanos, podendo solicitar informações de órgãos e entidades;
+
+#23
+tipo: dispositivo
+tag: Inciso
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO III-K – DA SECRETARIA DE MONITORAMENTO E FISCALIZAÇÃO DAS DECISÕES DO SISTEMA INTERAMERICANO DE DIREITOS HUMANOS > Art. 21-V > IV
+rotulo: IV
+texto: IV – promover e apoiar a universalização do acesso à justiça e a adoção de tecnologias digitais e de inteligência artificial em conformidade com as normas e os parâmetros nacionais e internacionais de direitos humanos;
+
+#24
+tipo: dispositivo
+tag: Inciso
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO III-K – DA SECRETARIA DE MONITORAMENTO E FISCALIZAÇÃO DAS DECISÕES DO SISTEMA INTERAMERICANO DE DIREITOS HUMANOS > Art. 21-V > V
+rotulo: V
+texto: V – promover ações, projetos e políticas públicas de direitos humanos, considerados os parâmetros normativos interamericanos e as boas práticas nacionais e internacionais;
+
+#25
+tipo: dispositivo
+tag: Inciso
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO III-K – DA SECRETARIA DE MONITORAMENTO E FISCALIZAÇÃO DAS DECISÕES DO SISTEMA INTERAMERICANO DE DIREITOS HUMANOS > Art. 21-V > VI
+rotulo: VI
+texto: VI – monitorar os processos legislativos em curso na Câmara dos Deputados abrangidos pelos efeitos de sentenças, medidas provisórias, opiniões consultivas ou resoluções de supervisão de cumprimento de sentenças da Corte Interamericana de Direitos Humanos;
+
+#26
+tipo: dispositivo
+tag: Inciso
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO III-K – DA SECRETARIA DE MONITORAMENTO E FISCALIZAÇÃO DAS DECISÕES DO SISTEMA INTERAMERICANO DE DIREITOS HUMANOS > Art. 21-V > VII
+rotulo: VII
+texto: VII – divulgar oficialmente, no âmbito da Câmara dos Deputados, o teor das sentenças da Corte Interamericana de Direitos Humanos proferidas em relação à República Federativa do Brasil para contribuir com a difusão dos parâmetros interamericanos de proteção de direitos humanos;
+
+#27
+tipo: dispositivo
+tag: Inciso
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO III-K – DA SECRETARIA DE MONITORAMENTO E FISCALIZAÇÃO DAS DECISÕES DO SISTEMA INTERAMERICANO DE DIREITOS HUMANOS > Art. 21-V > VIII
+rotulo: VIII
+texto: VIII – apoiar ou realizar, em cooperação com o Centro de Formação, Treinamento e Aperfeiçoamento da Câmara dos Deputados, cursos de aperfeiçoamento, capacitação e materiais didáticos sobre a jurisprudência interamericana, o controle de convencionalidade e o impacto das decisões do Sistema Interamericano de Direitos Humanos nos processos legislativos da Câmara dos Deputados;
+
+#28
+tipo: dispositivo
+tag: Inciso
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO III-K – DA SECRETARIA DE MONITORAMENTO E FISCALIZAÇÃO DAS DECISÕES DO SISTEMA INTERAMERICANO DE DIREITOS HUMANOS > Art. 21-V > IX
+rotulo: IX
+texto: IX – atuar como ponto de contato da Unidade de Monitoramento e Fiscalização das decisões do Sistema Interamericano de Direitos Humanos do Conselho Nacional de Justiça para facilitar o cumprimento do disposto na Resolução nº 364, de 12 de janeiro de 2021, do referido Conselho;
+
+#29
+tipo: dispositivo
+tag: Inciso
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO III-K – DA SECRETARIA DE MONITORAMENTO E FISCALIZAÇÃO DAS DECISÕES DO SISTEMA INTERAMERICANO DE DIREITOS HUMANOS > Art. 21-V > X
+rotulo: X
+texto: X – sugerir propostas e observações legislativas necessárias ao cumprimento das decisões do Sistema Interamericano de Direitos Humanos que envolva a República Federativa do Brasil;
+
+#30
+tipo: dispositivo
+tag: Inciso
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO III-K – DA SECRETARIA DE MONITORAMENTO E FISCALIZAÇÃO DAS DECISÕES DO SISTEMA INTERAMERICANO DE DIREITOS HUMANOS > Art. 21-V > XI
+rotulo: XI
+texto: XI – fomentar a cultura de direitos humanos e o controle de convencionalidade no Poder Legislativo, recomendando a conformidade da legislação brasileira aos tratados internacionais de direitos humanos e à jurisprudência interamericana.
+
+#31
+tipo: dispositivo
+tag: Paragrafo
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO III-K – DA SECRETARIA DE MONITORAMENTO E FISCALIZAÇÃO DAS DECISÕES DO SISTEMA INTERAMERICANO DE DIREITOS HUMANOS > Art. 21-V > Parágrafo único
+rotulo: Parágrafo único
+texto: Parágrafo único. A atuação da Secretaria de Monitoramento e Fiscalização das Decisões do Sistema Interamericano de Direitos Humanos dar-se-á sem prejuízo das competências atribuídas à Comissão de Direitos Humanos, Minorias e Igualdade Racial. (Artigo acrescido pela Resolução nº 34 de 2026)
+
+#32
+tipo: artigo
+tag: Artigo
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO III-K – DA SECRETARIA DE MONITORAMENTO E FISCALIZAÇÃO DAS DECISÕES DO SISTEMA INTERAMERICANO DE DIREITOS HUMANOS
+rotulo: Art. 21-V
+texto: Art. 21-V. Compete à Secretaria de Monitoramento e Fiscalização das Decisões do Sistema Interamericano de Direitos Humanos:
+
+#33
+tipo: artigo
+tag: Artigo
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO III-K – DA SECRETARIA DE MONITORAMENTO E FISCALIZAÇÃO DAS DECISÕES DO SISTEMA INTERAMERICANO DE DIREITOS HUMANOS
+rotulo: Art. 21-X
+texto: Art. 21-X. O Secretário de Monitoramento e Fiscalização das Decisões do Sistema Interamericano de Direitos Humanos será escolhido pelo Presidente da Câmara dos Deputados entre os Deputados no exercício do mandato e poderá ser substituído a qualquer tempo. (Artigo acrescido pela Resolução nº 34 de 2026)
+
+#34
+tipo: heading
+tag: Divisao
+local: TÍTULO II – DOS ÓRGÃOS DA CÂMARA > CAPÍTULO IV – DAS COMISSÕES
+rotulo: CAPÍTULO IV – DAS COMISSÕES
+texto: CAPÍTULO IV – DAS COMISSÕES

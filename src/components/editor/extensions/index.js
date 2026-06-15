@@ -171,6 +171,20 @@ export const ParagraphAlteradoAttrs = Extension.create({
 export const Nota = Mark.create({
   name: 'nota',
   // priority 70: verificado antes de italic/bold do StarterKit (padrão 50)
+  addAttributes() {
+    return {
+      vmText: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-vm-text'),
+        renderHTML: attrs => attrs.vmText != null ? { 'data-vm-text': attrs.vmText } : {},
+      },
+      vmHidden: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-vm-hidden'),
+        renderHTML: attrs => attrs.vmHidden ? { 'data-vm-hidden': 'true' } : {},
+      },
+    }
+  },
   parseHTML() { return [{ tag: 'span.leg-nota', priority: 70 }] },
   renderHTML({ HTMLAttributes }) {
     return ['span', mergeAttributes(HTMLAttributes, { class: 'leg-nota' }), 0]

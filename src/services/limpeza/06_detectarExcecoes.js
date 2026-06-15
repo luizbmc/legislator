@@ -12,6 +12,9 @@ function temMarca(node, nome) {
 }
 
 const RE_TERMO_ITALICO_OBRIGATORIO = /\b(?:Diário|[Cc]aput|DOU)\b/
+const RE_NOTA_PARENTETICA_INICIAL = /^\((?:Vide|Revogad[oa]|Incluíd[oa]|Incluid[oa]|Acrescid[oa]|Renumerad[oa]|Redação dada|Com redação|Vigência|(?:Artigo|Inciso|Alínea|Alinea|Item|Parágrafo|Paragrafo)\s+(?:revogad[oa]|incluíd[oa]|incluid[oa]|acrescid[oa]|renumerad[oa]))/i
+const ESTILOS_ENUMERACAO = new Set(['inciso', 'alinea', 'item'])
+const NIVEL_ENUMERACAO = { inciso: 1, alinea: 2, item: 3 }
 
 function alvoRegex(texto, regex) {
   const match = String(texto || '').match(regex)
@@ -45,6 +48,113 @@ function temTermoSemItalico(linha) {
   )
 }
 
+function temMarcaNota(node) {
+  return node?.type === 'text' && (node.marks ?? []).some(marca => {
+    const nome = nomeMarca(marca)
+    return nome === 'nota' || nome === 'notaRodape' || nome === 'notaSobrescrito'
+  })
+}
+
+function temBoldArtigo(linha) {
+  if (!linha.content?.length) return linha.style === 'artigo'
+  return linha.content.some(node =>
+    node?.type === 'text' &&
+    /^Arts?\.?/i.test(node.text || '') &&
+    temMarca(node, 'boldArtigo')
+  )
+}
+
+function textoSemNotas(linha) {
+  if (!linha.content?.length) return linha.text ?? ''
+  return linha.content
+    .map(node => {
+      if (node?.type !== 'text') return ''
+      return temMarcaNota(node) ? '' : node.text ?? ''
+    })
+    .join('')
+}
+
+function linhaEnumeracaoSemTextoPrincipal(linha) {
+  if (!ESTILOS_ENUMERACAO.has(linha?.style)) return false
+  const texto = textoSemNotas(linha).trim()
+  if (!texto) return true
+  if (linha.style === 'inciso') {
+    const resto = texto.replace(/^[IVXLCDM]+(?:-[A-Z])?\s*[–—-]\.?\s*/i, '')
+    return resto !== texto && (!resto.trim() || RE_NOTA_PARENTETICA_INICIAL.test(resto.trim()))
+  }
+  if (linha.style === 'alinea') {
+    const resto = texto.replace(/^[a-zà-ÿ]\)\s*/i, '')
+    return resto !== texto && (!resto.trim() || RE_NOTA_PARENTETICA_INICIAL.test(resto.trim()))
+  }
+  if (linha.style === 'item') {
+    const resto = texto.replace(/^\d+[.)]?\s*/, '')
+    return resto !== texto && (!resto.trim() || RE_NOTA_PARENTETICA_INICIAL.test(resto.trim()))
+  }
+  return false
+}
+
+function textoPrincipalEnumeracao(linha) {
+  return textoSemNotas(linha).replace(/[ \u00a0]+$/g, '')
+}
+
+function ultimoCharPrincipal(linha) {
+  const texto = textoPrincipalEnumeracao(linha)
+  return texto ? texto.charAt(texto.length - 1) : ''
+}
+
+function alvoPontuacaoEnumeracao(linha) {
+  const principal = textoPrincipalEnumeracao(linha)
+  if (!principal) return alvoTextoInteiro(linha.text)
+
+  const texto = String(linha.text || '')
+  const pos = texto.lastIndexOf(principal)
+  const inicio = pos >= 0 ? pos + principal.length - 1 : Math.max(0, texto.length - 1)
+  return {
+    inicio,
+    fim: inicio + 1,
+    texto: texto.charAt(inicio) || principal.charAt(principal.length - 1),
+  }
+}
+
+function proximoSignificativo(linhas, inicio) {
+  for (let i = inicio; i < linhas.length; i++) {
+    if (linhas[i]?.style !== 'vazio') return i
+  }
+  return -1
+}
+
+function numeroArtigoParaInteiro(valor) {
+  return parseInt(String(valor || '').replace(/\./g, ''), 10)
+}
+
+function formatarNumeroArtigo(numero) {
+  return String(numero).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+}
+
+function infoArtigo(linha, index) {
+  if (linha?.style !== 'artigo' || !temBoldArtigo(linha)) return null
+
+  const texto = String(linha.text || '').replace(/\u00a0/g, ' ')
+  const match = texto.match(/^Arts?\.?\s+(\d+(?:\.\d{3})*)(?:[ºª°])?(?:-[A-Z])?\.?(?:\s+a\s+(\d+(?:\.\d{3})*)(?:[ºª°])?)?/i)
+  if (!match) return null
+
+  const inicio = numeroArtigoParaInteiro(match[1])
+  const fim = match[2] ? numeroArtigoParaInteiro(match[2]) : inicio
+  if (!Number.isFinite(inicio) || !Number.isFinite(fim)) return null
+
+  return {
+    index,
+    inicio: Math.min(inicio, fim),
+    fim: Math.max(inicio, fim),
+    rotulo: match[0],
+    linha,
+  }
+}
+
+function alvoRotuloArtigo(linha) {
+  return alvoRegex(linha.text, /^Arts?\.?\s+\d+(?:\.\d{3})*(?:[ºª°])?(?:-[A-Z])?\.?(?:\s+a\s+\d+(?:\.\d{3})*(?:[ºª°])?)?/i) || alvoTextoInteiro(linha.text)
+}
+
 const PADROES = [
   {
     tipo: 'ordinal_antigo',
@@ -58,6 +168,22 @@ const PADROES = [
     descricao: 'Traço simples (-) em inciso — use travessão (–)',
     test: l => l.style === 'inciso' && /^[IVXLCDM]+(?:-[A-Z])? - /.test(l.text),
     alvo: l => alvoRegex(l.text, / - /),
+  },
+  {
+    tipo: 'inciso_sem_espaco_antes_traco',
+    descricao: 'Inciso sem espaço entre o rótulo e o traço',
+    test: l => l.style === 'inciso' && /^[IVXLCDM]+(?:-[A-Z])?[–—-](?![A-Z])/i.test(l.text),
+    alvo: l => alvoRegex(l.text, /^[IVXLCDM]+(?:-[A-Z])?[–—-]/i),
+  },
+  {
+    tipo: 'inciso_sem_travessao',
+    descricao: 'Inciso sem travessão (–) após o rótulo',
+    test: l => {
+      if (l.style !== 'inciso') return false
+      if (!/^[IVXLCDM]+(?:-[A-Z])?(?:\s|\u00a0|[.)])/i.test(l.text)) return false
+      return !/^[IVXLCDM]+(?:-[A-Z])?\s*[–—-]/i.test(l.text)
+    },
+    alvo: l => alvoRegex(l.text, /^[IVXLCDM]+(?:-[A-Z])?/i),
   },
   {
     // Artigos 1–9 devem ter º logo após o número (ex: "Art. 5º")
@@ -93,6 +219,12 @@ const PADROES = [
       return seg !== '.' && seg !== '-'
     },
     alvo: l => alvoRegex(l.text, /^Art\.\s+\d+(?:\.\d{3})*/),
+  },
+  {
+    tipo: 'paragrafo_sem_espaco_apos_simbolo',
+    descricao: 'Parágrafo sem espaço entre § e o número',
+    test: l => l.style === 'paragrafo' && /^§{1,2}\d/.test(l.text),
+    alvo: l => alvoRegex(l.text, /^§{1,2}\d+/),
   },
   {
     // Parágrafos §1–§9 devem ter º logo após o número (ex: "§ 5º")
@@ -137,9 +269,9 @@ const PADROES = [
       // A remoção é feita pelo padrão do texto (não pelo style), porque a linha
       // pode estar classificada como 'texto-lei' mesmo tendo formato de alínea.
       let texto = l.text
-      if (/^[A-Za-záéíóúâêôîûàèìòùãõçÁÉÍÓÚÂÊÔÎÛÀÈÌÒÙÃÕÇ]+\)\s/.test(texto)) {
+      if (/^[A-Za-záéíóúâêôîûàèìòùãõçÁÉÍÓÚÂÊÔÎÛÀÈÌÒÙÃÕÇ]+\)/.test(texto)) {
         texto = texto.replace(/^[A-Za-záéíóúâêôîûàèìòùãõçÁÉÍÓÚÂÊÔÎÛÀÈÌÒÙÃÕÇ]+\)\s*/, '')
-      } else if (/^\d+\)\s/.test(texto)) {
+      } else if (/^\d+\)/.test(texto)) {
         texto = texto.replace(/^\d+\)\s*/, '')
       }
       const a = (texto.match(/\(/g) || []).length
@@ -147,6 +279,13 @@ const PADROES = [
       return a !== f
     },
     alvo: l => alvoRegex(l.text, /\(|\)/) || alvoTextoInteiro(l.text),
+    estilosExcluidos: ['vazio'],
+  },
+  {
+    tipo: 'texto_colado_parentese',
+    descricao: 'Texto colado após parêntese de fechamento',
+    test: l => /\)(?=[A-Za-zÀ-ÿ0-9§])/.test(l.text),
+    alvo: l => alvoRegex(l.text, /\)(?=[A-Za-zÀ-ÿ0-9§])/),
     estilosExcluidos: ['vazio'],
   },
   {
@@ -188,6 +327,129 @@ const PADROES = [
   },
 ]
 
+function criarExcecaoPontuacaoEnumeracao(linha, indice, tipo, descricao) {
+  const alvo = alvoPontuacaoEnumeracao(linha)
+  return {
+    linha: indice + 1,
+    tipo,
+    descricao,
+    texto: linha.text.slice(0, 80),
+    alvoTexto: alvo?.texto ?? linha.text.slice(0, 80),
+    alvoInicio: alvo?.inicio ?? 0,
+    alvoFim: alvo?.fim ?? Math.min(linha.text.length, 80),
+    style: linha.style,
+    resolvida: false,
+  }
+}
+
+function adicionarExcecoesPontuacaoEnumeracoes(linhas, excecoes) {
+  let i = 0
+
+  while (i < linhas.length) {
+    const estilo = linhas[i]?.style
+    if (!ESTILOS_ENUMERACAO.has(estilo)) {
+      i++
+      continue
+    }
+
+    const grupo = [i]
+    let cursor = i + 1
+
+    while (true) {
+      const proximo = proximoSignificativo(linhas, cursor)
+      if (proximo < 0 || linhas[proximo]?.style !== estilo) break
+      grupo.push(proximo)
+      cursor = proximo + 1
+    }
+
+    const grupoComTexto = grupo.filter(indice => !linhaEnumeracaoSemTextoPrincipal(linhas[indice]))
+
+    if (grupoComTexto.length < 2) {
+      i = Math.max(i + 1, cursor)
+      continue
+    }
+
+    const depoisDoGrupo = proximoSignificativo(linhas, cursor)
+    const estiloSeguinte = depoisDoGrupo >= 0 ? linhas[depoisDoGrupo]?.style : null
+    const ultimoIntroduzSublista =
+      ESTILOS_ENUMERACAO.has(estiloSeguinte) &&
+      NIVEL_ENUMERACAO[estiloSeguinte] > NIVEL_ENUMERACAO[estilo]
+
+    for (let g = 0; g < grupoComTexto.length; g++) {
+      const indice = grupoComTexto[g]
+      const linha = linhas[indice]
+
+      const ultimo = g === grupoComTexto.length - 1
+      if (ultimo && ultimoIntroduzSublista) continue
+
+      const final = ultimoCharPrincipal(linha)
+      if (!ultimo && final === '.') {
+        excecoes.push(criarExcecaoPontuacaoEnumeracao(
+          linha,
+          indice,
+          'enumeracao_intermediaria_com_ponto',
+          'Elemento intermediário de enumeração termina com ponto final',
+        ))
+      }
+
+      if (ultimo && final !== '.' && final !== ':') {
+        excecoes.push(criarExcecaoPontuacaoEnumeracao(
+          linha,
+          indice,
+          'enumeracao_final_sem_ponto',
+          'Último elemento de enumeração deve terminar com ponto final',
+        ))
+      }
+    }
+
+    i = Math.max(i + 1, cursor)
+  }
+}
+
+function adicionarExcecoesArtigosFaltantes(linhas, excecoes) {
+  const artigos = (linhas || [])
+    .map((linha, index) => infoArtigo(linha, index))
+    .filter(Boolean)
+    .sort((a, b) => a.inicio - b.inicio || a.fim - b.fim || a.index - b.index)
+
+  if (artigos.length < 2) return
+
+  const primeiro = artigos[0].inicio
+  const ultimo = artigos.reduce((max, art) => Math.max(max, art.fim), artigos[0].fim)
+  const cobertos = new Set()
+
+  for (const art of artigos) {
+    for (let numero = art.inicio; numero <= art.fim; numero++) {
+      cobertos.add(numero)
+    }
+  }
+
+  let artigoAnterior = artigos[0]
+  let artCursor = 0
+
+  for (let numero = primeiro; numero <= ultimo; numero++) {
+    while (artCursor < artigos.length && artigos[artCursor].fim < numero) {
+      artigoAnterior = artigos[artCursor]
+      artCursor++
+    }
+
+    if (cobertos.has(numero)) continue
+
+    const alvo = alvoRotuloArtigo(artigoAnterior.linha)
+    excecoes.push({
+      linha: artigoAnterior.index + 1,
+      tipo: 'artigo_nao_encontrado',
+      descricao: `Artigo ${formatarNumeroArtigo(numero)} não encontrado`,
+      texto: artigoAnterior.linha.text.slice(0, 80),
+      alvoTexto: alvo?.texto ?? artigoAnterior.linha.text.slice(0, 80),
+      alvoInicio: alvo?.inicio ?? 0,
+      alvoFim: alvo?.fim ?? Math.min(artigoAnterior.linha.text.length, 80),
+      style: artigoAnterior.linha.style,
+      resolvida: false,
+    })
+  }
+}
+
 export function detectarExcecoes(linhas) {
   const excecoes = []
 
@@ -212,6 +474,9 @@ export function detectarExcecoes(linhas) {
       }
     }
   })
+
+  adicionarExcecoesPontuacaoEnumeracoes(linhas, excecoes)
+  adicionarExcecoesArtigosFaltantes(linhas, excecoes)
 
   return {
     excecoes,

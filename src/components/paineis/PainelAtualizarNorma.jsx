@@ -15,6 +15,8 @@ import { useState, useRef, useEffect } from 'react'
 import mammoth from 'mammoth'
 import { pipeline, linhasParaTiptap, normalizarDocNotas } from '../../services/limpeza/index.js'
 import { compararNormas }              from '../../services/compararNorma.js'
+import { compararEstruturasNorma }     from '../../services/compararEstruturaNorma.js'
+import { importarNotasDaNorma }        from '../../services/importarNotasNorma.js'
 import { aplicarCitacoes }             from '../../services/aplicarCitacoes.js'
 import { aplicarNotasVadeMecum }       from '../../services/notasVadeMecum.js'
 import { xmlParaTiptap }               from '../../services/importarXml.js'
@@ -64,7 +66,7 @@ function AvisoAtualizacaoPendente({ norma }) {
   return <span className="norma-pendente-icone" title="Atualização pendente">⚠️</span>
 }
 
-export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags = [], onIniciarRevisao, onFechar, onEditarManual, onConsolidarAtualizacoes }) {
+export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags = [], modoVadeMecum = false, onIniciarRevisao, onImportarNotas, onFechar, onEditarManual, onConsolidarAtualizacoes }) {
   const [fonte,       setFonte]       = useState('docx')      // 'docx' | 'catalogo'
   const [passo,       setPasso]       = useState('upload')
   const [nomeArq,     setNomeArq]     = useState('')
@@ -72,8 +74,10 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
   const [logPipeline, setLogPipeline] = useState([])
   const [processando, setProcessando] = useState(false)
   const [erroMsg,     setErroMsg]     = useState('')
-  const [incluirEstiloVadeMecum, setIncluirEstiloVadeMecum] = useState(false)
   const [incluirVadeMecum, setIncluirVadeMecum] = useState(false)
+  const [relatorioEstrutura, setRelatorioEstrutura] = useState(null)
+  const [importarNotas, setImportarNotas] = useState('') // '' | 'completas' | 'vm'
+  const [relatorioImportacaoNotas, setRelatorioImportacaoNotas] = useState(null)
 
   // ── Opções de comparação ──────────────────────────────────────────
   const [opcoesComp, setOpcoesComp] = useState({
@@ -83,9 +87,16 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
     ignorarHifens:      true,
     ignorarEspacos:     true,
     ignorarAlteracoesNota: false,
+    compararEstrutura: false,
   })
   function toggleOpcao(chave) {
     setOpcoesComp(prev => ({ ...prev, [chave]: !prev[chave] }))
+  }
+
+  function selecionarImportacaoNotas(modo) {
+    setImportarNotas(prev => prev === modo ? '' : modo)
+    setRelatorioImportacaoNotas(null)
+    setErroMsg('')
   }
 
   // ── Estado do catálogo ────────────────────────────────────────────
@@ -98,6 +109,20 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
   const fileRef = useRef(null)
   const [arquivo, setArquivo] = useState(null)
   const temTagVm = (tags || []).some(t => String(t).toLowerCase() === 'vm')
+  const modoEstrutura = importarNotas ? importarNotas === 'vm' : modoVadeMecum
+
+  useEffect(() => {
+    if ((!opcoesComp.compararEstrutura && !importarNotas) || !editorDoc || !novoDoc) {
+      setRelatorioEstrutura(null)
+      return
+    }
+
+    try {
+      setRelatorioEstrutura(compararEstruturasNorma(editorDoc, novoDoc, { modoVadeMecum: modoEstrutura }))
+    } catch (err) {
+      setRelatorioEstrutura({ erro: String(err) })
+    }
+  }, [opcoesComp.compararEstrutura, importarNotas, editorDoc, novoDoc, modoEstrutura])
 
   // Fluxo ativo
   const fluxo = fonte === 'docx' ? FLUXO_DOCX : FLUXO_CAT
@@ -122,6 +147,7 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
     setArquivo(null)
     setNomeArq('')
     setSomenteVmCat(false)
+    setRelatorioImportacaoNotas(null)
   }
 
   // ── Passo 1 (docx): carregar arquivo ─────────────────────────────
@@ -133,6 +159,7 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
     setNovoDoc(null)
     setLogPipeline([])
     setErroMsg('')
+    setRelatorioImportacaoNotas(null)
     setPasso('pipeline')
     e.target.value = ''
   }
@@ -147,6 +174,7 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
     setNovoDoc(null)
     setLogPipeline([])
     setErroMsg('')
+    setRelatorioImportacaoNotas(null)
     setPasso('pipeline')
   }
 
@@ -185,7 +213,7 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
 
       const { linhas, etapas } = pipeline(entradaPipeline, {
         tipoNorma,
-        estiloVadeMecum: temTagVm || incluirEstiloVadeMecum,
+        estiloVadeMecum: false,
       })
       let doc = linhasParaTiptap(linhas)
 
@@ -232,16 +260,53 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
   }
 
   // ── Passo final: comparar e iniciar revisão ───────────────────────
+  function executarImportacaoNotas() {
+    if (!novoDoc || !editorDoc) return
+    setProcessando(true)
+    setErroMsg('')
+    setRelatorioImportacaoNotas(null)
+
+    try {
+      const modoNotasVm = importarNotas === 'vm'
+      const relatorio = compararEstruturasNorma(editorDoc, novoDoc, { modoVadeMecum: modoNotasVm })
+      setRelatorioEstrutura(relatorio)
+
+      if (relatorio.totalDiferencas > 0) {
+        setErroMsg('a estrutura das normas deve ser idêntica para habilitar a importação de notas')
+        setProcessando(false)
+        return
+      }
+
+      const resultado = importarNotasDaNorma(editorDoc, novoDoc, { modoVadeMecum: modoNotasVm })
+      onImportarNotas?.(resultado.doc)
+      setRelatorioImportacaoNotas({
+        tipo: modoNotasVm ? 'Notas VM' : 'Notas completas',
+        ...resultado,
+      })
+      setProcessando(false)
+    } catch (err) {
+      setErroMsg(String(err))
+      setProcessando(false)
+    }
+  }
+
   function iniciarComparacao() {
     if (!novoDoc || !editorDoc) return
+    if (importarNotas) {
+      executarImportacaoNotas()
+      return
+    }
+
     setProcessando(true)
     setErroMsg('')
 
     try {
-      const { mergedDoc, diffs } = compararNormas(editorDoc, novoDoc, opcoesComp)
+      const { mergedDoc, diffs } = compararNormas(editorDoc, novoDoc, { ...opcoesComp, modoVadeMecum })
 
       if (diffs.length === 0) {
-        setErroMsg('Nenhuma diferença encontrada entre as versões.')
+        setErroMsg(opcoesComp.compararEstrutura
+          ? 'Nenhuma diferença textual encontrada entre as versões. Confira o relatório estrutural acima.'
+          : 'Nenhuma diferença encontrada entre as versões.')
         setProcessando(false)
         return
       }
@@ -294,11 +359,101 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
             onChange={() => toggleOpcao('ignorarAlteracoesNota')} />
           Ignorar alterações de nota <span className="modal-comp-ex">(quando apenas o trecho com estilo nota mudou)</span>
         </label>
+        <label className="modal-atualizar-opcao">
+          <input type="checkbox"
+            checked={opcoesComp.compararEstrutura}
+            onChange={() => toggleOpcao('compararEstrutura')} />
+          Comparar estrutura <span className="modal-comp-ex">(títulos, artigos e dispositivos internos)</span>
+        </label>
       </div>
     )
   }
 
   // ── Render ────────────────────────────────────────────────────────
+  function RelatorioEstrutura() {
+    if (!opcoesComp.compararEstrutura && !importarNotas) return null
+    if (!relatorioEstrutura) {
+      return (
+        <div className="modal-estrutura-relatorio">
+          <span className="modal-estrutura-status">Preparando relatório estrutural...</span>
+        </div>
+      )
+    }
+    if (relatorioEstrutura.erro) {
+      return (
+        <div className="modal-estrutura-relatorio modal-estrutura-erro">
+          Não foi possível comparar a estrutura: {relatorioEstrutura.erro}
+        </div>
+      )
+    }
+
+    const semDiferencas = relatorioEstrutura.totalDiferencas === 0
+
+    return (
+      <div className="modal-estrutura-relatorio">
+        <div className="modal-estrutura-topo">
+          <strong>Relatório estrutural</strong>
+          <span>{semDiferencas
+            ? 'Nenhuma diferença estrutural encontrada.'
+            : `${relatorioEstrutura.adicionados.length} entrada(s) nova(s), ${relatorioEstrutura.removidos.length} removida(s).`}
+          </span>
+        </div>
+
+        {!semDiferencas && (
+          <div className="modal-estrutura-diffs">
+            <div>
+              <h4>Entraram na nova versão</h4>
+              {relatorioEstrutura.adicionados.length === 0 ? (
+                <p>Nenhuma entrada.</p>
+              ) : (
+                <ul>
+                  {relatorioEstrutura.adicionados.map((linha, idx) => (
+                    <li key={`add-${linha.chave}-${idx}`}>{linha.indentada}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div>
+              <h4>Saíram da versão atual</h4>
+              {relatorioEstrutura.removidos.length === 0 ? (
+                <p>Nenhuma entrada.</p>
+              ) : (
+                <ul>
+                  {relatorioEstrutura.removidos.map((linha, idx) => (
+                    <li key={`rem-${linha.chave}-${idx}`}>{linha.indentada}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
+
+        <details className="modal-estrutura-arvore">
+          <summary>Ver árvore da versão atual ({relatorioEstrutura.totalAntiga} entradas)</summary>
+          <pre>{relatorioEstrutura.antiga.texto || 'Nenhuma estrutura detectada.'}</pre>
+        </details>
+        <details className="modal-estrutura-arvore">
+          <summary>Ver árvore da nova versão ({relatorioEstrutura.totalNova} entradas)</summary>
+          <pre>{relatorioEstrutura.nova.texto || 'Nenhuma estrutura detectada.'}</pre>
+        </details>
+      </div>
+    )
+  }
+
+  function RelatorioImportacaoNotas() {
+    if (!relatorioImportacaoNotas) return null
+    return (
+      <div className="modal-importar-notas-relatorio">
+        <strong>{relatorioImportacaoNotas.tipo} importadas</strong>
+        <span>{relatorioImportacaoNotas.notasImportadas} nota(s) importada(s).</span>
+        <span>{relatorioImportacaoNotas.blocosAlterados} bloco(s) alterado(s).</span>
+        {relatorioImportacaoNotas.notasRemovidas > 0 && (
+          <span>{relatorioImportacaoNotas.notasRemovidas} nota(s) removida(s) por não existirem na fonte.</span>
+        )}
+      </div>
+    )
+  }
+
   const normasCatFiltradas = somenteVmCat
     ? normasCat.filter(normaTemTagVm)
     : normasCat
@@ -354,6 +509,28 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
             >
               📚 Do catálogo
             </button>
+          </div>
+        )}
+
+        {(passo === 'upload' || passo === 'catalogo') && (
+          <div className="modal-importar-notas">
+            <span className="modal-importar-notas-titulo">Importar notas</span>
+            <label className={`modal-importar-notas-opcao${importarNotas === 'completas' ? ' ativa' : ''}`}>
+              <input
+                type="checkbox"
+                checked={importarNotas === 'completas'}
+                onChange={() => selecionarImportacaoNotas('completas')}
+              />
+              <span>Notas completas</span>
+            </label>
+            <label className={`modal-importar-notas-opcao${importarNotas === 'vm' ? ' ativa' : ''}`}>
+              <input
+                type="checkbox"
+                checked={importarNotas === 'vm'}
+                onChange={() => selecionarImportacaoNotas('vm')}
+              />
+              <span>Notas VM</span>
+            </label>
           </div>
         )}
 
@@ -444,15 +621,6 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
                 <label className="modal-atualizar-opcao">
                   <input
                     type="checkbox"
-                    checked={temTagVm || incluirEstiloVadeMecum}
-                    onChange={e => setIncluirEstiloVadeMecum(e.target.checked)}
-                    disabled={temTagVm}
-                  />
-                  Incluir rotina Estilo Vade Mecum{temTagVm ? ' (tag vm)' : ''}
-                </label>
-                <label className="modal-atualizar-opcao">
-                  <input
-                    type="checkbox"
                     checked={temTagVm || incluirVadeMecum}
                     onChange={e => setIncluirVadeMecum(e.target.checked)}
                     disabled={temTagVm}
@@ -481,6 +649,8 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
                   </ul>
                 )}
                 <OpcoesComparacao />
+                <RelatorioEstrutura />
+                <RelatorioImportacaoNotas />
                 <div className="modal-atualizar-acoes">
                   <button className="btn-ghost"
                     onClick={() => { setNovoDoc(null); setLogPipeline([]); setErroMsg('') }}>
@@ -491,7 +661,7 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
                     onClick={iniciarComparacao}
                     disabled={processando}
                   >
-                    {processando ? '⏳ Comparando…' : '🔍 Iniciar comparação →'}
+                    {processando ? '⏳ Processando…' : importarNotas ? 'Importar notas' : '🔍 Iniciar comparação →'}
                   </button>
                 </div>
               </>
@@ -519,6 +689,8 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
               As diferenças serão destacadas para revisão.
             </p>
             <OpcoesComparacao />
+            <RelatorioEstrutura />
+            <RelatorioImportacaoNotas />
             <div className="modal-atualizar-acoes">
               <button className="btn-ghost"
                 onClick={() => {
@@ -534,7 +706,7 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
                 onClick={iniciarComparacao}
                 disabled={processando}
               >
-                {processando ? '⏳ Comparando…' : '🔍 Iniciar comparação →'}
+                {processando ? '⏳ Processando…' : importarNotas ? 'Importar notas' : '🔍 Iniciar comparação →'}
               </button>
             </div>
           </div>

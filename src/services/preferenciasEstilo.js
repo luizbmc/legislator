@@ -1,5 +1,7 @@
-import { TIPOS_NORMA } from '../constants/normas.js'
+import { isTipoEmendaConstitucional, TIPOS_NORMA } from '../constants/normas.js'
 import {
+  ajustarEstiloParagrafoPorTipo,
+  ESTILOS_EMENDA_CONSTITUCIONAL_OCULTOS,
   ESTILOS_CARACTERE_LEGISLATOR,
   ESTILOS_PARAGRAFO_LEGISLATOR,
 } from '../constants/estilosLegislator.js'
@@ -111,10 +113,11 @@ function aplicarOverride(estilo, override = {}) {
   }
 }
 
-export function estilosParagrafoConfigurados({ incluirInternos = true } = {}) {
+export function estilosParagrafoConfigurados({ incluirInternos = true, tipoNorma = '' } = {}) {
   const prefs = carregarPreferenciasEstilo()
   const base = ESTILOS_PARAGRAFO_LEGISLATOR
     .filter(e => incluirInternos || !e.interno)
+    .map(e => ajustarEstiloParagrafoPorTipo(e, tipoNorma))
     .map(e => aplicarOverride(e, prefs.overrides.paragrafo[e.node]))
   return [...base, ...prefs.custom.paragrafo.map(e => ({ ...e, custom: true, disponibilidade: 'custom' }))]
 }
@@ -128,7 +131,10 @@ export function estilosCaractereConfigurados({ incluirInternos = true } = {}) {
 }
 
 export function estiloAtivoNoTipo(estilo, tipoNorma = '') {
-  if (!estilo?.custom) return true
+  if (!estilo?.custom) {
+    if (isTipoEmendaConstitucional(tipoNorma) && ESTILOS_EMENDA_CONSTITUCIONAL_OCULTOS.has(estilo?.node)) return false
+    return true
+  }
   const tipos = Array.isArray(estilo.tiposNorma) ? estilo.tiposNorma : []
   return tipos.length === 0 || tipos.includes(tipoNorma)
 }

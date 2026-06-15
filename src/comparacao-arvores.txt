@@ -1,0 +1,49 @@
+Linhas arvore InDesign: 450
+Linhas arvore XML: 453
+Blocos estruturais XML analisados: 2303
+Dispositivos/entradas XML com alterado="modificado": 34
+Entradas do InDesign ausentes na arvore XML: 16
+Entradas do XML ausentes na arvore InDesign: 19
+
+Primeira diferenca por ordem na linha 24:
+InDesign:     Art. 13-A {§ 1º; § 2º; § 3º};
+XML     :     Art. 13-A {§ 1º; § 2º; § 2º-A; § 3º};
+
+No InDesign, mas nao no XML:
+-     Art. 13-A {§ 1º; § 2º; § 3º};
+-       Art. 14 {§ 1º; § 2º; § 3º; § 4º; § 5º; § 6º};
+-     Art. 20-B {I; II; III; IV; § 1º; § 2º; § 3º; § 4º};
+-     Art. 21-J {I; II; III; IV; V; VI};
+-         Art. 32 {I; I > a); I > a) > 1; I > a) > 2; I > a) > 3; I > a) > 4; I > a) > 5; I > a) > 6; I > a) > 7; I > a) > 8; I > a) > 9; I > a) > 10; I > a) > 11; I > a) > 12; I > a) > 13; I > b); I > b) > 1; I > b) > 2; I > b) > 3; I > b) > 4; I > b) > 5; II; II > a); II > b); II > c); II > d); II > e); II > f); II > g); III; III > a); III > b); III > c); III > d); III > e); III > f); III > g); III > h); III > i); III > j); III > k); III > l); III > m); III > n); IV; IV > a); IV > b); IV > c); IV > d); IV > e); IV > f); IV > g); IV > h); IV > i); IV > j); IV > l); IV > m); IV > n); IV > o); IV > p); IV > q); V; V > a); V > b); V > c); VI; VI > a); VI > b); VI > c); VI > d); VI > e); VI > f); VI > g); VI > h); VI > i); VI > j); VI > l); VI > m); VI > n); VI > o); VI > p); VII; VII > a); VII > b); VII > c); VII > d); VII > e); VIII; VIII > a); VIII > b); VIII > c); VIII > d); VIII > e); VIII > f); VIII > g); VIII > h); IX; IX > a); IX > b); IX > c); IX > d); IX > e); IX > f); X; X > a); X > b); X > c); X > d); X > e); X > f); X > g); X > h); X > i); X > j); X > l); XI; XI > a); XI > b); XI > c); XI > d); XI > e); XI > f); XI > g); XI > h); XII; XII > a); XII > b); XIII; XIII > a); XIII > b); XIII > c); XIV; XIV > a); XIV > b); XIV > c); XIV > d); XIV > e); XIV > f); XIV > g); XIV > h); XIV > i); XIV > j); XV; XV > a); XV > b); XV > c); XV > d); XV > e); XV > f); XV > g); XV > h); XV > i); XV > j); XV > m); XVI; XVI > a); XVI > b); XVI > c); XVI > d); XVI > e); XVI > f); XVI > g); XVI > h); XVI > i); XVII; XVII > a); XVII > b); XVII > c); XVII > d); XVII > e); XVII > f); XVII > g); XVII > h); XVII > i); XVII > j); XVII > l); XVII > m); XVII > n); XVII > o); XVII > p); XVII > q); XVII > r); XVII > s); XVII > t); XVII > u); XVIII; XVIII > a); XVIII > b); XVIII > c); XVIII > d); XVIII > e); XVIII > f); XVIII > g); XVIII > h); XVIII > i); XVIII > j); XVIII > l); XVIII > m); XVIII > n); XVIII > o); XVIII > p); XVIII > q); XVIII > r); XVIII > s); XIX; XIX > a); XIX > b); XIX > c); XIX > d); XIX > e); XX; XX > a); XX > b); XX > c); XX > d); XX > e); XX > f); XX > g); XX > h); XXI; XXI > a); XXI > b); XXI > c); XXI > d); XXI > e); XXI > f); XXI > g); XXII; XXII > a); XXII > b); XXIII; XXIII > a); XXIII > b); XXIII > c); XXIII > d); XXIII > e); XXIII > f); XXIV; XXIV > a); XXIV > b); XXIV > c); XXIV > d); XXIV > e); XXIV > f); XXIV > g); XXIV > h); XXIV > i); XXIV > j); XXIV > k); XXIV > l); XXV; XXV > a); XXV > b); XXV > c); XXV > d); XXV > e); XXV > f); XXV > g); XXV > h); XXVI; XXVI > a); XXVI > a) > 1; XXVI > a) > 2; XXVI > a) > 3; XXVI > a) > 4; XXVI > a) > 5; XXVI > a) > 6; XXVI > b); XXVI > c); XXVII; XXVII > a); XXVII > b); XXVII > c); XXVII > d); XXVII > e); XXVII > f); XXVII > g); XXVII > h); XXVIII; XXVIII > a); XXVIII > b); XXVIII > c); XXVIII > d); XXVIII > e); XXVIII > f); XXVIII > g); XXIX; XXIX > a); XXIX > b); XXIX > c); XXIX > d); XXIX > e); XXIX > f); XXIX > g); XXIX > h); XXIX > i); XXX; XXX > a); XXX > b); XXX > c); XXX > d); XXX > e); XXX > f); Parágrafo único};
+-       Art. 48 {§ 1º; § 2º; § 2º > I; § 2º > II; § 2º > III; § 3º; § 4º; § 5º; § 6º};
+-       Art. 57 {I; II; III; IV; V; VI; VII; VIII; IX; IX-A; X; XI; XII; XIII; XIV; XIV > a); XIV > b); XV; XVI; XVII; XVIII; XIX; XX; XX > a); XX > b); XX > c); XXI};
+-     Art. 65 {I; II; II > a); II > b); III; III > a); III > b); IV};
+-     Art. 92 {I; II; Parágrafo único; Parágrafo único > I; Parágrafo único > II; Parágrafo único > III; Parágrafo único > IV};
+-     Art. 101 {I; I > a); I > a) > 1; I > a) > 2; I > a) > 3; I > a) > 4; I > a) > 5; II; § 1º; § 2º};
+-     Art. 105 {I; II; III; IV; V; VI; VII; VIII; IX; X; § 1º; § 2º};
+-       Art. 114 {I; II; III; IV; V; VI; VII; VIII; IX; X; XI; XII; XIII; XIV; XV; XVI; XVII; Parágrafo único};
+-       Art. 117 {I; II; III; IV; V; VI; VII; VIII; IX; X; XI; XII; XIII; XIV; XV; XVI; XVII; XVIII; XIX; § 1º; § 2º; § 2º > I; § 2º > II; § 3º; § 4º};
+-     Art. 143 {I; II; II > a); II > b); III; Parágrafo único};
+-     Art. 161 {I; II; III; IV; V; § 1º; § 2º; § 2º > I; § 2º > II; § 2º > III; § 2º > IV; § 3º; § 4º};
+-       Art. 188 {I; II; III; IV; § 1º; § 1º > I; § 1º > II; § 1º > III; § 2º; § 2º > I; § 2º > II; § 2º > III; § 2º > IV; § 2º > V};
+
+No XML, mas nao no InDesign:
+-     Art. 13-A {§ 1º; § 2º; § 2º-A; § 3º};
+-       Art. 14 {§ 1º; § 2º; § 3º; § 4º; § 5º; § 6º; § 7º};
+-     Art. 20-B {§ 1º; § 2º; § 3º; § 4º};
+-     Art. 21-J {I; II; IV; V};
+-   CAPÍTULO III-K – DA SECRETARIA DE MONITORAMENTO E FISCALIZAÇÃO DAS DECISÕES DO SISTEMA INTERAMERICANO DE DIREITOS HUMANOS
+-     Art. 21-V {I; II; III; IV; V; VI; VII; VIII; IX; X; XI; Parágrafo único};
+-     Art. 21-X.
+-         Art. 32 {I; I > a); I > a) > 1; I > a) > 2; I > a) > 3; I > a) > 4; I > a) > 5; I > a) > 6; I > a) > 7; I > a) > 8; I > a) > 9; I > a) > 10; I > a) > 11; I > a) > 12; I > a) > 13; I > b); I > b) > 1; I > b) > 2; I > b) > 3; I > b) > 4; I > b) > 5; II; II > c); II > d); II > e); II > f); II > g); III; III > a); III > b); III > i); III > k); III > l); III > m); III > n); IV; IV > a); IV > b); IV > c); IV > d); IV > e); IV > f); IV > g); IV > h); IV > i); IV > j); IV > l); IV > m); IV > n); IV > o); IV > p); IV > q); V; V > a); V > b); V > c); VI; VI > a); VI > b); VI > d); VI > e); VI > f); VI > g); VI > h); VI > j); VI > l); VII; VII > a); VII > b); VII > c); VII > d); VII > e); VIII; VIII > a); VIII > b); VIII > c); VIII > d); VIII > e); VIII > f); VIII > g); VIII > h); IX; IX > a); IX > b); IX > c); IX > d); X; X > a); X > b); X > c); X > d); X > e); X > f); X > g); X > h); X > i); X > j); X > l); XI; XI > a); XI > b); XI > c); XI > d); XI > e); XI > f); XI > g); XI > h); XII; XII > a); XII > b); XIII; XIII > a); XIII > b); XIII > c); XIV; XIV > a); XIV > b); XIV > c); XIV > d); XIV > e); XIV > f); XIV > g); XIV > h); XIV > i); XIV > j); XV; XV > a); XV > b); XV > c); XV > d); XV > e); XV > f); XV > g); XV > h); XV > i); XV > j); XV > m); XVI; XVI > a); XVI > b); XVI > c); XVI > d); XVI > e); XVI > f); XVI > g); XVI > h); XVI > i); XVII; XVII > a); XVII > b); XVII > c); XVII > d); XVII > e); XVII > f); XVII > g); XVII > h); XVII > i); XVII > j); XVII > l); XVII > m); XVII > n); XVIII; XVIII > a); XVIII > b); XVIII > c); XVIII > d); XVIII > e); XVIII > f); XVIII > g); XVIII > h); XVIII > i); XVIII > j); XVIII > l); XVIII > m); XIX; XIX > a); XIX > b); XIX > c); XX; XX > a); XX > b); XX > c); XX > d); XX > e); XX > f); XX > g); XX > h); XXI; XXI > a); XXI > b); XXI > c); XXI > d); XXI > e); XXI > f); XXI > g); XXII; XXII > a); XXII > b); XXIII; XXIII > a); XXIII > b); XXIII > c); XXIII > d); XXIII > e); XXIII > f); XXIV; XXIV > a); XXIV > b); XXIV > c); XXIV > d); XXIV > e); XXIV > f); XXIV > g); XXIV > h); XXIV > i); XXIV > j); XXIV > k); XXIV > l); XXV; XXV > a); XXV > b); XXV > c); XXV > d); XXV > e); XXV > f); XXV > g); XXV > h); XXVI; XXVI > a); XXVI > a) > 1; XXVI > a) > 2; XXVI > a) > 3; XXVI > a) > 4; XXVI > a) > 5; XXVI > a) > 6; XXVI > b); XXVI > c); XXVII; XXVII > a); XXVII > b); XXVII > c); XXVII > d); XXVII > e); XXVII > f); XXVII > g); XXVII > h); XXVIII; XXVIII > a); XXVIII > b); XXVIII > c); XXVIII > d); XXVIII > e); XXVIII > f); XXVIII > g); XXIX; XXIX > a); XXIX > b); XXIX > c); XXIX > d); XXIX > e); XXIX > f); XXIX > g); XXIX > h); XXIX > i); XXX; XXX > a); XXX > b); XXX > c); XXX > d); XXX > e); XXX > f); Parágrafo único};
+-       Art. 48 {§ 1º; § 2º; § 2º > I; § 2º > II; § 3º; § 4º; § 5º; § 6º};
+-       Art. 57 {I; II; III; IV; V; VI; VII; IX; IX-A; X; XI; XII; XIII; XIV; XIV > a); XIV > b); XV; XVI; XVIII; XIX; XX; XX > a); XX > b); XX > c); XXI};
+-     Art. 65 {I; II; II > a); II > b); III; III > a); III > b)};
+-     Art. 92 {I; II; Parágrafo único; Parágrafo único > I; Parágrafo único > II; Parágrafo único > III};
+-     Art. 101 {II; § 1º; § 2º};
+-     Art. 105 {IV; VI; VII; VIII; IX; X; § 1º; § 2º};
+-       Art. 114 {I; II; III; IV; V; VII; VIII; IX; X; XI; XII; XIII; XIV; XV; XVI; XVII; Parágrafo único};
+-       Art. 117 {I; II; III; IV; V; VI; VII; VIII; IX; X; XI; XII; XIV; XV; XVI; XVII; XVIII; XIX; § 1º; § 2º; § 2º > I; § 2º > II; § 3º; § 4º};
+-     Art. 143 {I; II; III; Parágrafo único};
+-     Art. 161 {I; II; III; IV; § 1º; § 2º; § 2º > I; § 2º > II; § 2º > III; § 2º > IV; § 3º; § 4º};
+-       Art. 188 {I; II; III; IV; § 1º; § 2º; § 2º > I; § 2º > II; § 2º > III; § 2º > IV; § 2º > V};

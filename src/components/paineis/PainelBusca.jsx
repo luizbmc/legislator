@@ -196,12 +196,12 @@ export default function PainelBusca({ editor, aberto, onFechar, onModificado, ti
 
   const patInputRef = useRef(null)
   const estilosParagrafoBase = useMemo(
-    () => estilosParagrafoConfigurados({ incluirInternos: true })
+    () => estilosParagrafoConfigurados({ incluirInternos: true, tipoNorma })
       .filter(e => !e.custom && estiloAtivoNoTipo(e, tipoNorma)),
     [tipoNorma, prefsTick]
   )
   const estilosParagrafoCustom = useMemo(
-    () => estilosParagrafoConfigurados({ incluirInternos: true })
+    () => estilosParagrafoConfigurados({ incluirInternos: true, tipoNorma })
       .filter(e => e.custom && estiloAtivoNoTipo(e, tipoNorma)),
     [tipoNorma, prefsTick]
   )

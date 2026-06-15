@@ -25,6 +25,8 @@
   };
   var DEFAULTS = {
     paragraph: {
+      Epigrafe: "tit-subtit/epigrafe",
+      EpigrafeApelido: "tit-subtit/epigrafe-apelido",
       Ementa: "corpo-legis/ementa",
       NotaTitulo: "corpo-legis/nota-titulos",
       NotaRodape: "corpo-legis/nota-rodape",
@@ -57,6 +59,84 @@
       NotaEmItalico: "italico light"
     }
   };
+
+  var progressWindow = null;
+  var progressStageText = null;
+  var progressDetailText = null;
+  var progressStartedAt = 0;
+  var progressLastUpdate = 0;
+  var progressLastStage = "";
+  var progressHistory = [];
+
+  function nowMs() {
+    return (new Date()).getTime();
+  }
+
+  function elapsedText() {
+    var elapsed = progressStartedAt ? Math.round((nowMs() - progressStartedAt) / 1000) : 0;
+    var minutes = Math.floor(elapsed / 60);
+    var seconds = elapsed % 60;
+    return minutes + "m " + (seconds < 10 ? "0" : "") + seconds + "s";
+  }
+
+  function openProgressWindow() {
+    try {
+      progressStartedAt = nowMs();
+      progressLastUpdate = 0;
+      progressLastStage = "";
+      progressHistory = [];
+      progressWindow = new Window("palette", "Atualizar norma - diagnostico");
+      progressWindow.orientation = "column";
+      progressWindow.alignChildren = "fill";
+      progressWindow.margins = 12;
+      progressWindow.spacing = 8;
+      progressStageText = progressWindow.add("statictext", undefined, "Preparando...");
+      progressStageText.characters = 52;
+      progressDetailText = progressWindow.add("statictext", undefined, "");
+      progressDetailText.characters = 68;
+      progressWindow.show();
+      updateProgress("Preparando", "Inicializando diagnostico", 0, 0, true);
+    } catch (e) {
+      progressWindow = null;
+    }
+  }
+
+  function updateProgress(stage, detail, current, total, force) {
+    var t = nowMs();
+    var message;
+    if (!progressWindow) return;
+    if (!force && t - progressLastUpdate < 250) return;
+    progressLastUpdate = t;
+    progressLastStage = stage || progressLastStage || "";
+    try {
+      message = String(stage || "");
+      if (total && total > 0) message += " (" + current + " de " + total + ")";
+      progressStageText.text = message;
+      progressDetailText.text = String(detail || "") + " | tempo: " + elapsedText();
+      progressHistory.push(elapsedText() + " - " + message + (detail ? " - " + detail : ""));
+      if (progressHistory.length > 40) progressHistory.shift();
+      progressWindow.update();
+      try { app.refresh(); } catch (e1) {}
+    } catch (e2) {}
+  }
+
+  function progressSummary() {
+    var start = Math.max(0, progressHistory.length - 12);
+    var lines = [];
+    var i;
+    for (i = start; i < progressHistory.length; i++) lines.push(progressHistory[i]);
+    if (!lines.length && progressLastStage) lines.push(progressLastStage);
+    return lines.join("\n");
+  }
+
+  function closeProgressWindow() {
+    try {
+      if (progressWindow) progressWindow.close();
+    } catch (e) {}
+    progressWindow = null;
+    progressStageText = null;
+    progressDetailText = null;
+  }
 
   function fail(message) {
     alert(message);
@@ -123,6 +203,38 @@
     } catch (e) {
       return "";
     }
+  }
+
+  function normalizeTipoNorma(s) {
+    return String(s || "")
+      .toLowerCase()
+      .replace(/[áàâãä]/g, "a")
+      .replace(/[éèêë]/g, "e")
+      .replace(/[íìîï]/g, "i")
+      .replace(/[óòôõö]/g, "o")
+      .replace(/[úùûü]/g, "u")
+      .replace(/ç/g, "c")
+      .replace(/\s+/g, " ")
+      .replace(/^\s+|\s+$/g, "");
+  }
+
+  function isEmendaConstitucionalXml(xmlText) {
+    var xml, tipo;
+    try {
+      XML.ignoreWhitespace = false;
+      XML.prettyPrinting = false;
+      xml = new XML(prepareXmlText(xmlText));
+      tipo = String(xml.attribute("tipo"));
+      return normalizeTipoNorma(tipo) === "emenda constitucional";
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function applyEmendaConstitucionalFields(pFields) {
+    if (!pFields) return;
+    if (pFields.Epigrafe) pFields.Epigrafe.text = "tit-subtit/epigrafe-emenda";
+    if (pFields.Ementa) pFields.Ementa.text = "corpo-legis/emenda-ementa";
   }
 
   function ensureCondition(doc, name, color, method) {
@@ -1647,9 +1759,22 @@
   }
 
   function paragraphText(paragraph) {
-    var tables = paragraphTables(paragraph);
-    if (tables.length) return tableComparableText(tables[0]);
-    return normalizeText(paragraph.contents);
+    var tables, contents;
+    try {
+      if (!paragraph || paragraph.isValid === false) return "";
+    } catch (e0) {
+      return "";
+    }
+    try {
+      tables = paragraphTables(paragraph);
+      if (tables.length) return tableComparableText(tables[0]);
+    } catch (e1) {}
+    try {
+      contents = paragraph.contents;
+    } catch (e2) {
+      return "";
+    }
+    return normalizeText(contents);
   }
 
   function collectPreservedParagraphs(frame) {
@@ -1757,18 +1882,26 @@
     return frame;
   }
 
-  function collectComparableParagraphs(paragraphs, startIndex) {
+  function collectComparableParagraphs(paragraphs, startIndex, progressLabel) {
     var result = [];
     var seen = {};
-    var i, text, paragraph, pStart, firstBound = -1, lastBound = -1;
+    var i, text, paragraph, pStart, firstBound = -1, lastBound = -1, item, total;
     var story, tables, table, tableStart, anchorParagraph;
     try {
-      if (paragraphs.length) {
+      total = paragraphs.length;
+    } catch (eLen) {
+      total = 0;
+    }
+    try {
+      if (total) {
         firstBound = paragraphs[startIndex || 0].insertionPoints[0].index;
-        lastBound = paragraphs[paragraphs.length - 1].insertionPoints[-1].index;
+        lastBound = paragraphs[total - 1].insertionPoints[-1].index;
       }
     } catch (e0) {}
-    for (i = startIndex || 0; i < paragraphs.length; i++) {
+    for (i = startIndex || 0; i < total; i++) {
+      if (i === (startIndex || 0) || i % 50 === 0 || i === total - 1) {
+        updateProgress(progressLabel || "Varrendo paragrafos", "Coletando texto comparavel", i + 1, total, false);
+      }
       paragraph = paragraphs[i];
       if (paragraphIsInTableCell(paragraph)) continue;
       text = paragraphText(paragraph);
@@ -1777,16 +1910,20 @@
         pStart = paragraph.insertionPoints[0].index;
         seen[pStart] = true;
       } catch (e1) {}
-      result.push(comparableItemFromParagraph(paragraph, i));
+      item = comparableItemFromParagraph(paragraph, i, text);
+      if (item) result.push(item);
     }
 
     try {
-      story = paragraphs.length ? paragraphs[0].parentStory : null;
+      story = total ? paragraphs[0].parentStory : null;
       tables = story && story.tables ? story.tables.everyItem().getElements() : [];
     } catch (e2) {
       tables = [];
     }
     for (i = 0; i < tables.length; i++) {
+      if (i === 0 || i % 10 === 0 || i === tables.length - 1) {
+        updateProgress(progressLabel || "Varrendo tabelas", "Coletando tabelas ancoradas", i + 1, tables.length, false);
+      }
       try {
         table = tables[i];
         tableStart = table.storyOffset.index;
@@ -1795,7 +1932,9 @@
         anchorParagraph = table.storyOffset.paragraphs[0];
         pStart = anchorParagraph.insertionPoints[0].index;
         if (seen[pStart]) continue;
-        result.push(comparableItemFromParagraph(anchorParagraph, result.length));
+        item = comparableItemFromParagraph(anchorParagraph, result.length);
+        if (!item) continue;
+        result.push(item);
         seen[pStart] = true;
       } catch (e3) {}
     }
@@ -1823,16 +1962,35 @@
     return item && item.alterado === "modificado";
   }
 
-  function comparableItemFromParagraph(paragraph, sourceIndex) {
-    var tables = paragraphTables(paragraph);
+  function comparableItemFromParagraph(paragraph, sourceIndex, precomputedText) {
+    var tables, text, story, start, end;
+    try {
+      if (!paragraph || paragraph.isValid === false) return null;
+    } catch (e0) {
+      return null;
+    }
+    try {
+      tables = paragraphTables(paragraph);
+    } catch (e1) {
+      tables = [];
+    }
+    text = precomputedText || (tables.length ? tableComparableText(tables[0]) : paragraphText(paragraph));
+    if (!text) return null;
+    try {
+      story = paragraph.parentStory;
+      start = paragraph.insertionPoints[0].index;
+      end = paragraph.insertionPoints[-1].index - 1;
+    } catch (e2) {
+      return null;
+    }
     return {
       paragraph: paragraph,
-      text: tables.length ? tableComparableText(tables[0]) : paragraphText(paragraph),
+      text: text,
       isTable: tables.length > 0,
       sourceIndex: sourceIndex,
-      story: paragraph.parentStory,
-      start: paragraph.insertionPoints[0].index,
-      end: paragraph.insertionPoints[-1].index - 1
+      story: story,
+      start: start,
+      end: end
     };
   }
 
@@ -1935,7 +2093,11 @@
   function copyParagraphOverItem(source, targetItem) {
     var story, index, paragraph;
     story = targetItem.story;
-    index = targetItem.start;
+    try {
+      index = targetItem.paragraph.insertionPoints[0].index;
+    } catch (e0) {
+      index = targetItem.start;
+    }
     try {
       app.select(source.texts[0]);
     } catch (e1) {
@@ -2103,8 +2265,8 @@
   }
 
   function applyIncrementalDiff(selection, skippedHead, tempFrame, blocks, conditions) {
-    var originalItems = collectComparableParagraphs(selection.paragraphs, skippedHead);
-    var importedItems = attachImportedBlockFlags(collectComparableParagraphs(tempFrame.parentStory.paragraphs, 0), blocks);
+    var originalItems = collectComparableParagraphs(selection.paragraphs, skippedHead, "Indexando texto original");
+    var importedItems = attachImportedBlockFlags(collectComparableParagraphs(tempFrame.parentStory.paragraphs, 0, "Indexando XML importado"), blocks);
     var segments = diffParagraphs(originalItems, importedItems);
     var matches = segments.matches || [];
     var changeItems = [];
@@ -2423,8 +2585,11 @@
     return bestScore > 0 ? best : null;
   }
 
-  function findArticleRange(selection, skippedHead, article, references) {
-    var items = collectComparableParagraphs(selection.paragraphs, skippedHead);
+  function findArticleRange(selection, skippedHead, article, references, operationIndex, operationTotal) {
+    var label = operationIndex && operationTotal
+      ? "Buscando artigo " + article + " - alteracao " + operationIndex + "/" + operationTotal
+      : "Buscando artigo " + article;
+    var items = collectComparableParagraphs(selection.paragraphs, skippedHead, label);
     var i, key, start = -1, end, byReference;
     for (i = 0; i < items.length; i++) {
       key = articleKey(items[i].text);
@@ -2453,6 +2618,28 @@
       return item.paragraph.insertionPoints[-1].index;
     } catch (e1) {
       return item.end + 1;
+    }
+  }
+
+  function itemParagraphIsValid(item) {
+    try {
+      return item && item.paragraph && item.paragraph.isValid !== false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function contextMatchIsLive(match, type) {
+    if (!match || !itemParagraphIsValid(match.endItem)) return false;
+    if (type !== "inserirApos" && !itemParagraphIsValid(match.nextItem)) return false;
+    return true;
+  }
+
+  function liveItemStart(item) {
+    try {
+      return item.paragraph.insertionPoints[0].index;
+    } catch (e1) {
+      return item.start;
     }
   }
 
@@ -2489,7 +2676,7 @@
         key = markerKeyFromItem(item, block.tag);
         if (markerType(key) !== wantedType) continue;
         order = markerOrder(key);
-        if (order > wantedOrder) return item.start;
+        if (order > wantedOrder) return liveItemStart(item);
       }
     }
     return itemInsertionAfter(range.items[range.end - 1]);
@@ -2666,10 +2853,14 @@
     alert(lines.join("\n"));
   }
 
-  function findContextMatch(selection, skippedHead, contextBlocks) {
-    var items = collectComparableParagraphs(selection.paragraphs, skippedHead);
+  function findContextMatch(selection, skippedHead, contextBlocks, operationIndex, operationTotal, cachedItems) {
+    var label = operationIndex && operationTotal
+      ? "Comparando contexto - alteracao " + operationIndex + "/" + operationTotal
+      : "Comparando contexto";
+    var items = cachedItems || collectComparableParagraphs(selection.paragraphs, skippedHead, label);
     var context = [];
     var i, text, match;
+    updateProgress(label, cachedItems ? "Usando indice ja coletado" : "Coletando texto comparavel", operationIndex || 0, operationTotal || 0, true);
     for (i = 0; i < contextBlocks.length; i++) {
       text = blockComparableText(contextBlocks[i]);
       if (text) context.push(text);
@@ -2696,13 +2887,20 @@
       conditions: 0
     };
     var story = selection.parentStory;
-    var op, match, target, paragraph, insertionIndex, i, remainingBlocks;
+    var op, match, target, paragraph, insertionIndex, i, remainingBlocks, contextItems;
 
     attachSourceParagraphsFromTempFrame(tempFrame, parsed.blocks);
+    contextItems = collectComparableParagraphs(selection.paragraphs, parsed.skippedHead, "Indexando texto original para contexto");
 
     for (i = 0; i < operations.length; i++) {
       op = operations[i];
-      match = findContextMatch(selection, parsed.skippedHead, op.contextBlocks);
+      updateProgress("Aplicando alteracoes por contexto", "Alteracao " + (i + 1) + " de " + operations.length, i + 1, operations.length, true);
+      match = findContextMatch(selection, parsed.skippedHead, op.contextBlocks, i + 1, operations.length, contextItems);
+      if (match && !contextMatchIsLive(match, op.type)) {
+        updateProgress("Reindexando texto original", "Referencia invalidada antes da alteracao " + (i + 1), i + 1, operations.length, true);
+        contextItems = collectComparableParagraphs(selection.paragraphs, parsed.skippedHead, "Reindexando texto original");
+        match = findContextMatch(selection, parsed.skippedHead, op.contextBlocks, i + 1, operations.length, contextItems);
+      }
       if (!match) {
         stats.notFound++;
         warnings.push("Nao localizei o contexto da alteracao " + (i + 1) + ".");
@@ -2783,7 +2981,7 @@
   }
 
   function attachSourceParagraphsFromTempFrame(tempFrame, blocks) {
-    var items = attachImportedBlockFlags(collectComparableParagraphs(tempFrame.parentStory.paragraphs, 0), blocks);
+    var items = attachImportedBlockFlags(collectComparableParagraphs(tempFrame.parentStory.paragraphs, 0, "Indexando XML importado"), blocks);
     var i;
     for (i = 0; i < items.length; i++) {
       if (items[i].sourceBlock) items[i].sourceBlock.sourceParagraph = items[i].paragraph;
@@ -2853,7 +3051,8 @@
     for (i = 0; i < operations.length; i++) {
       op = operations[i];
       propagateOperationAlterado(op);
-      range = findArticleRange(selection, parsed.skippedHead, op.article, parsed.references);
+      updateProgress("Aplicando alteracoes por artigo", "Alteracao " + (i + 1) + " de " + operations.length, i + 1, operations.length, true);
+      range = findArticleRange(selection, parsed.skippedHead, op.article, parsed.references, i + 1, operations.length);
       if (!range) {
         stats.notFound++;
         warnings.push("Nao localizei o artigo de referencia para local=\"" + op.local + "\".");
@@ -2953,6 +3152,9 @@
       selectedFile = File.openDialog("Selecione o XML exportado pelo Legislator", "*.xml");
       if (selectedFile) {
         status.text = "Arquivo pronto para atualizacao localizada: " + selectedFile.name;
+        if (isEmendaConstitucionalXml(readFile(selectedFile))) {
+          applyEmendaConstitucionalFields(pFields);
+        }
         ok.enabled = true;
       }
     };
@@ -2971,36 +3173,74 @@
 
     var selection = resolveInitialSelection();
     var ui = showDialog();
+    var xmlText, parsed, styles, conditions, originalStory, tempFrame, report, changeItems;
     if (!ui) return;
 
-    var xmlText = readFile(ui.file);
-    var parsed = parseXmlBlocks(xmlText);
-    if (!parsed.blocks.length && !(parsed.contextOperations && parsed.contextOperations.length)) {
-      fail("O XML nao contem blocos de texto importaveis.\nTags iniciais detectadas: " + previewXmlTags(xmlText));
+    openProgressWindow();
+    try {
+      updateProgress("Lendo XML", ui.file ? ui.file.fsName : "", 0, 0, true);
+      xmlText = readFile(ui.file);
+
+      updateProgress("Interpretando XML", "Convertendo blocos e alteracoes", 0, 0, true);
+      parsed = parseXmlBlocks(xmlText);
+      if (!parsed.blocks.length && !(parsed.contextOperations && parsed.contextOperations.length)) {
+        fail("O XML nao contem blocos de texto importaveis.\nTags iniciais detectadas: " + previewXmlTags(xmlText));
+      }
+      updateProgress(
+        "XML interpretado",
+        "Blocos: " + parsed.blocks.length + " | alteracoes: " + ((parsed.contextOperations && parsed.contextOperations.length) || 0),
+        0,
+        0,
+        true
+      );
+
+      updateProgress("Resolvendo estilos", "Localizando estilos de paragrafo e caractere", 0, 0, true);
+      styles = resolveStyleMaps(app.activeDocument, ui.map);
+
+      updateProgress("Preparando condicoes", "Criando/localizando textConditions", 0, 0, true);
+      conditions = ensureLegislatorConditions(app.activeDocument);
+
+      originalStory = selection.parentStory;
+
+      updateProgress("Montando frame temporario", "Inserindo XML em camada temporaria", 0, 0, true);
+      tempFrame = createImportedTempFrame(selection, parsed.blocks, styles);
+
+      updateProgress("Aplicando atualizacoes", "Iniciando comparacao", 0, 0, true);
+      report = parsed.contextOperations && parsed.contextOperations.length
+        ? applyContextOperations(selection, parsed, tempFrame, styles, conditions)
+        : applyLocalOperations(selection, parsed, tempFrame, styles, conditions);
+
+      updateProgress("Montando navegador", "Coletando marcacoes de alteracao", 0, 0, true);
+      changeItems = report.changeItems && report.changeItems.length ? report.changeItems : buildConditionNavigatorItems(originalStory, conditions);
+
+      updateProgress("Finalizando", "Ocultando camada temporaria", 0, 0, true);
+      hideTempLayer(tempFrame);
+
+      updateProgress("Abrindo navegador", "Itens de alteracao: " + changeItems.length, 0, 0, true);
+      showChangeNavigator(changeItems);
+
+      closeProgressWindow();
+      alert(
+        "Atualizacao por localizadores concluida.\n\n" +
+        "Operacoes localizadas no XML: " + report.stats.operations + "\n" +
+        "Blocos inseridos: " + report.stats.inserted + "\n" +
+        "Blocos substituidos: " + report.stats.replaced + "\n" +
+        "Referencias nao localizadas: " + report.stats.notFound + "\n" +
+        "Avisos: " + report.warnings.length + "\n" +
+        "Marcacoes de condicao aplicadas: " + report.stats.conditions + "\n\n" +
+        (report.warnings.length ? "Primeiro aviso: " + report.warnings[0] + "\n\n" : "") +
+        "O texto importado foi mantido e ocultado na camada \"" + TEMP_LAYER_NAME + "\"."
+      );
+    } catch (err) {
+      alert(
+        "Erro durante a atualizacao localizada.\n\n" +
+        "Ultimas etapas registradas:\n" +
+        progressSummary() + "\n\n" +
+        "Erro: " + (err && err.message ? err.message : err)
+      );
+      closeProgressWindow();
+      throw err;
     }
-
-    var styles = resolveStyleMaps(app.activeDocument, ui.map);
-    var conditions = ensureLegislatorConditions(app.activeDocument);
-    var originalStory = selection.parentStory;
-    var tempFrame = createImportedTempFrame(selection, parsed.blocks, styles);
-    var report = parsed.contextOperations && parsed.contextOperations.length
-      ? applyContextOperations(selection, parsed, tempFrame, styles, conditions)
-      : applyLocalOperations(selection, parsed, tempFrame, styles, conditions);
-    var changeItems = report.changeItems && report.changeItems.length ? report.changeItems : buildConditionNavigatorItems(originalStory, conditions);
-    hideTempLayer(tempFrame);
-    showChangeNavigator(changeItems);
-
-    alert(
-      "Atualizacao por localizadores concluida.\n\n" +
-      "Operacoes localizadas no XML: " + report.stats.operations + "\n" +
-      "Blocos inseridos: " + report.stats.inserted + "\n" +
-      "Blocos substituidos: " + report.stats.replaced + "\n" +
-      "Referencias nao localizadas: " + report.stats.notFound + "\n" +
-      "Avisos: " + report.warnings.length + "\n" +
-      "Marcacoes de condicao aplicadas: " + report.stats.conditions + "\n\n" +
-      (report.warnings.length ? "Primeiro aviso: " + report.warnings[0] + "\n\n" : "") +
-      "O texto importado foi mantido e ocultado na camada \"" + TEMP_LAYER_NAME + "\"."
-    );
   }
 
   main();

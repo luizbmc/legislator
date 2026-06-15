@@ -95,19 +95,97 @@ function limparVmRole(node) {
   return next
 }
 
-function marcarVmRole(node, role) {
-  const clean = limparVmRole(stripVadeMeta(node))
-  return {
-    ...clean,
-    attrs: {
-      ...(clean.attrs || {}),
-      vmRole: role,
-    },
-  }
-}
-
 function jsonSemVmMeta(node) {
   return JSON.stringify(limparVmRole(stripVadeMeta(node)))
+}
+
+function indiceMarkNota(node) {
+  return (node?.marks || []).findIndex(mark => mark.type === 'nota')
+}
+
+function textoRunNota(run) {
+  return run.map(item => item.node.text || '').join('').replace(/\s+/g, ' ').trim()
+}
+
+function runsNota(content = []) {
+  const runs = []
+  let atual = null
+
+  content.forEach((node, index) => {
+    if (node?.type === 'text' && indiceMarkNota(node) >= 0) {
+      if (!atual) atual = []
+      atual.push({ node, index })
+      return
+    }
+    if (atual) {
+      runs.push(atual)
+      atual = null
+    }
+  })
+
+  if (atual) runs.push(atual)
+  return runs
+}
+
+function markNotaComAttrs(mark, attrsExtras = {}) {
+  const attrs = {
+    ...(mark.attrs || {}),
+    ...attrsExtras,
+  }
+  Object.keys(attrs).forEach(key => {
+    if (attrs[key] == null || attrs[key] === false) delete attrs[key]
+  })
+  return Object.keys(attrs).length ? { ...mark, attrs } : { type: mark.type }
+}
+
+function aplicarAttrsNota(node, attrsExtras) {
+  const idx = indiceMarkNota(node)
+  if (idx < 0) return node
+  const marks = [...(node.marks || [])]
+  marks[idx] = markNotaComAttrs(marks[idx], attrsExtras)
+  return { ...node, marks }
+}
+
+function anotarRunComVm(content, run, textoVm) {
+  const next = [...content]
+  run.forEach((item, idx) => {
+    if (idx === 0 && textoVm) {
+      next[item.index] = aplicarAttrsNota(next[item.index], { vmText: textoVm, vmHidden: null })
+    } else {
+      next[item.index] = aplicarAttrsNota(next[item.index], { vmText: null, vmHidden: true })
+    }
+  })
+  return next
+}
+
+function anotarNotasVm(original, vm) {
+  const out = limparVmRole(stripVadeMeta(original))
+  if (!Array.isArray(out.content)) return out
+
+  let content = out.content.map(limparVmRole)
+  const origRuns = runsNota(content)
+  const vmRuns = runsNota(vm?.content || [])
+  let mudou = false
+
+  origRuns.forEach((run, idx) => {
+    const textoOriginal = textoRunNota(run)
+    const textoVm = vmRuns[idx] ? textoRunNota(vmRuns[idx]) : ''
+    if (textoOriginal === textoVm) return
+    mudou = true
+    content = anotarRunComVm(content, run, textoVm)
+  })
+
+  if (!origRuns.length && vmRuns.length) {
+    mudou = true
+    vmRuns.forEach(run => {
+      const textoVm = textoRunNota(run)
+      if (!textoVm) return
+      if (content.length) content.push({ type: 'text', text: ' ' })
+      content.push({ type: 'text', text: textoVm, marks: [{ type: 'nota' }] })
+    })
+  }
+
+  return mudou ? { ...out, content } : out
 }
 
 function prepararConteudoBaseParaVm(doc) {
@@ -632,7 +710,7 @@ export function aplicarNotasVadeMecum(doc) {
 
 /**
  * Aplica as regras de Notas Vade Mecum preservando a versão original.
- * Blocos alterados recebem uma versão original e uma versão VM lado a lado.
+ * As variações VM ficam vinculadas à própria marca de nota, sem duplicar o parágrafo.
  */
 export function aplicarNotasVadeMecumAlternavel(doc) {
   const { contentInicial, newContent, log, relatorio } = calcularNotasVadeMecum(doc)
@@ -656,8 +734,7 @@ export function aplicarNotasVadeMecumAlternavel(doc) {
     }
 
     alterados++
-    alternado.push(marcarVmRole(originalClean, 'original'))
-    if (vmClean) alternado.push(marcarVmRole(vmClean, 'vm'))
+    alternado.push(anotarNotasVm(originalClean, vmClean))
   }
 
   const logFinal = alterados
@@ -668,6 +745,41 @@ export function aplicarNotasVadeMecumAlternavel(doc) {
     doc: { ...doc, content: alternado },
     log: logFinal,
     relatorio,
+    alterados,
+  }
+}
+
+export function normalizarNotasVadeMecumLegado(doc) {
+  const content = doc?.content || []
+  const normalizado = []
+  let alterados = 0
+
+  for (let i = 0; i < content.length; i++) {
+    const node = content[i]
+    const role = node?.attrs?.vmRole
+
+    if (role === 'original') {
+      const prox = content[i + 1]
+      if (prox?.attrs?.vmRole === 'vm') {
+        normalizado.push(anotarNotasVm(limparVmRole(node), limparVmRole(prox)))
+        alterados++
+        i++
+        continue
+      }
+      normalizado.push(limparVmRole(node))
+      continue
+    }
+
+    if (role === 'vm') {
+      alterados++
+      continue
+    }
+
+    normalizado.push(node)
+  }
+
+  return {
+    doc: { ...(doc || { type: 'doc' }), content: normalizado },
     alterados,
   }
 }

@@ -42,6 +42,16 @@ export function normalizarPontuacao(texto) {
   s = s.replace(/ - /g, ' – ')
   if (tracos) log.push(`${tracos} " - " → " – "`)
 
+  // "Pena: texto" no início do parágrafo → "Pena – texto"
+  const penaDoisPontos = (s.match(/^Pena:\s+/gm) || []).length
+  s = s.replace(/^Pena:\s+/gm, 'Pena – ')
+  if (penaDoisPontos) log.push(`${penaDoisPontos} rótulo(s) "Pena:" corrigido(s) para "Pena –"`)
+
+  // "Art 1.636" → "Art. 1.636" (abreviação de artigo sem ponto)
+  const artSemPonto = (s.match(/^Arts?\s+(?=\d)/gm) || []).length
+  s = s.replace(/^(Arts?)\s+(?=\d)/gm, '$1. ')
+  if (artSemPonto) log.push(`${artSemPonto} rótulo(s) de artigo com ponto restaurado(s)`)
+
   // Marcador numérico no início da linha com hífen → travessão.
   // Ex.: "1- texto" / "1 - texto" → "1 – texto"
   const itensHifen = (s.match(/^\d+\s*-\s+/gm) || []).length

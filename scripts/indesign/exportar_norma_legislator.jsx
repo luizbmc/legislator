@@ -219,6 +219,14 @@
     }
   }
 
+  function paragraphStyleHasAnyGroup(paragraph, groupNames) {
+    var i;
+    for (i = 0; i < groupNames.length; i++) {
+      if (paragraphStyleHasGroup(paragraph, groupNames[i])) return true;
+    }
+    return false;
+  }
+
   function normalizeText(s) {
     return stripInvalidXmlChars(String(s || ""))
       .replace(/\r/g, "")
@@ -371,7 +379,7 @@
   function inferredParagraphTag(paragraph, nextParagraph, allowFallback) {
     var name = lowerParagraphStyleName(paragraph);
     var text = paragraphPlainText(paragraph, nextParagraph);
-    var inTitSubtit = paragraphStyleHasGroup(paragraph, "tit-subtit");
+    var inTitSubtit = paragraphStyleHasAnyGroup(paragraph, ["tit-subtit", "tit-substit"]);
     var inCorpoLegis = paragraphStyleHasGroup(paragraph, "corpo-legis");
 
     if (inTitSubtit && startsWithText(name, "epigrafe-apelido")) return "EpigrafeApelido";
@@ -379,7 +387,7 @@
     if (inTitSubtit && startsWithText(name, "epigrafe")) return "Epigrafe";
     if (inTitSubtit && startsWithText(name, "ep\u00edgrafe")) return "Epigrafe";
 
-    if (name === "ementa") return "Ementa";
+    if (name === "ementa" || name === "emenda-ementa") return "Ementa";
     if (name === "texto-lei-sem-indent") return "ParagrafoAbertura";
     if (name === "texto-lei-faco-saber") return "ParagrafoFacoSaber";
     if (inTitSubtit && (

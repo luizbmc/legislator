@@ -5,9 +5,13 @@ import {
 
 const TAG_TO_NODE = {
   Epigrafe: 'epigrafe',
+  EpigrafeEC: 'epigrafe',
+  EpigrafeDaEC: 'epigrafe',
   EpigrafeApelido: 'epigrafeApelido',
   NotaTitulo: 'notaTitulo',
   Ementa: 'ementa',
+  EmentaEC: 'ementa',
+  EmentaDaEC: 'ementa',
   ParagrafoAbertura: 'paragrafAbertura',
   ParagrafoFacoSaber: 'paragrafFacoSaber',
   AberturaCapitulo: 'aberturaCapitulo',

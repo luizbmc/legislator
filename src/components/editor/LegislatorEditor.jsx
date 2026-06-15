@@ -418,9 +418,9 @@ export default function LegislatorEditor({
 
           const resultado = textoComum
             ? { doc: blocosTextoComumParaTiptap(entrada), excecoes: [], etapas: [] }
-            : processarBlocosParaTiptap(entrada, {
+              : processarBlocosParaTiptap(entrada, {
                 tipoNorma: tipoNormaRef.current,
-                estiloVadeMecum: (tagsRef.current || []).some(t => String(t).toLowerCase() === 'vm'),
+                estiloVadeMecum: false,
                 notasVadeMecum: (tagsRef.current || []).some(t => String(t).toLowerCase() === 'vm'),
               })
           if (!resultado.doc?.content?.length) return false

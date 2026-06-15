@@ -7,10 +7,13 @@ import {
 const BLOCK_CLASS_TO_NODE = {
   'tit-subtit_epigrafe': 'epigrafe',
   'tit-subtit_epigrafe-quebra': 'epigrafe',
+  'tit-subtit_epigrafe-emenda': 'epigrafe',
+  'tit-substit_epigrafe-emenda': 'epigrafe',
   'tit-subtit_epigrafe-apelido': 'epigrafeApelido',
   'corpo-legis_nota-titulos': 'notaTitulo',
   'corpo-legis_nota-titulos-transp': 'notaTitulo',
   'corpo-legis_ementa': 'ementa',
+  'corpo-legis_emenda-ementa': 'ementa',
   'corpo-legis_texto-lei-sem-indent': 'paragrafAbertura',
   'corpo-legis_texto-lei-faco-saber': 'paragrafFacoSaber',
   'tit-subtit_abertura-cap': 'aberturaCapitulo',

@@ -14,6 +14,12 @@ const ESTILOS_TITULO_OU_SECAO = new Set([
 
 // Exclui da detecção de apelido linhas que contenham datas ou palavras-chave de nota.
 const RE_APELIDO_EXCL = /Publicad|Aprovad|\d{1,2}\/\d{1,2}\/\d{4}/i
+const RE_NOTA_FINAL_NOME_JURIDICO = /\s*\((?:Nome\s+jur[ií]dico|Reda[cç][aã]o|Inclu[ií]d[oa]|Acrescid[oa]|Revogad[oa]|Renumerad[oa]|Com\s+reda[cç][aã]o)[^)]*\)\s*$/i
+const RE_PREFIXO_OCULTO_WORD = /^[\u00ac\u00ad\u200b\u200c\u200d\ufeff\u2010\u2011\u2012]+/
+
+function limparPrefixoOcultoWord(text) {
+  return String(text || '').replace(RE_PREFIXO_OCULTO_WORD, '')
+}
 
 // Retorna o estilo da linha não-vazia mais próxima antes de i.
 function estiloAnteriorNaoVazio(linhas, i) {
@@ -31,7 +37,7 @@ function estiloSeguinteNaoVazio(linhas, i) {
 }
 
 function pareceNomeJuridico(text) {
-  const s = text.trim()
+  const s = limparPrefixoOcultoWord(text).trim().replace(RE_NOTA_FINAL_NOME_JURIDICO, '').trim()
   if (!s) return false
   if (s.length > 90) return false
   if (/^[("]/.test(s)) return false
@@ -43,7 +49,7 @@ function pareceNomeJuridico(text) {
 export function aplicarContextuais(linhas) {
   const log = []
 
-  for (let i = 1; i < linhas.length - 1; i++) {
+  for (let i = 0; i < linhas.length; i++) {
     const prev = linhas[i - 1]
     const curr = linhas[i]
     const next = linhas[i + 1]
@@ -59,15 +65,15 @@ export function aplicarContextuais(linhas) {
     }
 
     // artigo logo após artigo-titulo  →  artigo-pos-titulo
-    if (curr.style === 'artigo' && prev.style === 'artigo-titulo') {
+    if (curr.style === 'artigo' && prev?.style === 'artigo-titulo') {
       curr.style = 'artigo-pos-titulo'
       log.push(`Linha ${i + 1}: artigo → artigo-pos-titulo`)
     }
 
-    // Nome juridico: rubrica curta entre dispositivos, imediatamente antes de artigo.
+    // Nome juridico: rubrica curta entre dispositivos, imediatamente antes de dispositivo.
     if (curr.style === 'texto-lei' &&
         pareceNomeJuridico(curr.text) &&
-        estiloSeguinteNaoVazio(linhas, i) === 'artigo') {
+        ['artigo', 'paragrafo', 'inciso', 'alinea'].includes(estiloSeguinteNaoVazio(linhas, i))) {
       curr.style = 'nome-juridico'
       log.push(`Linha ${i + 1}: texto-lei → nome-juridico`)
     }

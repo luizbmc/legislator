@@ -60,6 +60,15 @@ export function isTipoRecorte(tipo) {
   return normalizado === 'recorte'
 }
 
+export function isTipoEmendaConstitucional(tipo) {
+  const normalizado = String(tipo || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+
+  return normalizado === 'emenda constitucional'
+}
+
 export function isTipoOcultoCatalogo(tipo) {
   return isTipoTextoComum(tipo) || isTipoRecorte(tipo)
 }

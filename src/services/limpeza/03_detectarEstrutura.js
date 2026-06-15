@@ -10,6 +10,12 @@
  */
 import { isTipoTratado } from '../../constants/normas.js'
 
+const RE_PREFIXO_OCULTO_WORD = /^[\u00ac\u00ad\u200b\u200c\u200d\ufeff\u2010\u2011\u2012]+/
+
+function limparPrefixoOcultoWord(line) {
+  return String(line || '').replace(RE_PREFIXO_OCULTO_WORD, '')
+}
+
 // Regras aplicadas em ordem — a primeira que bater vence
 const REGRAS = [
   // ── Nível 1: Epígrafe ──────────────────────────────────────
@@ -52,7 +58,7 @@ const REGRAS = [
   // ── Artigo ─────────────────────────────────────────────────
   {
     style: 'artigo',
-    test: s => /^Arts?\.\s*\d/.test(s),
+    test: s => /^Arts?\.?\s*\d/.test(s),
   },
 
   // ── Parágrafo (§ ou "Parágrafo único") ─────────────────────
@@ -111,22 +117,23 @@ function detectarEstruturaTratado(texto) {
   const contadores = {}
 
   const resultado = texto.split('\n').map(line => {
-    if (!line.trim()) return { style: 'vazio', text: '', marks: [] }
+    const linha = limparPrefixoOcultoWord(line)
+    if (!linha.trim()) return { style: 'vazio', text: '', marks: [] }
 
-    if (RE_TITULO_TRATADO.test(line.trim())) {
+    if (RE_TITULO_TRATADO.test(linha.trim())) {
       contadores['artigo-titulo'] = (contadores['artigo-titulo'] || 0) + 1
-      return { style: 'artigo-titulo', text: line, marks: [] }
+      return { style: 'artigo-titulo', text: linha, marks: [] }
     }
 
     for (const regra of REGRAS) {
-      if (!ESTILOS_MANTIDOS_TRATADO.has(regra.style) || !regra.test(line)) continue
-      const text = regra.transform ? regra.transform(line) : line
+      if (!ESTILOS_MANTIDOS_TRATADO.has(regra.style) || !regra.test(linha)) continue
+      const text = regra.transform ? regra.transform(linha) : linha
       contadores[regra.style] = (contadores[regra.style] || 0) + 1
       return { style: regra.style, text, marks: [] }
     }
 
     contadores['corpo-tratado'] = (contadores['corpo-tratado'] || 0) + 1
-    return { style: 'corpo-tratado', text: line, marks: [] }
+    return { style: 'corpo-tratado', text: linha, marks: [] }
   })
 
   for (const [style, n] of Object.entries(contadores)) {
@@ -144,22 +151,23 @@ export function detectarEstrutura(texto, { tipoNorma = '' } = {}) {
   const contadores = {}
 
   const resultado = linhas.map((line, i) => {
-    if (!line.trim()) return { style: 'vazio', text: '', marks: [] }
+    const linha = limparPrefixoOcultoWord(line)
+    if (!linha.trim()) return { style: 'vazio', text: '', marks: [] }
 
     for (const regra of REGRAS) {
-      if (regra.test(line)) {
-        const text = regra.transform ? regra.transform(line) : line
+      if (regra.test(linha)) {
+        const text = regra.transform ? regra.transform(linha) : linha
         contadores[regra.style] = (contadores[regra.style] || 0) + 1
         return { style: regra.style, text, marks: [] }
       }
     }
 
-    return { style: 'texto-lei', text: line, marks: [] }
+    return { style: 'texto-lei', text: linha, marks: [] }
   })
 
   // Correção de falso positivo: nó "artigo" cujo texto não começa com "Art" → texto-lei
   resultado.forEach(l => {
-    if (l.style === 'artigo' && !/^Arts?\./.test(l.text)) {
+    if (l.style === 'artigo' && !/^Arts?\.?/.test(l.text)) {
       l.style = 'texto-lei'
     }
   })

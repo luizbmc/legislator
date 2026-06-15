@@ -5,6 +5,8 @@
  */
 
 // ── Extração de texto de um nó TipTap ────────────────────────────
+import { filtrarDocPorModoVadeMecum } from './filtrarModoVadeMecum.js'
+
 export function getNodeText(node) {
   if (!node) return ''
   if (node.type === 'text') return node.text || ''
@@ -211,6 +213,9 @@ function mergeModifiedOps(ops, oldTexts, newTexts, threshold = 0.35) {
  * }
  */
 export function compararNormas(oldDoc, newDoc, opcoes = {}) {
+  oldDoc = filtrarDocPorModoVadeMecum(oldDoc, !!opcoes.modoVadeMecum)
+  newDoc = filtrarDocPorModoVadeMecum(newDoc, !!opcoes.modoVadeMecum)
+
   // Separa tabelas e nós de texto (tabelas são preservadas sem diff)
   const oldNodes = (oldDoc.content || [])
   const newNodes = (newDoc.content || [])

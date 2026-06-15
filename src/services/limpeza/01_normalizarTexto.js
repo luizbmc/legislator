@@ -5,6 +5,17 @@
  */
 import { isTipoTratado } from '../../constants/normas.js'
 
+function normalizarRotuloEstrutural(rotulo) {
+  return String(rotulo || '')
+    .replace(/^SUBTITULO\b/i, 'SUBTÍTULO')
+    .replace(/^TITULO\b/i, 'TÍTULO')
+    .replace(/^CAPITULO\b/i, 'CAPÍTULO')
+    .replace(/^SECAO\b/i, 'SEÇÃO')
+    .replace(/^SUBSECAO\b/i, 'SUBSEÇÃO')
+    .replace(/\bUNICO\b/i, 'ÚNICO')
+    .replace(/\bUNICA\b/i, 'ÚNICA')
+}
+
 export function normalizarTexto(texto, { tipoNorma = '' } = {}) {
   const log = []
   let s = texto
@@ -24,6 +35,11 @@ export function normalizarTexto(texto, { tipoNorma = '' } = {}) {
   const notCount = (s.match(/¬/g) || []).length
   s = s.replace(/¬/g, '')
   if (notCount) log.push(`${notCount} caractere(s) "¬" removido(s)`)
+
+  // Remove artefatos ocultos que o Word pode inserir no começo de dispositivos.
+  const prefixosOcultos = (s.match(/^[\u00ad\u200b\u200c\u200d\ufeff\u2010\u2011\u2012]+/gm) || []).length
+  s = s.replace(/^[\u00ad\u200b\u200c\u200d\ufeff\u2010\u2011\u2012]+/gm, '')
+  if (prefixosOcultos) log.push(`${prefixosOcultos} prefixo(s) oculto(s) de linha removido(s)`)
 
   // Colapsa tabs múltiplos → um tab
   s = s.replace(/\t+/g, '\t')
@@ -81,23 +97,47 @@ export function normalizarTexto(texto, { tipoNorma = '' } = {}) {
   // TÍTULO I\nDAS DISPOSIÇÕES GERAIS  →  TÍTULO I – DAS DISPOSIÇÕES GERAIS
   // (somente quando separados por UMA quebra — linhas consecutivas)
   // Palavras que indicam que o próximo parágrafo é independente (não é subtítulo):
-  const INICIO_ESTRUTURA = /^(?:LIVRO|PARTE|SUBTÍTULO|TÍTULO|CAPÍTULO|Seção|Subseção|SEÇÃO|SUBSEÇÃO|Art\.|Arts\.|§|Parágrafo\s+único|[IVXLCDM]+(?:-[A-Z])?[\s–—\-]|[a-záéíóúâêôîûàèìòùãõç]\)|Brasília,|\(Publicad|\(Vigência|\(Redação|\(Incluíd|\(Revogad|\(NR|Dispõe|Disciplina|Estatui|Define|Regula|Estabelece|Cria|Institui|Altera|Revoga|Faço\s+saber|O\s+Presidente)/i
+  const INICIO_ESTRUTURA = /^(?:LIVRO|PARTE|SUBTÍTULO|SUBTITULO|TÍTULO|TITULO|CAPÍTULO|CAPITULO|Seção|Secao|Subseção|Subsecao|SEÇÃO|SECAO|SUBSEÇÃO|SUBSECAO|Art\.|Arts\.|§|Parágrafo\s+único|Paragrafo\s+unico|[IVXLCDM]+(?:-[A-Z])?[\s–—\-]|[a-záéíóúâêôîûàèìòùãõç]\)|Brasília,|\(Publicad|\(Vigência|\(Redação|\(Incluíd|\(Revogad|\(NR|Dispõe|Disciplina|Estatui|Define|Regula|Estabelece|Cria|Institui|Altera|Revoga|Faço\s+saber|O\s+Presidente)/i
 
   if (!modoTratado) {
     const titAnt = s
+    const linhasTitulo = s.split('\n')
+    const preUnidas = []
+    const RE_ROTULO_TITULO_INTERNO = /^((?:LIVRO|SUBT\u00cdTULO|SUBTITULO|T\u00cdTULO|TITULO|CAP\u00cdTULO|CAPITULO)\s+(?:[IVXLCDM]+|\d+[\u00ba\u00aa]?|\u00daNICO|\u00danico|UNICO|Unico)[^\n]*)$/i
+    const RE_ROTULO_SECAO_INTERNO = /^((?:Se\u00e7\u00e3o|Secao|Subse\u00e7\u00e3o|Subsecao|SE\u00c7\u00c3O|SECAO|SUBSE\u00c7\u00c3O|SUBSECAO)\s+(?:[IVXLCDM]+|\d+[\u00ba\u00aa]?|\u00daNICO|\u00danico|UNICO|Unico|\u00daNICA|\u00danica|UNICA|Unica)[^\n]*)$/i
+
+    for (let i = 0; i < linhasTitulo.length; i++) {
+      const atual = linhasTitulo[i]
+      const proximo = linhasTitulo[i + 1]
+      const rotulo = atual.match(RE_ROTULO_TITULO_INTERNO) || atual.match(RE_ROTULO_SECAO_INTERNO)
+
+      if (rotulo && proximo != null && proximo !== '' && proximo.trim().charAt(0) !== '(' && !INICIO_ESTRUTURA.test(proximo.trim())) {
+        preUnidas.push(normalizarRotuloEstrutural(rotulo[1]) + ' \u2013 ' + proximo)
+        i++
+        continue
+      }
+
+      preUnidas.push(atual)
+    }
+
+    s = preUnidas.join('\n')
     // Rótulo com numeral/ordinal/especial obrigatório (evita falsos positivos)
     s = s.replace(
-      /^((?:LIVRO|PARTE|SUBTÍTULO|TÍTULO|CAPÍTULO)\s+(?:[IVXLCDM]+|\d+[ºª]?|ÚNICO|Único|ESPECIAL|Especial)[^\n]*)\n(?!\n)([^\n]+)/gm,
+      /^((?:LIVRO|PARTE|SUBTÍTULO|SUBTITULO|TÍTULO|TITULO|CAPÍTULO|CAPITULO)\s+(?:[IVXLCDM]+|\d+[ºª]?|ÚNICO|Único|UNICO|Unico|ESPECIAL|Especial)[^\n]*)\n(?!\n)([^\n]+)/gm,
       (match, rotulo, proximo) => {
+        if (/\s[\u2013\u2014-]\s/.test(rotulo)) return match
+        if (proximo.trim().charAt(0) === '(') return match
         if (INICIO_ESTRUTURA.test(proximo.trim())) return match
-        return rotulo + ' – ' + proximo
+        return normalizarRotuloEstrutural(rotulo) + ' – ' + proximo
       }
     )
     s = s.replace(
-      /^((?:Seção|Subseção|SEÇÃO|SUBSEÇÃO)\s+(?:[IVXLCDM]+|\d+[ºª]?)[^\n]*)\n(?!\n)([^\n]+)/gm,
+      /^((?:Seção|Secao|Subseção|Subsecao|SEÇÃO|SECAO|SUBSEÇÃO|SUBSECAO)\s+(?:[IVXLCDM]+|\d+[ºª]?|ÚNICO|Único|UNICO|Unico|ÚNICA|Única|UNICA|Unica)[^\n]*)\n(?!\n)([^\n]+)/gm,
       (match, rotulo, proximo) => {
+        if (/\s[\u2013\u2014-]\s/.test(rotulo)) return match
+        if (proximo.trim().charAt(0) === '(') return match
         if (INICIO_ESTRUTURA.test(proximo.trim())) return match
-        return rotulo + ' – ' + proximo
+        return normalizarRotuloEstrutural(rotulo) + ' – ' + proximo
       }
     )
     if (s !== titAnt) log.push('Rótulos de título unidos ao texto do título com " – "')

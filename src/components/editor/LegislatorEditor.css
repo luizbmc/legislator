@@ -70,6 +70,28 @@
   line-height: 1.35;
   color: #111;
   zoom: var(--editor-zoom, 1);
+  counter-reset: legislator-line;
+}
+
+.legislator-editor-inner > p[data-tipo] {
+  counter-increment: legislator-line;
+}
+
+.legislator-editor-inner > p[data-tipo]::before {
+  content: counter(legislator-line);
+  position: absolute;
+  left: -44px;
+  width: 34px;
+  text-align: right;
+  color: rgba(100, 99, 76, 0.42);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: inherit;
+  text-indent: 0 !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
 }
 
 /* ── Seleção de parágrafo focado ─────────────────────────── */
@@ -350,6 +372,20 @@
 /* ══════════════════════════════════════════════════════════ */
 .leg-nota {
   font-size: 0.9em;
+  color: #1d6fd1;
+}
+
+.editor-page.modo-vm-ativo .leg-nota[data-vm-hidden="true"] {
+  display: none;
+}
+
+.editor-page.modo-vm-ativo .leg-nota[data-vm-text] {
+  font-size: 0;
+}
+
+.editor-page.modo-vm-ativo .leg-nota[data-vm-text]::after {
+  content: attr(data-vm-text);
+  font-size: 0.9rem;
   color: #1d6fd1;
 }
 

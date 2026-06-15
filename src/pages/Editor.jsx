@@ -12,12 +12,15 @@ import PainelComentarios    from '../components/paineis/PainelComentarios.jsx'
 import PainelAtualizarNorma from '../components/paineis/PainelAtualizarNorma.jsx'
 import UsuarioAtualBadge    from '../components/UsuarioAtualBadge.jsx'
 import { baixarXml }        from '../services/exportarXml.js'
+import { normalizarNotasVadeMecumLegado } from '../services/notasVadeMecum.js'
 import { xmlParaTiptap }     from '../services/importarXml.js'
 import { analisarClassesHtmlInDesign, htmlInDesignParaTiptap } from '../services/importarHtmlInDesign.js'
 import { estiloAtivoNoTipo, estilosParagrafoConfigurados } from '../services/preferenciasEstilo.js'
 import { limparHtmlInternet, parseHtmlInput } from '../services/limpeza/00_parseHtml.js'
 import { blocosTextoComumParaTiptap } from '../services/limpeza/index.js'
 import { detectarExcecoes } from '../services/limpeza/06_detectarExcecoes.js'
+import { filtrarDocPorModoVadeMecum } from '../services/filtrarModoVadeMecum.js'
+import { aplicarEstiloVadeMecumDoc, documentoTemEstiloVadeMecum } from '../services/estiloVadeMecum.js'
 import { isTipoTextoComum, TIPOS_NORMA }      from '../constants/normas.js'
 import { TEXTO_COMUM_WORD_STYLE_MAP } from '../constants/textoComumWord.js'
 import { carregarUsuarioComentarioAtual, iniciaisUsuario } from '../services/usuariosComentarios.js'
@@ -636,40 +639,18 @@ function documentoTemVersoesVadeMecum(doc) {
       tem = true
       return
     }
+    if (Array.isArray(node.marks) && node.marks.some(mark => mark.type === 'nota' && (mark.attrs?.vmText != null || mark.attrs?.vmHidden))) {
+      tem = true
+      return
+    }
     ;(node.content || []).forEach(walk)
   }
   walk(doc)
   return tem
 }
 
-function filtrarNoPorModoVadeMecum(no, modoVadeMecum = false) {
-  if (!no || typeof no !== 'object') return no
-  const role = no.attrs?.vmRole
-  if (role === 'vm' && !modoVadeMecum) return null
-  if (role === 'original' && modoVadeMecum) return null
-
-  const out = { ...no }
-  if (out.attrs) {
-    const attrs = { ...out.attrs }
-    delete attrs.vmRole
-    if (Object.keys(attrs).length) out.attrs = attrs
-    else delete out.attrs
-  }
-  if (Array.isArray(out.content)) {
-    out.content = out.content
-      .map(filho => filtrarNoPorModoVadeMecum(filho, modoVadeMecum))
-      .filter(Boolean)
-  }
-  return out
-}
-
 function docPorModoVadeMecum(doc, modoVadeMecum = false) {
-  return {
-    ...(doc || { type: 'doc' }),
-    content: (doc?.content || [])
-      .map(no => filtrarNoPorModoVadeMecum(no, modoVadeMecum))
-      .filter(Boolean),
-  }
+  return filtrarDocPorModoVadeMecum(doc, modoVadeMecum)
 }
 
 export default function Editor({ usuarioAtual, onTrocarUsuario }) {
@@ -700,6 +681,8 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
   const [buscaAberta,      setBuscaAberta]      = useState(false)
   const [notasAberto,      setNotasAberto]      = useState(false)
   const [modoVadeMecumAtivo, setModoVadeMecumAtivo] = useState(false)
+  const [estiloVadeMecumAtivo, setEstiloVadeMecumAtivo] = useState(false)
+  const [relatorioEstiloVm, setRelatorioEstiloVm] = useState(null)
   const [comentariosAberto, setComentariosAberto] = useState(false)
   const [excecoesAberto,   setExcecoesAberto]   = useState(false)
   const [modalPadronizacao, setModalPadronizacao] = useState(false)
@@ -773,7 +756,8 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
       setModoVadeMecumAtivo(false)
       setMarcasAtualizacaoVisiveis(!textoComum)
       if (n.conteudo_doc && n.conteudo_doc !== DOC_VAZIO) {
-        setDocJson(JSON.parse(n.conteudo_doc))
+        const { doc } = normalizarNotasVadeMecumLegado(JSON.parse(n.conteudo_doc))
+        setDocJson(doc)
         setAbaEsq('sumario')
       }
     })
@@ -790,6 +774,11 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
       manualTrackingSuspensoRef.current = false
     }, 0)
   }, [editor, norma?.tipo])
+
+  useEffect(() => {
+    if (!editor) return
+    setEstiloVadeMecumAtivo(documentoTemEstiloVadeMecum(editor.getJSON()))
+  }, [editor, norma?.id])
 
   // ── Atalhos de teclado globais ────────────────────────────────
   useEffect(() => {
@@ -893,6 +882,18 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
       manualTrackingRef.current = false
     }
     setModalAtualizarAberto(false)
+  }
+
+  function alternarEstiloVadeMecum() {
+    if (!editor) return
+
+    const proximoAtivo = !estiloVadeMecumAtivo
+    const resultado = aplicarEstiloVadeMecumDoc(editor.getJSON(), proximoAtivo)
+
+    editor.commands.setContent(resultado.doc, false)
+    setEstiloVadeMecumAtivo(proximoAtivo)
+    setRelatorioEstiloVm(resultado)
+    setModificado(true)
   }
 
   function documentoTemMarcasAtualizacao() {
@@ -1424,7 +1425,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
   }
 
   function estilosDisponiveisParaMapeamentoHtml() {
-    return estilosParagrafoConfigurados({ incluirInternos: false })
+    return estilosParagrafoConfigurados({ incluirInternos: false, tipoNorma: norma?.tipo })
       .filter(estilo => estiloAtivoNoTipo(estilo, norma?.tipo))
       .sort((a, b) => String(a.label || '').localeCompare(String(b.label || '')))
   }
@@ -1851,6 +1852,13 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
   }
 
   // ── Revisão: aceitar diff atual ───────────────────────────────
+  function onImportarNotasAtualizacao(docComNotas) {
+    if (!editor || !docComNotas) return
+    editor.commands.setContent(docComNotas, false)
+    setDocJson(docComNotas)
+    setModificado(true)
+  }
+
   function aceitarDiff() {
     if (!editor || currDiffIdx < 0) return
     const diff = diffs[currDiffIdx]
@@ -2271,6 +2279,11 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
                 }}
                 title={modoVadeMecumAtivo ? 'Exibir notas originais' : 'Exibir notas no formato Vade Mecum'}
               >Modo VM</button>
+              <button
+                className={`btn-ghost btn-estilo-vm${estiloVadeMecumAtivo ? ' ativa' : ''}`}
+                onClick={alternarEstiloVadeMecum}
+                title={estiloVadeMecumAtivo ? 'Remover Estilo VM dos inícios de dispositivos' : 'Aplicar Estilo VM aos inícios de dispositivos'}
+              >Estilo VM</button>
               <button
                 className={`btn-ghost btn-comentarios${comentariosAberto ? ' ativa' : ''}`}
                 onClick={() => { setComentariosAberto(v => !v); setNotasAberto(false); setExcecoesAberto(false) }}
@@ -2709,11 +2722,56 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
           editorDoc={editor?.getJSON()}
           tipoNorma={norma?.tipo}
           tags={norma?.tags ?? []}
+          modoVadeMecum={modoVadeMecumAtivo}
           onIniciarRevisao={onIniciarRevisao}
+          onImportarNotas={onImportarNotasAtualizacao}
           onFechar={() => setModalAtualizarAberto(false)}
           onEditarManual={iniciarEdicaoManual}
           onConsolidarAtualizacoes={consolidarAtualizacoes}
         />
+      )}
+
+      {relatorioEstiloVm && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setRelatorioEstiloVm(null) }}>
+          <div className="modal-box modal-estilo-vm">
+            <div className="modal-header">
+              <h3>Relatório Estilo VM</h3>
+              <button className="btn-ghost modal-fechar" onClick={() => setRelatorioEstiloVm(null)}>x</button>
+            </div>
+            <div className="estilo-vm-relatorio-corpo">
+              <div className={`estilo-vm-status${relatorioEstiloVm.ativo ? ' ativo' : ''}`}>
+                {relatorioEstiloVm.ativo ? 'Estilo VM ativado' : 'Estilo VM desativado'}
+              </div>
+              <div className="estilo-vm-resumo">
+                <span>{relatorioEstiloVm.totalAlvos} bloco(s) analisado(s)</span>
+                <span>{relatorioEstiloVm.alterados} bloco(s) alterado(s)</span>
+                {relatorioEstiloVm.ativo && (
+                  <span>{relatorioEstiloVm.totalPendentes} pendência(s)</span>
+                )}
+              </div>
+              {relatorioEstiloVm.ativo && relatorioEstiloVm.totalPendentes > 0 ? (
+                <div className="estilo-vm-pendencias">
+                  <p>Os textos abaixo continuam sem o estilo esperado no início:</p>
+                  <ul>
+                    {relatorioEstiloVm.pendentes.map((item, idx) => (
+                      <li key={`${item.linha}-${idx}`}>
+                        <strong>Linha {item.linha}</strong>
+                        <span>{item.estilo}: esperava {item.esperado}</span>
+                        <p>{item.texto}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="estilo-vm-ok">
+                  {relatorioEstiloVm.ativo
+                    ? 'Nenhuma pendência encontrada.'
+                    : 'As marcas de Estilo VM foram removidas dos inícios de dispositivos.'}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Modal: Editar dados da norma ─────────────────────────── */}

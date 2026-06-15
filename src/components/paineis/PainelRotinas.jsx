@@ -486,6 +486,7 @@ export default function PainelRotinas({
   const temInput     = modoSelecao || !!inputHtml || modoDocAtual
   const ultimaRodada = resultados.reduce((acc, r, i) => r != null ? i : acc, -1)
   const temTagVm     = (tags || []).some(t => String(t).toLowerCase() === 'vm')
+  const estiloVadeMecumAutomatico = false
 
   useEffect(() => {
     if (!autoExecutarKey || autoExecutarKey === ultimoAutoExecutarRef.current) return
@@ -507,12 +508,12 @@ export default function PainelRotinas({
     let res
     try {
       if (podeRodarDireto && (modoDocAtual || !prev || prev.doc)) {
-        res = executarEtapaIndividual(id, editor, temTagVm)
+        res = executarEtapaIndividual(id, editor, estiloVadeMecumAutomatico)
       } else if (id === 0 && modoDocAtual) {
         const docBlocos = getDocumentBlocos(editor)
         res = { texto: docBlocos.textoPuro, blocos: docBlocos.blocos, log: docBlocos.log }
       } else {
-        res = executarEtapa(id, prev, inputHtml, tipoNorma, temTagVm)
+        res = executarEtapa(id, prev, inputHtml, tipoNorma, estiloVadeMecumAutomatico)
       }
     } catch (err) {
       res = { erro: String(err), log: [] }
@@ -548,7 +549,7 @@ export default function PainelRotinas({
         // Etapas 1–9 sobre o texto extraído da seleção
         let prev = novos[0]
         for (const def of DEFS.filter(d => d.id >= 1)) {
-          const res = executarEtapa(def.id, prev, null, tipoNorma, temTagVm)
+          const res = executarEtapa(def.id, prev, null, tipoNorma, estiloVadeMecumAutomatico)
           novos[def.id] = res
           if (res.erro) break
           prev = res
@@ -560,7 +561,7 @@ export default function PainelRotinas({
 
         let prev = novos[0]
         for (const def of DEFS.filter(d => d.id >= 1)) {
-          const res = executarEtapa(def.id, prev, null, tipoNorma, temTagVm)
+          const res = executarEtapa(def.id, prev, null, tipoNorma, estiloVadeMecumAutomatico)
           novos[def.id] = res
           if (res.erro) break
           prev = res
@@ -569,7 +570,7 @@ export default function PainelRotinas({
         // Modo documento: fluxo original (etapas 0–9 sobre inputHtml)
         let prev = {}
         for (const def of DEFS) {
-          const res = executarEtapa(def.id, prev, inputHtml, tipoNorma, temTagVm)
+          const res = executarEtapa(def.id, prev, inputHtml, tipoNorma, estiloVadeMecumAutomatico)
           novos[def.id] = res
           if (res.erro) break
           prev = res
@@ -611,7 +612,6 @@ export default function PainelRotinas({
 
   // ── Rotina opcional: Notas Vade Mecum ─────────────────────────
   const [logVadeMecum, setLogVadeMecum] = useState(null)
-  const [logEstiloVadeMecum, setLogEstiloVadeMecum] = useState(null)
   const [relatorioVadeMecum, setRelatorioVadeMecum] = useState([])
   const [modalRelatorioVade, setModalRelatorioVade] = useState(false)
   const [relatorioVadeAtivo, setRelatorioVadeAtivo] = useState(-1)
@@ -668,16 +668,6 @@ export default function PainelRotinas({
     if (lista.length) {
       setModalRelatorioVade(true)
     }
-  }
-
-  function rodarEstiloVadeMecum() {
-    if (!editor || rodando) return
-    const docAtual = editor.getJSON()
-    const linhas = tiptapDocParaLinhasRicas(docAtual)
-    const r = aplicarMarcas(linhas, { estiloVadeMecum: true, somenteEstiloVadeMecum: true })
-    editor.commands.setContent(aplicarLinhasNoDoc(docAtual, r.output), false)
-    setLogEstiloVadeMecum(r.log.length ? r.log : ['Nenhuma marca de Estilo Vade Mecum aplicada.'])
-    onModificado?.()
   }
 
   function rodarNotasVadeMecum() {
@@ -809,25 +799,6 @@ export default function PainelRotinas({
       {/* Rotinas opcionais — não executadas pelo "Executar todas" */}
       <div className="rotinas-opcionais">
         <div className="rotinas-opcionais-titulo">Rotinas opcionais</div>
-
-        <div className="rotina-opcional-item">
-          <button
-            className="btn-rotina-opcional"
-            onClick={rodarEstiloVadeMecum}
-            disabled={!editor || rodando}
-            title={temTagVm
-              ? 'A tag vm faz esta rotina entrar no fluxo normal; este botao reaplica apenas o Estilo Vade Mecum.'
-              : 'Aplica negrito em marcadores de paragrafos/incisos e italico em alineas'}
-          >
-            Estilo Vade Mecum <strong>§ IV</strong> <em>a)</em>
-          </button>
-
-          {logEstiloVadeMecum && (
-            <ul className="rotina-step-log">
-              {logEstiloVadeMecum.map((l, i) => <li key={i}>{l}</li>)}
-            </ul>
-          )}
-        </div>
 
         <div className="rotina-opcional-item">
           <button
