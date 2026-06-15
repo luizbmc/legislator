@@ -9,6 +9,7 @@ import PainelExcecoes       from '../components/paineis/PainelExcecoes.jsx'
 import PainelBusca          from '../components/paineis/PainelBusca.jsx'
 import PainelNotas          from '../components/paineis/PainelNotas.jsx'
 import PainelComentarios    from '../components/paineis/PainelComentarios.jsx'
+import PainelAlteracoes     from '../components/paineis/PainelAlteracoes.jsx'
 import PainelAtualizarNorma from '../components/paineis/PainelAtualizarNorma.jsx'
 import UsuarioAtualBadge    from '../components/UsuarioAtualBadge.jsx'
 import { baixarXml }        from '../services/exportarXml.js'
@@ -680,6 +681,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
   const [modoEdicaoManual, setModoEdicaoManual] = useState(false)
   const [buscaAberta,      setBuscaAberta]      = useState(false)
   const [notasAberto,      setNotasAberto]      = useState(false)
+  const [alteracoesAberto, setAlteracoesAberto] = useState(false)
   const [modoVadeMecumAtivo, setModoVadeMecumAtivo] = useState(false)
   const [estiloVadeMecumAtivo, setEstiloVadeMecumAtivo] = useState(false)
   const [relatorioEstiloVm, setRelatorioEstiloVm] = useState(null)
@@ -1278,7 +1280,10 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
     setExcecoes(normalizadas)
     const temPendentes = normalizadas.some(exc => !exc.resolvida)
     setExcecoesAberto(temPendentes)
-    if (temPendentes) setNotasAberto(false)
+    if (temPendentes) {
+      setNotasAberto(false)
+      setAlteracoesAberto(false)
+    }
     return temPendentes
   }
 
@@ -2169,9 +2174,21 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
             </span>
           )}
           {fase === 'editar' && !emRevisao && (
-            <span className={`editor-modo-badge${modoEdicaoManual ? ' editor-modo-edicao' : ''}`}>
-              {modoEdicaoManual ? 'Modo de edição' : 'Modo leitura'}
-            </span>
+            <>
+              <select
+                className="status-select status-select-topbar"
+                value={status}
+                onChange={e => alterarStatusNorma(e.target.value)}
+                title="Status da norma"
+              >
+                <option value="rascunho">Rascunho</option>
+                <option value="revisao">Em revisão</option>
+                <option value="finalizado">Finalizado</option>
+              </select>
+              <span className={`editor-modo-badge${modoEdicaoManual ? ' editor-modo-edicao' : ''}`}>
+                {modoEdicaoManual ? 'Modo de edição' : 'Modo leitura'}
+              </span>
+            </>
           )}
         </div>
         <div className="editor-topbar-controls">
@@ -2185,16 +2202,6 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
             >← Catálogo</button>
             {fase === 'editar' && !emRevisao && (
               <div className="editor-titulo-acoes">
-                <select
-                  className="status-select"
-                  value={status}
-                  onChange={e => alterarStatusNorma(e.target.value)}
-                  title="Status da norma"
-                >
-                  <option value="rascunho">Rascunho</option>
-                  <option value="revisao">Em revisão</option>
-                  <option value="finalizado">Finalizado</option>
-                </select>
                 <button
                   className="btn-ghost btn-atualizar-norma-topo"
                   onClick={() => setModalAtualizarAberto(true)}
@@ -2232,6 +2239,25 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
                 title="Verificar pontos de padronização"
               >Padronização</button>
               <button
+                className={`btn-ghost btn-excecoes${excecoesAberto ? ' ativa' : ''}`}
+                onClick={rodarExcecoesDoTopo}
+                title="Executar rotina de exceções e navegar pelos resultados"
+              >Exceções</button>
+              <button
+                className={`btn-ghost btn-update-marks${alteracoesAberto ? ' ativa' : ''}`}
+                onClick={() => {
+                  if (!alteracoesAberto && !documentoTemMarcasAtualizacao()) {
+                    alert('Não há marcas de atualização nesta norma.')
+                    return
+                  }
+                  setAlteracoesAberto(v => !v)
+                  setNotasAberto(false)
+                  setExcecoesAberto(false)
+                  setComentariosAberto(false)
+                }}
+                title="Navegar pelas alterações marcadas"
+              >Alterações</button>
+              <button
                 className={`btn-ghost btn-hidden-chars${hiddenCharsAtivo ? ' ativa' : ''}`}
                 onClick={() => {
                   if (!editor) return
@@ -2265,7 +2291,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
               >Cab</button>
               <button
                 className={`btn-ghost btn-notas${notasAberto ? ' ativa' : ''}`}
-                onClick={() => { setNotasAberto(v => !v); setExcecoesAberto(false); setComentariosAberto(false) }}
+                onClick={() => { setNotasAberto(v => !v); setExcecoesAberto(false); setComentariosAberto(false); setAlteracoesAberto(false) }}
                 title="Navegador de notas"
               >Ver notas</button>
               <button
@@ -2278,7 +2304,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
                   setModoVadeMecumAtivo(v => !v)
                 }}
                 title={modoVadeMecumAtivo ? 'Exibir notas originais' : 'Exibir notas no formato Vade Mecum'}
-              >Modo VM</button>
+              >Notas VM</button>
               <button
                 className={`btn-ghost btn-estilo-vm${estiloVadeMecumAtivo ? ' ativa' : ''}`}
                 onClick={alternarEstiloVadeMecum}
@@ -2286,7 +2312,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
               >Estilo VM</button>
               <button
                 className={`btn-ghost btn-comentarios${comentariosAberto ? ' ativa' : ''}`}
-                onClick={() => { setComentariosAberto(v => !v); setNotasAberto(false); setExcecoesAberto(false) }}
+                onClick={() => { setComentariosAberto(v => !v); setNotasAberto(false); setExcecoesAberto(false); setAlteracoesAberto(false) }}
                 title="Navegador de comentarios"
               >Lista 💬</button>
               <button
@@ -2301,22 +2327,6 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
                 disabled={!modoEdicaoManual}
                 title="Inserir nota de rodape"
               >+ Nota de rodapé</button>
-              <button
-                className={`btn-ghost btn-excecoes${excecoesAberto ? ' ativa' : ''}`}
-                onClick={rodarExcecoesDoTopo}
-                title="Executar rotina de exceções e navegar pelos resultados"
-              >Exceções</button>
-              <button
-                className={`btn-ghost btn-update-marks${marcasAtualizacaoVisiveis ? ' ativa' : ''}`}
-                onClick={() => {
-                  if (!documentoTemMarcasAtualizacao()) {
-                    alert('Não há marcas de atualização nesta norma.')
-                    return
-                  }
-                  setMarcasAtualizacaoVisiveis(v => !v)
-                }}
-                title={marcasAtualizacaoVisiveis ? 'Ocultar marcas de atualização' : 'Exibir marcas de atualização'}
-              >Marcação</button>
             </>}
             {emRevisao && (
               <span className="revisao-modo-label">🔍 Modo revisão</span>
@@ -2660,6 +2670,16 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
                 aberto={comentariosAberto}
                 editable={modoEdicaoManual}
                 onFechar={() => setComentariosAberto(false)}
+              />
+            )}
+            {!emRevisao && (
+              <PainelAlteracoes
+                editor={editor}
+                aberto={alteracoesAberto}
+                modoVadeMecum={modoVadeMecumAtivo}
+                marcasVisiveis={marcasAtualizacaoVisiveis}
+                onMarcasVisiveisChange={setMarcasAtualizacaoVisiveis}
+                onFechar={() => setAlteracoesAberto(false)}
               />
             )}
             {!emRevisao && (
