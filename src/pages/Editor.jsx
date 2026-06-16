@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import mammoth from 'mammoth'
 import LegislatorEditor     from '../components/editor/LegislatorEditor.jsx'
 import PainelSumario        from '../components/paineis/PainelSumario.jsx'
@@ -657,6 +657,7 @@ function docPorModoVadeMecum(doc, modoVadeMecum = false) {
 export default function Editor({ usuarioAtual, onTrocarUsuario }) {
   const { id } = useParams()
   const nav    = useNavigate()
+  const location = useLocation()
 
   const fileRef = useRef(null)
   const colagemRef = useRef(null)
@@ -681,6 +682,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
   const [modoEdicaoManual, setModoEdicaoManual] = useState(false)
   const [buscaAberta,      setBuscaAberta]      = useState(false)
   const [notasAberto,      setNotasAberto]      = useState(false)
+  const [notaEdicaoRequest, setNotaEdicaoRequest] = useState(null)
   const [alteracoesAberto, setAlteracoesAberto] = useState(false)
   const [modoVadeMecumAtivo, setModoVadeMecumAtivo] = useState(false)
   const [estiloVadeMecumAtivo, setEstiloVadeMecumAtivo] = useState(false)
@@ -2142,6 +2144,18 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
     }
   }
 
+  function voltarDoEditor() {
+    const origem = location.state?.origem
+    const publicacaoId = location.state?.publicacaoId
+    const destino = origem === 'publicacao' && publicacaoId
+      ? `/publicacoes/${publicacaoId}`
+      : '/'
+    const nomeDestino = origem === 'publicacao' ? 'publicação' : 'catálogo'
+
+    if (modificado && !confirm(`Há alterações não salvas. Deseja voltar à tela de ${nomeDestino} sem salvar?`)) return
+    nav(destino)
+  }
+
   const dataAtualizacaoFormatada = norma?.data_atualizacao
     ? new Date(norma.data_atualizacao).toLocaleDateString('pt-BR', {
         day: '2-digit', month: '2-digit', year: 'numeric',
@@ -2195,11 +2209,8 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
           <div className="editor-controles-esquerda">
             <button
               className="btn-ghost btn-voltar"
-              onClick={() => {
-                if (modificado && !confirm('Há alterações não salvas. Deseja voltar ao catálogo sem salvar?')) return
-                nav('/')
-              }}
-            >← Catálogo</button>
+              onClick={voltarDoEditor}
+            >← Voltar</button>
             {fase === 'editar' && !emRevisao && (
               <div className="editor-titulo-acoes">
                 <button
@@ -2661,6 +2672,8 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
                 editor={editor}
                 aberto={notasAberto}
                 modoVadeMecum={modoVadeMecumAtivo}
+                editable={modoEdicaoManual}
+                editarNotaRequest={notaEdicaoRequest}
                 onFechar={() => setNotasAberto(false)}
               />
             )}
@@ -2707,6 +2720,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
               tags={norma?.tags ?? []}
               onPasteRotinas={() => setModificado(true)}
               trackInternalPasteAdditions={modoEdicaoManual}
+              onEditNotaClick={setNotaEdicaoRequest}
             />
           </main>
 

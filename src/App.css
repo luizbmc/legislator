@@ -2191,6 +2191,134 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
     font-size: 12px;
     line-height: 1.35;
 }
+.nota-editar-btn {
+  align-self: flex-end;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.nota-editar-btn:hover {
+  background: #dbeafe;
+}
+.nota-acoes {
+  align-self: flex-end;
+  display: flex;
+  gap: 6px;
+}
+.nota-excluir-btn {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #b91c1c;
+}
+.nota-excluir-btn:hover {
+  background: #ffe4e6;
+}
+.nota-edicao-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.38);
+}
+.nota-edicao-modal {
+  width: min(680px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 42px rgba(15, 23, 42, 0.28);
+}
+.nota-edicao-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.nota-edicao-topo h3 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.2;
+}
+.nota-edicao-toolbar {
+  display: flex;
+  justify-content: flex-start;
+  padding: 0 14px;
+}
+.nota-italico-btn {
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  color: #1d4ed8;
+  font-style: italic;
+}
+.nota-italico-btn:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+.nota-edicao-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 0 14px;
+}
+.nota-edicao-campo > span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.nota-edicao-editor {
+  min-height: 84px;
+  max-height: 190px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 9px 10px;
+  color: #1d6fd1;
+  font-size: 13px;
+  line-height: 1.45;
+  outline: none;
+  background: #f8fbff;
+  cursor: text;
+}
+.nota-edicao-editor * {
+  cursor: text;
+}
+.nota-edicao-editor:focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18);
+}
+.nota-edicao-editor i,
+.nota-edicao-editor em {
+  font-style: italic;
+}
+.nota-edicao-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 14px 14px;
+  border-top: 1px solid var(--border-soft);
+}
+.nota-edicao-excluir {
+  margin-right: auto;
+  color: #b91c1c;
+}
 .alteracoes-toggle {
   display: flex;
   align-items: center;

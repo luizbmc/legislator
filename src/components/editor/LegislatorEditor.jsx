@@ -216,6 +216,47 @@ function blocoTopoEmPos(doc, pos) {
   return encontrado
 }
 
+function blocoCompletoSelecionado(state) {
+  const { from, to, empty } = state.selection
+  if (empty) return null
+
+  const bloco = blocoTopoEmPos(state.doc, from)
+  if (!bloco?.node?.isTextblock) return null
+
+  const inicioConteudo = bloco.offset + 1
+  const fimConteudo = bloco.offset + bloco.node.nodeSize - 1
+  if (to > fimConteudo + 1) return null
+  if (from > inicioConteudo || to < fimConteudo) return null
+
+  return bloco.node
+}
+
+function inserirBlocoCopiado(view, nodeJson) {
+  if (!view || !nodeJson) return false
+  let node
+  try {
+    node = view.state.schema.nodeFromJSON(nodeJson)
+  } catch {
+    return false
+  }
+  if (!node?.isTextblock) return false
+
+  const { state } = view
+  const destino = blocoTopoEmPos(state.doc, state.selection.from)
+  let tr
+  if (
+    state.selection.empty &&
+    destino?.node?.isTextblock &&
+    !destino.node.textContent.trim()
+  ) {
+    tr = state.tr.replaceWith(destino.offset, destino.offset + destino.node.nodeSize, node)
+  } else {
+    tr = state.tr.replaceSelectionWith(node, false)
+  }
+  view.dispatch(tr.scrollIntoView())
+  return true
+}
+
 function marcarBlocosColadosComoAdicionados(view, quantidade) {
   if (!quantidade) return
 
@@ -254,6 +295,10 @@ function marcarBlocosColadosComoAdicionados(view, quantidade) {
 
 function htmlTemNotasRodape(html = '') {
   return /(?:footnote|endnote|mso-footnote-id|mso-element:\s*(?:footnote|endnote))/i.test(String(html || ''))
+}
+
+function htmlPareceWord(html = '') {
+  return /(?:\bclass=["'][^"']*\bMso|mso-|xmlns:w=|urn:schemas-microsoft-com:office:word|<!--\[if gte mso)/i.test(String(html || ''))
 }
 
 function findNotaRodapeRange(state, pos, chamada, texto) {
@@ -297,11 +342,13 @@ export default function LegislatorEditor({
   tags = [],
   onPasteRotinas,
   trackInternalPasteAdditions = false,
+  onEditNotaClick,
 }) {
   const scrollRef = useRef(null)
   const tipoNormaRef = useRef(tipoNorma)
   const tagsRef = useRef(tags)
   const onPasteRotinasRef = useRef(onPasteRotinas)
+  const ultimoBlocoCopiadoRef = useRef(null)
   const [styleIndicators, setStyleIndicators] = useState([])
   const [styleIndicatorsHeight, setStyleIndicatorsHeight] = useState(0)
   const [notaRodapeAberta, setNotaRodapeAberta] = useState(null)
@@ -357,6 +404,20 @@ export default function LegislatorEditor({
         'xml:lang': 'pt-BR',
       },
 
+      handleDOMEvents: {
+        copy(view) {
+          const node = blocoCompletoSelecionado(view.state)
+          ultimoBlocoCopiadoRef.current = node ? node.toJSON() : null
+          return false
+        },
+
+        cut(view) {
+          const node = blocoCompletoSelecionado(view.state)
+          ultimoBlocoCopiadoRef.current = node ? node.toJSON() : null
+          return false
+        },
+      },
+
       /**
        * Chamado pelo TipTap antes de parsear qualquer HTML colado.
        *
@@ -399,6 +460,13 @@ export default function LegislatorEditor({
         const textoPuro = event.clipboardData?.getData('text/plain') || ''
 
         if (html.includes('data-pm-slice')) {
+          if (ultimoBlocoCopiadoRef.current && inserirBlocoCopiado(view, ultimoBlocoCopiadoRef.current)) {
+            event.preventDefault()
+            if (trackInternalPasteAdditions) {
+              marcarBlocosColadosComoAdicionados(view, 1)
+            }
+            return true
+          }
           if (trackInternalPasteAdditions) {
             marcarBlocosColadosComoAdicionados(view, contarBlocosColados(slice))
           }
@@ -408,6 +476,7 @@ export default function LegislatorEditor({
 
         try {
           const textoComum = isTipoTextoComum(tipoNormaRef.current)
+          const colagemWord = htmlPareceWord(html)
           const usarParserHtml = htmlTemNotasRodape(html) || textoComum
           const entrada = usarParserHtml
             ? parseHtmlInput(html)
@@ -421,7 +490,7 @@ export default function LegislatorEditor({
               : processarBlocosParaTiptap(entrada, {
                 tipoNorma: tipoNormaRef.current,
                 estiloVadeMecum: false,
-                notasVadeMecum: (tagsRef.current || []).some(t => String(t).toLowerCase() === 'vm'),
+                notasVadeMecum: colagemWord || (tagsRef.current || []).some(t => String(t).toLowerCase() === 'vm'),
               })
           if (!resultado.doc?.content?.length) return false
 
@@ -533,6 +602,19 @@ export default function LegislatorEditor({
   }, [editor, styleIndicatorsActive, zoom])
 
   function handleEditorClick(event) {
+    const notaEl = event.target?.closest?.('.leg-nota')
+    if (notaEl && scrollRef.current?.contains(notaEl)) {
+      let pos = null
+      try {
+        pos = editor.view.posAtDOM(notaEl, 0)
+      } catch {}
+
+      event.preventDefault()
+      event.stopPropagation()
+      onEditNotaClick?.({ pos, time: Date.now() })
+      return
+    }
+
     const noteEl = event.target?.closest?.('.leg-nota-rodape')
     if (!noteEl || !scrollRef.current?.contains(noteEl)) return
 

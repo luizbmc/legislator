@@ -137,8 +137,8 @@ function aplicarRunsVmNoConteudo(targetContent = [], sourceRuns = []) {
     const textoVm = sourceRun?.length ? textoDeNos(sourceRun) : ''
     parte.nos.forEach((node, idx) => {
       resultado.push(aplicarAttrsNota(node, idx === 0 && textoVm
-        ? { vmText: textoVm, vmHidden: null }
-        : { vmText: null, vmHidden: true }))
+        ? { vmText: textoVm, vmSegments: null, vmHidden: null }
+        : { vmText: null, vmSegments: null, vmHidden: true }))
     })
   }
 
@@ -147,7 +147,7 @@ function aplicarRunsVmNoConteudo(targetContent = [], sourceRuns = []) {
     const textoVm = textoDeNos(sourceRun)
     if (!textoVm) continue
     if (resultado.length) resultado.push(textNodeEspaco())
-    resultado.push({ type: 'text', text: textoVm, marks: [{ type: 'nota', attrs: { vmText: textoVm } }] })
+    resultado.push({ type: 'text', text: textoVm, marks: [{ type: 'nota', attrs: { vmText: textoVm, vmSegments: null } }] })
   }
 
   return resultado

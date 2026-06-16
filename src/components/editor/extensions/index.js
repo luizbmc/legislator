@@ -168,6 +168,30 @@ export const ParagraphAlteradoAttrs = Extension.create({
 // ── Marks customizados ──────────────────────────────────────────
 
 // Nota: texto entre parênteses após . ; :
+function vmNoteRenderNodes(attrs = {}) {
+  let segments = []
+  try {
+    const parsed = JSON.parse(attrs.vmSegments || '[]')
+    if (Array.isArray(parsed)) {
+      segments = parsed
+        .map(seg => ({ text: String(seg?.text || ''), italic: !!seg?.italic }))
+        .filter(seg => seg.text)
+    }
+  } catch {
+    segments = []
+  }
+
+  if (!segments.length && attrs.vmText) {
+    segments = [{ text: String(attrs.vmText), italic: false }]
+  }
+
+  return segments.map(seg => (
+    seg.italic
+      ? ['i', { class: 'leg-nota-vm-italico' }, seg.text]
+      : ['span', {}, seg.text]
+  ))
+}
+
 export const Nota = Mark.create({
   name: 'nota',
   // priority 70: verificado antes de italic/bold do StarterKit (padrão 50)
@@ -178,6 +202,11 @@ export const Nota = Mark.create({
         parseHTML: element => element.getAttribute('data-vm-text'),
         renderHTML: attrs => attrs.vmText != null ? { 'data-vm-text': attrs.vmText } : {},
       },
+      vmSegments: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-vm-segments'),
+        renderHTML: attrs => attrs.vmSegments ? { 'data-vm-segments': attrs.vmSegments } : {},
+      },
       vmHidden: {
         default: null,
         parseHTML: element => element.getAttribute('data-vm-hidden'),
@@ -186,8 +215,13 @@ export const Nota = Mark.create({
     }
   },
   parseHTML() { return [{ tag: 'span.leg-nota', priority: 70 }] },
-  renderHTML({ HTMLAttributes }) {
-    return ['span', mergeAttributes(HTMLAttributes, { class: 'leg-nota' }), 0]
+  renderHTML({ mark, HTMLAttributes }) {
+    const attrs = mergeAttributes(HTMLAttributes, { class: 'leg-nota', contenteditable: 'false' })
+    const vmNodes = vmNoteRenderNodes(mark?.attrs || {})
+    if (vmNodes.length) {
+      return ['span', attrs, ['span', { class: 'leg-nota-original' }, 0], ['span', { class: 'leg-nota-vm-render' }, ...vmNodes]]
+    }
+    return ['span', attrs, 0]
   },
 })
 

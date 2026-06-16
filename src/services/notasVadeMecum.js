@@ -150,9 +150,9 @@ function anotarRunComVm(content, run, textoVm) {
   const next = [...content]
   run.forEach((item, idx) => {
     if (idx === 0 && textoVm) {
-      next[item.index] = aplicarAttrsNota(next[item.index], { vmText: textoVm, vmHidden: null })
+      next[item.index] = aplicarAttrsNota(next[item.index], { vmText: textoVm, vmSegments: null, vmHidden: null })
     } else {
-      next[item.index] = aplicarAttrsNota(next[item.index], { vmText: null, vmHidden: true })
+      next[item.index] = aplicarAttrsNota(next[item.index], { vmText: null, vmSegments: null, vmHidden: true })
     }
   })
   return next

@@ -155,12 +155,70 @@ function clonarBlocoRecorte(node) {
   return JSON.parse(JSON.stringify(node))
 }
 
+function docOrigemRecorte(norma) {
+  try {
+    return norma?.conteudo_doc ? JSON.parse(norma.conteudo_doc) : { type: 'doc', content: [] }
+  } catch {
+    return { type: 'doc', content: [] }
+  }
+}
+
+function blocosAberturaLeiRecorte(doc) {
+  return blocosDaNorma(doc).filter(node =>
+    node?.type === 'paragrafAbertura' ||
+    node?.type === 'paragrafFacoSaber'
+  )
+}
+
+function blocosNotaTituloCabecalhoRecorte(doc) {
+  const blocos = blocosDaNorma(doc)
+  const notas = []
+  let viuEpigrafe = false
+
+  for (const node of blocos) {
+    if (node?.type === 'epigrafe' || node?.type === 'epigrafeApelido') {
+      viuEpigrafe = true
+      continue
+    }
+    if (viuEpigrafe && node?.type === 'notaTitulo') {
+      notas.push(node)
+      continue
+    }
+    if (viuEpigrafe && node?.type !== 'notaTitulo') break
+  }
+
+  return notas
+}
+
+function blocosFinalizacaoLeiRecorte(doc) {
+  return blocosDaNorma(doc).filter(node =>
+    node?.type === 'data' ||
+    node?.type === 'assinatura' ||
+    node?.type === 'assinaturaData' ||
+    node?.type === 'assinaturaNome'
+  )
+}
+
+function adicionarClonesRecorte(destino, blocos) {
+  for (const bloco of blocos || []) {
+    const clonado = clonarBlocoRecorte(bloco)
+    if (clonado) destino.push(clonado)
+  }
+}
+
 function montarDocRecorte(norma, itens) {
+  const docOrigem = docOrigemRecorte(norma)
   const content = [
     blocoTextoRecorte('epigrafe', norma?.epigrafe),
     blocoTextoRecorte('epigrafeApelido', formatarApelidoRecorte(norma?.apelido)),
-    blocoTextoRecorte('ementa', norma?.ementa),
   ].filter(Boolean)
+
+  adicionarClonesRecorte(content, blocosNotaTituloCabecalhoRecorte(docOrigem))
+
+  const ementa = blocoTextoRecorte('ementa', norma?.ementa)
+  if (ementa) content.push(ementa)
+
+  adicionarClonesRecorte(content, blocosAberturaLeiRecorte(docOrigem))
 
   for (const item of itens || []) {
     for (const bloco of item.blocos || []) {
@@ -168,6 +226,8 @@ function montarDocRecorte(norma, itens) {
       if (clonado) content.push(clonado)
     }
   }
+
+  adicionarClonesRecorte(content, blocosFinalizacaoLeiRecorte(docOrigem))
 
   return { type: 'doc', content }
 }
@@ -586,6 +646,23 @@ function nodeTemConteudoRecorte(node) {
   return Boolean(textoBlocoRecorte(node))
 }
 
+function nodeEhCabecalhoInicialRecorte(node) {
+  return [
+    'epigrafe',
+    'epigrafeApelido',
+    'notaTitulo',
+    'ementa',
+    'paragrafAbertura',
+    'paragrafFacoSaber',
+  ].includes(node?.type)
+}
+
+function existeConteudoNormativoAnterior(blocosBase, indice) {
+  return blocosBase.slice(0, Math.max(0, indice)).some(node =>
+    nodeTemConteudoRecorte(node) && !nodeEhCabecalhoInicialRecorte(node)
+  )
+}
+
 function ordenarUnicosPorPosicao(blocosArtigo, selecionados) {
   const vistos = []
   for (const node of selecionados) {
@@ -599,6 +676,15 @@ function inserirMarcadoresOmissao(blocosBase, selecionados, fimOmissaoAte) {
   if (ordenados.length <= 1) return ordenados
 
   const resultado = []
+  const primeiroIndice = blocosBase.indexOf(ordenados[0])
+  if (
+    primeiroIndice > 0 &&
+    nodeEhHeadingRecorte(ordenados[0]) &&
+    existeConteudoNormativoAnterior(blocosBase, primeiroIndice)
+  ) {
+    resultado.push({ type: 'recorteOmissao' })
+  }
+
   let indiceAnterior = -1
   for (const node of ordenados) {
     const indiceAtual = blocosBase.indexOf(node)
@@ -1120,6 +1206,19 @@ export default function PublicacaoPage() {
     }
   }
 
+  function abrirNormaDaPublicacao(norma) {
+    const normaId = idNormaPublicacao(norma)
+    if (!normaId) {
+      alert('Nao foi possivel identificar a norma selecionada. Atualize a pagina e tente novamente.')
+      return
+    }
+    if (modificado) {
+      const continuar = confirm('A publicação não está salva. Ao editar o conteúdo da norma, você perderá as alterações da publicação.\n\nDeseja abrir a norma mesmo assim?')
+      if (!continuar) return
+    }
+    nav(`/editor/${normaId}`, { state: { origem: 'publicacao', publicacaoId: id } })
+  }
+
   const normasFiltradas = normasDisponiveis.filter(n =>
     !normaJaNaPublicacao(n.id) &&
     (!somenteVm || normaTemTagVm(n)) &&
@@ -1344,14 +1443,7 @@ export default function PublicacaoPage() {
                       <div
                         className="pub-norma-info pub-norma-info-link"
                         title="Abrir no editor"
-                        onClick={() => {
-                          const normaId = idNormaPublicacao(n)
-                          if (!normaId) {
-                            alert('Nao foi possivel identificar a norma selecionada. Atualize a pagina e tente novamente.')
-                            return
-                          }
-                          nav(`/editor/${normaId}`)
-                        }}
+                        onClick={() => abrirNormaDaPublicacao(n)}
                       >
                         <span className="pub-norma-epigrafe"><AvisoAtualizacaoPendente norma={n} />{n.epigrafe}</span>
                         {n.apelido && <span className="pub-norma-apelido">{n.apelido}</span>}

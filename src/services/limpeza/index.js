@@ -9,7 +9,7 @@ import { aplicarMarcas }       from './07_aplicarMarcas.js'
 import { corrigirPontuacaoEnumeracoes } from './08_corrigirPontuacaoEnumeracoes.js'
 import { substituirTextoEmNota, RE_EMENDA_CONSTITUCIONAL_NOTA, RE_PARENTESE_INTERMEDIARIO_NOTA, RE_VETADO_CAIXA_ALTA_NOTA } from './substituirNota.js'
 import { aplicarCitacoes } from '../aplicarCitacoes.js'
-import { aplicarNotasVadeMecum } from '../notasVadeMecum.js'
+import { aplicarNotasVadeMecumAlternavel } from '../notasVadeMecum.js'
 import { isTipoTextoComum } from '../../constants/normas.js'
 
 /**
@@ -283,7 +283,7 @@ function tiptapFinalDeLinhas(linhas, excecoes, etapas, { notasVadeMecum = false 
   let docFinal = normalizarDocNotas(doc)
 
   if (notasVadeMecum) {
-    const { doc: docVM, log: logVM } = aplicarNotasVadeMecum(docFinal)
+    const { doc: docVM, log: logVM } = aplicarNotasVadeMecumAlternavel(docFinal)
     docFinal = normalizarDocNotas(docVM)
     etapasComCitacoes.push({ nome: 'Notas Vade Mecum', log: logVM })
   }

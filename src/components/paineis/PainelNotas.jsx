@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Fragment } from 'prosemirror-model'
 
 function hasMark(node, name) {
   return (node.marks || []).some(mark => mark.type.name === name)
@@ -39,6 +40,66 @@ function normalizeSegments(segments) {
 
 function segmentsText(segments) {
   return compactText((segments || []).map(seg => seg.text).join(''))
+}
+
+function parseSegmentsAttr(value) {
+  try {
+    const parsed = JSON.parse(value || '[]')
+    if (!Array.isArray(parsed)) return []
+    return normalizeSegments(parsed.map(seg => ({
+      text: String(seg?.text || ''),
+      italic: !!seg?.italic,
+    })))
+  } catch {
+    return []
+  }
+}
+
+function segmentsEqual(a = [], b = []) {
+  const aa = normalizeSegments(a)
+  const bb = normalizeSegments(b)
+  if (aa.length !== bb.length) return false
+  return aa.every((seg, idx) => seg.text === bb[idx].text && !!seg.italic === !!bb[idx].italic)
+}
+
+function escapeHtml(text) {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function segmentsToHtml(segments = []) {
+  return normalizeSegments(segments).map(seg => {
+    const texto = escapeHtml(seg.text)
+    return seg.italic ? `<i>${texto}</i>` : texto
+  }).join('')
+}
+
+function segmentsFromEditable(root) {
+  const out = []
+
+  function walk(node, italic = false) {
+    if (!node) return
+    if (node.nodeType === Node.TEXT_NODE) {
+      out.push({ text: node.nodeValue || '', italic })
+      return
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return
+
+    const tag = node.tagName?.toLowerCase?.() || ''
+    const isItalic = italic || tag === 'i' || tag === 'em' || node.style?.fontStyle === 'italic'
+    if (tag === 'br') {
+      out.push({ text: ' ', italic })
+      return
+    }
+    node.childNodes.forEach(child => walk(child, isItalic))
+    if (tag === 'div' || tag === 'p') out.push({ text: ' ', italic })
+  }
+
+  root?.childNodes?.forEach(node => walk(node, false))
+  return normalizeSegments(out)
 }
 
 function labelTipo(tipo) {
@@ -105,20 +166,23 @@ function collectNotesFromBlock(node, pos) {
 
     const texto = child.text
     const segment = { text: texto, italic: isItalic(child) }
-    let vmSegment = null
-    if (markNota?.attrs?.vmText != null) {
-      vmSegment = { text: markNota.attrs.vmText, italic: false }
+    let vmSegments = []
+    const vmSegmentsAttr = parseSegmentsAttr(markNota?.attrs?.vmSegments)
+    if (vmSegmentsAttr.length) {
+      vmSegments = vmSegmentsAttr
+    } else if (markNota?.attrs?.vmText != null) {
+      vmSegments = [{ text: markNota.attrs.vmText, italic: false }]
     } else if (markNota?.attrs?.vmHidden) {
-      vmSegment = null
+      vmSegments = []
     } else {
-      vmSegment = { text: texto, italic: isItalic(child) }
+      vmSegments = [{ text: texto, italic: isItalic(child) }]
     }
 
     if (current && current.tipo === tipo && current.to === from) {
       current.texto += texto
       current.segments.push(segment)
-      if (vmSegment) current.vmSegments.push(vmSegment)
-      if (markNota?.attrs?.vmHidden || markNota?.attrs?.vmText != null) current.temVm = true
+      if (vmSegments.length) current.vmSegments.push(...vmSegments)
+      if (markNota?.attrs?.vmHidden || markNota?.attrs?.vmText != null || vmSegmentsAttr.length) current.temVm = true
       current.to = to
     } else {
       if (current) runs.push(current)
@@ -126,8 +190,8 @@ function collectNotesFromBlock(node, pos) {
         tipo,
         texto,
         segments: [segment],
-        vmSegments: vmSegment ? [vmSegment] : [],
-        temVm: markNota?.attrs?.vmHidden || markNota?.attrs?.vmText != null,
+        vmSegments: vmSegments.length ? [...vmSegments] : [],
+        temVm: markNota?.attrs?.vmHidden || markNota?.attrs?.vmText != null || vmSegmentsAttr.length,
         from,
         to,
         contexto,
@@ -147,6 +211,8 @@ function collectNotesFromBlock(node, pos) {
       tipo: run.tipo,
       texto,
       segments: normalizedSegments,
+      normalSegments: normalizedSegments,
+      normalTexto: texto,
       vmPreview: run.temVm
         ? (() => {
             const vmSegments = normalizeSegments(run.vmSegments || [])
@@ -195,7 +261,7 @@ function collectNotes(editor, modoVadeMecum = false) {
 
     if (modoVadeMecum) {
       notas.push(...notasBloco.map(nota => nota.vmPreview?.status === 'alterada'
-        ? { ...nota, texto: nota.vmPreview.texto, segments: nota.vmPreview.segments }
+        ? { ...nota, texto: nota.vmPreview.texto, segments: nota.vmPreview.segments, normalSegments: nota.normalSegments || nota.segments, normalTexto: nota.normalTexto || nota.texto }
         : nota).filter(nota => nota.vmPreview?.status !== 'excluida'))
       continue
     }
@@ -235,9 +301,61 @@ function scrollToSelection(editor, from) {
   })
 }
 
-export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = false }) {
+function criarNodesNota(schema, nota, normalSegments, vmSegments) {
+  const notaType = schema.marks.nota
+  const italicType = schema.marks.italic
+  if (!notaType) return []
+
+  const normal = normalizeSegments(normalSegments)
+  const vm = normalizeSegments(vmSegments)
+  const vmTexto = segmentsText(vm)
+  const normalTexto = segmentsText(normal)
+  const vmIgualNormal = vmTexto === normalTexto && segmentsEqual(vm, normal)
+  const vmExcluida = !vmTexto
+  const attrsVm = vmIgualNormal
+    ? null
+    : vmExcluida
+      ? { vmHidden: true }
+      : { vmText: vmTexto, vmSegments: JSON.stringify(vm), vmHidden: null }
+
+  return normal.map((seg, idx) => {
+    const attrs = !attrsVm
+      ? {}
+      : vmExcluida
+        ? { vmHidden: true }
+        : idx === 0
+          ? attrsVm
+          : { vmHidden: true }
+    const marks = [notaType.create(attrs)]
+    if (seg.italic && italicType) marks.push(italicType.create())
+    return schema.text(seg.text, marks)
+  })
+}
+
+function substituirNota(editor, nota, normalSegments, vmSegments) {
+  if (!editor || !nota || nota.tipo !== 'nota') return false
+  const nodes = criarNodesNota(editor.state.schema, nota, normalSegments, vmSegments)
+  if (!nodes.length) return false
+  const tr = editor.state.tr.replaceWith(nota.from, nota.to, Fragment.fromArray(nodes))
+  editor.view.dispatch(tr)
+  return true
+}
+
+function excluirNota(editor, nota) {
+  if (!editor || !nota || nota.tipo !== 'nota') return false
+  const tr = editor.state.tr.delete(nota.from, nota.to)
+  editor.view.dispatch(tr.scrollIntoView())
+  return true
+}
+
+export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = false, editable = false, editarNotaRequest = null }) {
   const [notas, setNotas] = useState(() => collectNotes(editor, modoVadeMecum))
   const [ativa, setAtiva] = useState(-1)
+  const [editando, setEditando] = useState(null)
+  const normalRef = useRef(null)
+  const vmRef = useRef(null)
+  const campoAtivoRef = useRef(null)
+  const ultimaEdicaoRequestRef = useRef(null)
 
   useEffect(() => {
     if (!editor || !aberto) return
@@ -251,7 +369,46 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
     if (!aberto) setAtiva(-1)
   }, [aberto])
 
-  if (!aberto) return null
+  useEffect(() => {
+    if (!editando) return
+    const normalSegments = editando.normalSegments || editando.segments || []
+    const vmSegments = editando.vmPreview?.status === 'excluida'
+      ? []
+      : editando.vmPreview?.segments || normalSegments
+    window.setTimeout(() => {
+      if (normalRef.current) normalRef.current.innerHTML = segmentsToHtml(normalSegments)
+      if (vmRef.current) vmRef.current.innerHTML = segmentsToHtml(vmSegments)
+    }, 0)
+  }, [editando])
+
+  useEffect(() => {
+    if (!editor || !editarNotaRequest) return
+    const requestKey = editarNotaRequest.time ?? editarNotaRequest.pos ?? editarNotaRequest
+    if (ultimaEdicaoRequestRef.current === requestKey) return
+    ultimaEdicaoRequestRef.current = requestKey
+
+    const pos = Number(editarNotaRequest.pos)
+    const coletadas = collectNotes(editor, modoVadeMecum)
+    setNotas(coletadas)
+
+    let alvo = null
+    if (Number.isFinite(pos)) {
+      alvo = coletadas.find(nota => nota.tipo === 'nota' && pos >= nota.from && pos <= nota.to)
+        || coletadas.find(nota => nota.tipo === 'nota' && pos >= nota.from - 1 && pos <= nota.to + 1)
+    }
+    if (!alvo) alvo = coletadas.find(nota => nota.tipo === 'nota')
+    if (!alvo) return
+
+    if (!editable) {
+      alert('Entre no modo de edição para alterar notas.')
+      return
+    }
+
+    setAtiva(coletadas.findIndex(nota => nota.id === alvo.id))
+    setEditando(alvo)
+  }, [editor, editarNotaRequest, modoVadeMecum, editable])
+
+  if (!aberto && !editando) return null
 
   function irParaNota(nota, idx) {
     if (!editor || !nota) return
@@ -260,8 +417,59 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
     scrollToSelection(editor, nota.from)
   }
 
+  function abrirEdicaoNota(nota, idx, event) {
+    event?.stopPropagation()
+    if (nota.tipo !== 'nota') return
+    if (!editable) {
+      alert('Entre no modo de edição para alterar notas.')
+      return
+    }
+    setAtiva(idx)
+    setEditando(nota)
+  }
+
+  function excluirNotaSelecionada(nota, event) {
+    event?.stopPropagation()
+    if (nota?.tipo !== 'nota') return
+    if (!editable) {
+      alert('Entre no modo de edição para excluir notas.')
+      return
+    }
+    if (!confirm('Excluir esta nota do parágrafo?')) return
+    if (excluirNota(editor, nota)) {
+      setEditando(null)
+      setNotas(collectNotes(editor, modoVadeMecum))
+    }
+  }
+
+  function notaPodeSerEditada(nota) {
+    return nota?.tipo === 'nota'
+  }
+
+  function aplicarNotaItalico() {
+    const alvo = campoAtivoRef.current || normalRef.current
+    if (!alvo) return
+    alvo.focus()
+    document.execCommand('italic')
+  }
+
+  function salvarEdicaoNota() {
+    const normalSegments = segmentsFromEditable(normalRef.current)
+    const vmSegments = segmentsFromEditable(vmRef.current)
+    if (!segmentsText(normalSegments)) {
+      alert('A nota normal não pode ficar vazia.')
+      return
+    }
+    if (substituirNota(editor, editando, normalSegments, vmSegments)) {
+      setEditando(null)
+      setNotas(collectNotes(editor, modoVadeMecum))
+    }
+  }
+
   return (
-    <div className="notas-painel notas-navegador-painel" role="dialog" aria-label="Navegador de notas">
+    <>
+      {aberto && (
+        <div className="notas-painel notas-navegador-painel" role="dialog" aria-label="Navegador de notas">
       <div className="notas-topo">
         <div>
           <span className="notas-titulo">Notas</span>
@@ -276,10 +484,12 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
         <ul className="notas-lista">
           {notas.map((nota, idx) => (
             <li key={nota.id}>
-              <button
+              <div
                 className={`nota-item${idx === ativa ? ' ativa' : ''}`}
                 onClick={() => irParaNota(nota, idx)}
                 title={nota.contexto || nota.texto}
+                role="button"
+                tabIndex={0}
               >
                 <span className={`nota-tipo nota-tipo-${nota.tipo}`}>{labelTipo(nota.tipo)}</span>
                 <span className="nota-texto">{renderNotaTexto(nota)}</span>
@@ -289,11 +499,79 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
                     <span className="nota-vm-texto">{renderVmPreview(nota.vmPreview)}</span>
                   </span>
                 )}
-              </button>
+                {notaPodeSerEditada(nota) && (
+                  <span className="nota-acoes">
+                    <button
+                      type="button"
+                      className="nota-editar-btn"
+                      onClick={event => abrirEdicaoNota(nota, idx, event)}
+                      title={editable ? 'Alterar nota normal e nota VM' : 'Entre no modo de edição para alterar notas'}
+                    >
+                      Alterar
+                    </button>
+                    <button
+                      type="button"
+                      className="nota-editar-btn nota-excluir-btn"
+                      onClick={event => excluirNotaSelecionada(nota, event)}
+                      title={editable ? 'Excluir nota normal e nota VM' : 'Entre no modo de edição para excluir notas'}
+                    >
+                      Excluir
+                    </button>
+                  </span>
+                )}
+              </div>
             </li>
           ))}
         </ul>
       )}
-    </div>
+        </div>
+      )}
+
+      {editando && (
+        <div className="nota-edicao-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setEditando(null) }}>
+          <div className="nota-edicao-modal" role="dialog" aria-label="Editar nota">
+            <div className="nota-edicao-topo">
+              <h3>Editar nota</h3>
+              <button className="btn-ghost notas-fechar" onClick={() => setEditando(null)} title="Fechar">x</button>
+            </div>
+            <div className="nota-edicao-toolbar">
+              <button
+                type="button"
+                className="btn-ghost btn-sm nota-italico-btn"
+                onMouseDown={event => event.preventDefault()}
+                onClick={aplicarNotaItalico}
+              >
+                Aplicar nota itálico
+              </button>
+            </div>
+            <label className="nota-edicao-campo">
+              <span>Nota normal</span>
+              <div
+                ref={normalRef}
+                className="nota-edicao-editor"
+                contentEditable
+                suppressContentEditableWarning
+                onFocus={() => { campoAtivoRef.current = normalRef.current }}
+              />
+            </label>
+            <label className="nota-edicao-campo">
+              <span>Nota VM</span>
+              <div
+                ref={vmRef}
+                className="nota-edicao-editor"
+                contentEditable
+                suppressContentEditableWarning
+                onFocus={() => { campoAtivoRef.current = vmRef.current }}
+              />
+            </label>
+            <div className="nota-edicao-acoes">
+              <button type="button" className="btn-ghost nota-edicao-excluir" onClick={event => excluirNotaSelecionada(editando, event)}>Excluir</button>
+              <button type="button" className="btn-ghost" onClick={() => setEditando(null)}>Cancelar</button>
+              <button type="button" className="btn-primary" onClick={salvarEdicaoNota}>Salvar nota</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
