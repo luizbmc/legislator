@@ -108,7 +108,7 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 
 .btn-ghost {
   color: var(--text-muted);
-  padding: 6px 12px;
+  padding: 6px 10px;
   border-radius: var(--radius);
   font-size: 13px;
   transition: background .15s, color .15s;
@@ -443,7 +443,7 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   margin-top: 10px; padding-top: 10px;
   border-top: 1px solid var(--border-soft);
 }
-.norma-data { font-size: 14px; color: var(--text-muted); }
+.norma-data { font-size: 12px; color: #696552; }
 .norma-card-acoes {
   display: flex;
   flex-wrap: wrap;
@@ -4785,7 +4785,7 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 }
 
 .btn-full { width: 100%; justify-content: center; }
-.btn-sm   { font-size: 14px; padding: 2px 8px; }
+.btn-sm   { font-size: 14px; padding: 2px 5px; }
 
 /* ── Erro ───────────────────────────────────────────────────────── */
 .modal-atualizar-erro {
