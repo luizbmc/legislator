@@ -18,6 +18,9 @@
 
   var TABLE_STYLE_NAME = "tabela1";
   var CELL_STYLE_NAME = "cel-corpo";
+  var CONDITION_NAMES = {
+    modificado: "Par\u00e1grafo adicionado/modificado"
+  };
 
   var DEFAULTS = {
     paragraph: {
@@ -145,6 +148,49 @@
     if (!pFields) return;
     if (pFields.Epigrafe) pFields.Epigrafe.text = "tit-subtit/epigrafe-emenda";
     if (pFields.Ementa) pFields.Ementa.text = "corpo-legis/emenda-ementa";
+  }
+
+  function ensureCondition(doc, name, color, method) {
+    var condition;
+    try {
+      condition = doc.conditions.add({
+        name: name,
+        indicatorColor: color,
+        indicatorMethod: method
+      });
+    } catch (err) {
+      condition = doc.conditions.itemByName(name);
+      condition.indicatorColor = color;
+      condition.indicatorMethod = method;
+    }
+    return condition;
+  }
+
+  function ensureLegislatorConditions(doc) {
+    return {
+      modificado: ensureCondition(
+        doc,
+        CONDITION_NAMES.modificado,
+        [167, 200, 55],
+        ConditionIndicatorMethod.useUnderline
+      )
+    };
+  }
+
+  function conditionForAlterado(alterado, conditions) {
+    alterado = String(alterado || "").toLowerCase();
+    if (alterado === "modificado" || alterado === "adicionado" || alterado === "added") return conditions.modificado;
+    return null;
+  }
+
+  function applyConditionToRange(textRange, condition) {
+    if (!condition || !textRange) return false;
+    try {
+      textRange.applyConditions(condition, false);
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   function getValidItem(collection, name) {
@@ -343,7 +389,7 @@
     if (localName(xml) === "Paragrafo") {
       tableXml = childTableXml(xml);
       if (tableXml && !textFromInlineXml(xml).replace(textFromInlineXml(tableXml), "").replace(/\s+/g, "")) {
-        return tableBlockFromXml(tableXml);
+        return tableBlockFromXml(tableXml, xmlAttr(xml, "alterado"));
       }
     }
     collectInline(xml, [], runs, footnotes);
@@ -358,7 +404,8 @@
       tag: localName(xml),
       text: text,
       runs: runs,
-      footnotes: footnotes
+      footnotes: footnotes,
+      alterado: xmlAttr(xml, "alterado")
     };
   }
 
@@ -371,7 +418,7 @@
     return String(text || "").replace(/\t/g, " ").replace(/\r|\n/g, " ");
   }
 
-  function tableBlockFromXml(xml) {
+  function tableBlockFromXml(xml, alteradoOverride) {
     var rows = [];
     var children = xml.children();
     var rowChildren, cells, i, j, tag;
@@ -390,7 +437,8 @@
     return {
       tag: "Tabela",
       isTable: true,
-      rows: rows
+      rows: rows,
+      alterado: alteradoOverride || xmlAttr(xml, "alterado")
     };
   }
 
@@ -604,6 +652,27 @@
       end: ip.index,
       story: story
     };
+  }
+
+  function applyConditionsToInsertedBlocks(story, insertedBounds, blocks, conditions) {
+    var insertedText, paragraphs, i, condition, applied = 0;
+
+    if (!story || insertedBounds.end <= insertedBounds.start) return 0;
+
+    try {
+      insertedText = story.characters.itemByRange(insertedBounds.start, insertedBounds.end - 1);
+      paragraphs = insertedText.paragraphs;
+    } catch (e0) {
+      return 0;
+    }
+
+    for (i = 0; i < blocks.length && i < paragraphs.length; i++) {
+      condition = conditionForAlterado(blocks[i].alterado, conditions);
+      if (!condition) continue;
+      if (applyConditionToRange(paragraphs[i].texts[0], condition)) applied++;
+    }
+
+    return applied;
   }
 
   function applyFootnotes(story, start, footnotes, styles) {
@@ -947,13 +1016,16 @@
     }
 
     var styles = resolveStyleMaps(doc, ui.map);
+    var conditions = ensureLegislatorConditions(doc);
     clearInsertionPointCharacterStyle(doc, target);
     prepareEmptyInsertionParagraph(doc, target, styles);
     var insertedBounds = insertBlocks(target.story, target.index, blocks, styles);
+    var appliedConditions = applyConditionsToInsertedBlocks(insertedBounds.story, insertedBounds, blocks, conditions);
 
     alert(
       "Norma inserida com sucesso.\n\n" +
-      "Paragrafos inseridos: " + blocks.length
+      "Paragrafos inseridos: " + blocks.length + "\n" +
+      "Marcacoes de alteracao aplicadas: " + appliedConditions
     );
   }
 

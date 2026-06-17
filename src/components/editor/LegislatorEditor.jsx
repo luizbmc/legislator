@@ -231,7 +231,7 @@ function blocoCompletoSelecionado(state) {
   return bloco.node
 }
 
-function inserirBlocoCopiado(view, nodeJson) {
+function inserirBlocoCopiado(view, nodeJson, marcarComoAdicionado = false) {
   if (!view || !nodeJson) return false
   let node
   try {
@@ -240,6 +240,17 @@ function inserirBlocoCopiado(view, nodeJson) {
     return false
   }
   if (!node?.isTextblock) return false
+  if (marcarComoAdicionado && node.type.attrs?.alterado && node.type.attrs?.diffType) {
+    node = node.type.create(
+      {
+        ...node.attrs,
+        alterado: 'modificado',
+        diffType: 'added',
+      },
+      node.content,
+      node.marks,
+    )
+  }
 
   const { state } = view
   const destino = blocoTopoEmPos(state.doc, state.selection.from)
@@ -460,11 +471,8 @@ export default function LegislatorEditor({
         const textoPuro = event.clipboardData?.getData('text/plain') || ''
 
         if (html.includes('data-pm-slice')) {
-          if (ultimoBlocoCopiadoRef.current && inserirBlocoCopiado(view, ultimoBlocoCopiadoRef.current)) {
+          if (ultimoBlocoCopiadoRef.current && inserirBlocoCopiado(view, ultimoBlocoCopiadoRef.current, trackInternalPasteAdditions)) {
             event.preventDefault()
-            if (trackInternalPasteAdditions) {
-              marcarBlocosColadosComoAdicionados(view, 1)
-            }
             return true
           }
           if (trackInternalPasteAdditions) {
