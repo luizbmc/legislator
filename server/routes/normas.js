@@ -96,6 +96,7 @@ router.post('/', (req, res) => {
       conteudo_doc,
       conteudo_txt,
       status = 'rascunho',
+      atualizado_por,
       tags = [],
     } = req.body
     const agora = new Date().toISOString()
@@ -105,9 +106,9 @@ router.post('/', (req, res) => {
         tipo, epigrafe, apelido, ementa, dados_publicacao,
         data_ultima_alteracao, atualizacao_pendente, vigencia, link_acesso, anexo, observacoes,
         conteudo_doc, conteudo_txt, status,
-        criado_em, atualizado_em
+        atualizado_por, criado_em, atualizado_em
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       tipo,
       epigrafe,
@@ -123,6 +124,7 @@ router.post('/', (req, res) => {
       conteudo_doc ?? '{"type":"doc","content":[]}',
       conteudo_txt ?? '',
       status || 'rascunho',
+      atualizado_por || null,
       agora,
       agora,
     )
@@ -147,7 +149,7 @@ router.post('/', (req, res) => {
 // PUT /:id — salvar conteúdo
 router.put('/:id', (req, res) => {
   try {
-    const { conteudo_doc, conteudo_txt, status, data_atualizacao } = req.body
+    const { conteudo_doc, conteudo_txt, status, data_atualizacao, atualizado_por } = req.body
     const id = req.params.id
 
     const atual = db.prepare(`SELECT * FROM normas WHERE id = ?`).get(id)
@@ -170,13 +172,14 @@ router.put('/:id', (req, res) => {
 
       db.prepare(`
         UPDATE normas
-        SET conteudo_doc = ?, conteudo_txt = ?, status = ?, data_atualizacao = ?, atualizado_em = ?
+        SET conteudo_doc = ?, conteudo_txt = ?, status = ?, data_atualizacao = ?, atualizado_por = ?, atualizado_em = ?
         WHERE id = ?
       `).run(
         conteudo_doc ?? '{"type":"doc","content":[]}',
         conteudo_txt ?? '',
         status ?? atual.status ?? 'rascunho',
         data_atualizacao ?? atual.data_atualizacao ?? null,
+        atualizado_por || atual.atualizado_por || null,
         agora,
         id,
       )
@@ -210,6 +213,7 @@ router.patch('/:id/meta', (req, res) => {
       link_acesso,
       anexo,
       observacoes,
+      atualizado_por,
       tags = [],
     } = req.body
     const id = req.params.id
@@ -228,6 +232,7 @@ router.patch('/:id/meta', (req, res) => {
         link_acesso = ?,
         anexo = ?,
         observacoes = ?,
+        atualizado_por = ?,
         atualizado_em = ?
       WHERE id = ?
     `).run(
@@ -242,6 +247,7 @@ router.patch('/:id/meta', (req, res) => {
       link_acesso || null,
       anexo || null,
       observacoes || null,
+      atualizado_por || null,
       agora,
       id,
     )

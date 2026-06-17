@@ -12,6 +12,7 @@ import PainelComentarios    from '../components/paineis/PainelComentarios.jsx'
 import PainelAlteracoes     from '../components/paineis/PainelAlteracoes.jsx'
 import PainelAtualizarNorma from '../components/paineis/PainelAtualizarNorma.jsx'
 import UsuarioAtualBadge    from '../components/UsuarioAtualBadge.jsx'
+import { selecionarTextoNoEditor } from '../components/editor/selecionarTexto.js'
 import { baixarXml }        from '../services/exportarXml.js'
 import { normalizarNotasVadeMecumLegado } from '../services/notasVadeMecum.js'
 import { xmlParaTiptap }     from '../services/importarXml.js'
@@ -258,6 +259,46 @@ function tiptapDocParaLinhasExcecoes(doc) {
 
 // ── Diff de palavras para exibição inline no painel ───────────────
 // Retorna array de { type: 'equal'|'added'|'removed', text: string }
+const EXCECOES_CONCLUIDAS_STORAGE_PREFIX = 'normando_excecoes_concluidas_'
+
+function normalizarAssinaturaExcecao(valor) {
+  return String(valor ?? '')
+    .normalize('NFKC')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+function assinaturaExcecao(exc = {}) {
+  return [
+    exc.tipo,
+    exc.descricao,
+    exc.style,
+    exc.alvoTexto,
+    exc.textoContexto || exc.texto,
+  ].map(normalizarAssinaturaExcecao).join('|')
+}
+
+function storageKeyExcecoesConcluidas(normaId) {
+  return `${EXCECOES_CONCLUIDAS_STORAGE_PREFIX}${normaId || 'sem_norma'}`
+}
+
+function carregarExcecoesConcluidas(normaId) {
+  try {
+    const raw = window.localStorage.getItem(storageKeyExcecoesConcluidas(normaId))
+    const lista = JSON.parse(raw || '[]')
+    return new Set(Array.isArray(lista) ? lista : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function salvarExcecoesConcluidas(normaId, conjunto) {
+  try {
+    window.localStorage.setItem(storageKeyExcecoesConcluidas(normaId), JSON.stringify([...conjunto]))
+  } catch {}
+}
+
 function diffWords(a, b) {
   const tok = s => s.match(/\S+|\s+/g) ?? []
   const A = tok(a), B = tok(b)
@@ -674,6 +715,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
   const [nomeArq,   setNomeArq]   = useState('')
   const [autoExecutarRotinas, setAutoExecutarRotinas] = useState(0)
   const [excecoes,  setExcecoes]  = useState([])
+  const [excecoesConcluidas, setExcecoesConcluidas] = useState(() => carregarExcecoesConcluidas(id))
   const [editor,    setEditor]    = useState(null)
   const [salvando,  setSalvando]  = useState(false)
   const [abaEsq,    setAbaEsq]    = useState('rotinas')
@@ -750,6 +792,10 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
   const padronizacaoPodeSubstituir = modoEdicaoManual || emRevisao
 
   // ── Carga inicial ─────────────────────────────────────────────
+  useEffect(() => {
+    setExcecoesConcluidas(carregarExcecoesConcluidas(id))
+  }, [id])
+
   useEffect(() => {
     window.legislator.normas.buscar(parseInt(id)).then(n => {
       const textoComum = isTipoTextoComum(n.tipo)
@@ -1272,17 +1318,34 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
 
     const from = posicaoDocPorOffsetTexto(bloco, inicio)
     const to = posicaoDocPorOffsetTexto(bloco, fim)
-    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return exc
+    const base = {
+      ...exc,
+      textoContexto: texto,
+    }
+    const assinatura = assinaturaExcecao(base)
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) {
+      return { ...base, assinatura }
+    }
 
-    return { ...exc, from, to }
+    return { ...base, from, to, assinatura }
   }
 
-  function receberExcecoesDetectadas(lista = []) {
-    const normalizadas = (Array.isArray(lista) ? lista : []).map(localizarExcecaoNoEditor)
+  function receberExcecoesDetectadas(lista = [], opcoes = {}) {
+    const normalizadas = (Array.isArray(lista) ? lista : [])
+      .map(localizarExcecaoNoEditor)
+      .map(exc => {
+        const assinatura = exc.assinatura || assinaturaExcecao(exc)
+        return {
+          ...exc,
+          assinatura,
+          resolvida: excecoesConcluidas.has(assinatura),
+        }
+      })
     setExcecoes(normalizadas)
     const temPendentes = normalizadas.some(exc => !exc.resolvida)
-    setExcecoesAberto(temPendentes)
-    if (temPendentes) {
+    const deveAbrir = temPendentes || (opcoes.abrirConcluidas && normalizadas.length > 0)
+    setExcecoesAberto(deveAbrir)
+    if (deveAbrir) {
       setNotasAberto(false)
       setAlteracoesAberto(false)
     }
@@ -1292,13 +1355,41 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
   function rodarExcecoesDoTopo() {
     if (!editor) return
     const resultado = detectarExcecoes(tiptapDocParaLinhasExcecoes(editor.getJSON()))
-    const temPendentes = receberExcecoesDetectadas(resultado.excecoes)
+    const temPendentes = receberExcecoesDetectadas(resultado.excecoes, { abrirConcluidas: true })
+    if (!temPendentes && resultado.excecoes?.length) return
     if (!temPendentes) alert('Nenhuma exceção encontrada.')
   }
 
   function limparExcecoesDetectadas() {
     setExcecoes([])
     setExcecoesAberto(false)
+  }
+
+  function atualizarExcecoesConcluidas(proximo) {
+    setExcecoesConcluidas(proximo)
+    salvarExcecoesConcluidas(id, proximo)
+  }
+
+  function concluirExcecao(idx) {
+    const exc = excecoes[idx]
+    if (!exc) return
+    const assinatura = exc.assinatura || assinaturaExcecao(exc)
+    const proximo = new Set(excecoesConcluidas)
+    proximo.add(assinatura)
+    atualizarExcecoesConcluidas(proximo)
+    setExcecoes(prev => prev.map((e, i) =>
+      i === idx ? { ...e, assinatura, resolvida: true } : e))
+  }
+
+  function reabrirExcecao(idx) {
+    const exc = excecoes[idx]
+    if (!exc) return
+    const assinatura = exc.assinatura || assinaturaExcecao(exc)
+    const proximo = new Set(excecoesConcluidas)
+    proximo.delete(assinatura)
+    atualizarExcecoesConcluidas(proximo)
+    setExcecoes(prev => prev.map((e, i) =>
+      i === idx ? { ...e, assinatura, resolvida: false } : e))
   }
 
   function inserirNotaRodape(e) {
@@ -1378,12 +1469,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
 
   function irParaOcorrenciaPadronizacao(ocorrencia) {
     if (!editor || !ocorrencia) return
-    editor
-      .chain()
-      .focus()
-      .setTextSelection({ from: ocorrencia.from, to: ocorrencia.to })
-      .scrollIntoView()
-      .run()
+    selecionarTextoNoEditor(editor, { from: ocorrencia.from, to: ocorrencia.to })
   }
 
   function trocarAbaPadronizacao(abaId) {
@@ -1646,6 +1732,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
         conteudo_doc: JSON.stringify(doc),
         conteudo_txt: txt,
         status,
+        atualizado_por: usuarioAtual?.nome || '',
       }
       if (opts.data_atualizacao) payload.data_atualizacao = opts.data_atualizacao
       await window.legislator.normas.salvar(parseInt(id), payload)
@@ -1658,7 +1745,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
     } finally {
       setSalvando(false)
     }
-  }, [editor, id, excecoes, status])
+  }, [editor, id, excecoes, status, usuarioAtual])
 
   // ── Editar metadados ──────────────────────────────────────────
   async function abrirEditarMeta() {
@@ -1694,7 +1781,11 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
     setEditSalvando(true)
     setEditErro('')
     try {
-      const atualizada = await window.legislator.normas.atualizarMeta(parseInt(id), { ...editForm, tags: editTags })
+      const atualizada = await window.legislator.normas.atualizarMeta(parseInt(id), {
+        ...editForm,
+        tags: editTags,
+        atualizado_por: usuarioAtual?.nome || '',
+      })
       setNorma(atualizada)
       setModalEditarMeta(false)
     } catch (err) {
@@ -2071,6 +2162,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
         conteudo_doc: JSON.stringify(doc),
         conteudo_txt: txt,
         data_atualizacao: dataAtual,
+        atualizado_por: usuarioAtual?.nome || '',
       })
       setNorma(prev => ({ ...prev, data_atualizacao: dataAtual }))
       editor.commands.clearDiffDecorations()
@@ -2702,10 +2794,8 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
                 aberto={excecoesAberto}
                 modoVadeMecum={modoVadeMecumAtivo}
                 onFechar={() => setExcecoesAberto(false)}
-                onResolver={idx =>
-                  setExcecoes(prev => prev.map((e, i) =>
-                    i === idx ? { ...e, resolvida: true } : e))
-                }
+                onResolver={concluirExcecao}
+                onReabrir={reabrirExcecao}
               />
             )}
             <LegislatorEditor

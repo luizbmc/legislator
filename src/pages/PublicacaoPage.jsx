@@ -792,7 +792,7 @@ function extrairRecortesDaNorma(doc, especificacao, tipoNorma = '') {
   })
 }
 
-export default function PublicacaoPage() {
+export default function PublicacaoPage({ usuarioAtual }) {
   const { id } = useParams()
   const nav    = useNavigate()
 
@@ -1077,6 +1077,7 @@ export default function PublicacaoPage() {
         link_acesso: novaNormaForm.link_acesso.trim(),
         anexo: novaNormaForm.anexo.trim(),
         observacoes: novaNormaForm.observacoes.trim(),
+        atualizado_por: usuarioAtual?.nome || '',
         tags: novaNormaTags,
       })
       const normaCriada = {
@@ -1149,6 +1150,7 @@ export default function PublicacaoPage() {
         apelido: origem.apelido || '',
         ementa: origem.ementa || '',
         vigencia: origem.vigencia || 'Vigente',
+        atualizado_por: usuarioAtual?.nome || '',
         tags: [],
         status: 'rascunho',
       })
@@ -1157,6 +1159,7 @@ export default function PublicacaoPage() {
         conteudo_txt: conteudoTxt,
         status: 'rascunho',
         data_atualizacao: criada.data_atualizacao || null,
+        atualizado_por: usuarioAtual?.nome || '',
       })
       const normaCriada = {
         ...criada,

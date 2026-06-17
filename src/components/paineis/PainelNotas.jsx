@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Fragment } from 'prosemirror-model'
+import { selecionarTextoNoEditor } from '../editor/selecionarTexto.js'
 
 function hasMark(node, name) {
   return (node.marks || []).some(mark => mark.type.name === name)
@@ -289,18 +290,6 @@ function renderVmPreview(preview) {
   return renderNotaTexto(preview)
 }
 
-function scrollToSelection(editor, from) {
-  requestAnimationFrame(() => {
-    try {
-      const { node } = editor.view.domAtPos(from)
-      const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : node
-      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    } catch {
-      editor.commands.scrollIntoView()
-    }
-  })
-}
-
 function criarNodesNota(schema, nota, normalSegments, vmSegments) {
   const notaType = schema.marks.nota
   const italicType = schema.marks.italic
@@ -413,8 +402,7 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
   function irParaNota(nota, idx) {
     if (!editor || !nota) return
     setAtiva(idx)
-    editor.chain().focus().setTextSelection({ from: nota.from, to: nota.to }).run()
-    scrollToSelection(editor, nota.from)
+    selecionarTextoNoEditor(editor, { from: nota.from, to: nota.to })
   }
 
   function abrirEdicaoNota(nota, idx, event) {

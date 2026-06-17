@@ -37,7 +37,7 @@ function formInicial(origem) {
   }
 }
 
-export default function NovaNorma() {
+export default function NovaNorma({ usuarioAtual }) {
   const nav = useNavigate()
   const location = useLocation()
   const duplicarNorma = location.state?.duplicarNorma || null
@@ -95,13 +95,14 @@ export default function NovaNorma() {
     setSalvando(true)
     setErro('')
     try {
-      const norma = await window.legislator.normas.criar({ ...form, tags })
+      const norma = await window.legislator.normas.criar({ ...form, tags, atualizado_por: usuarioAtual?.nome || '' })
       if (duplicarNorma) {
         await window.legislator.normas.salvar(norma.id, {
           conteudo_doc: duplicarNorma.conteudo_doc || DOC_VAZIO,
           conteudo_txt: duplicarNorma.conteudo_txt || '',
           status: duplicarNorma.status || 'rascunho',
           data_atualizacao: duplicarNorma.data_atualizacao || null,
+          atualizado_por: usuarioAtual?.nome || '',
         })
       }
       nav(`/editor/${norma.id}`)

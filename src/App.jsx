@@ -70,12 +70,12 @@ export default function App() {
     <HashRouter>
       <Routes>
         <Route path="/"                   element={<Home usuarioAtual={usuarioAtual} onTrocarUsuario={trocarUsuario} />} />
-        <Route path="/nova"               element={<NovaNorma />} />
+        <Route path="/nova"               element={<NovaNorma usuarioAtual={usuarioAtual} />} />
         <Route path="/editor/:id"         element={<Editor usuarioAtual={usuarioAtual} onTrocarUsuario={trocarUsuario} />} />
         <Route path="/configuracoes"      element={<Configuracoes />} />
         <Route path="/rotinas"            element={<Rotinas />} />
         <Route path="/publicacoes"        element={<PublicacoesPage usuarioAtual={usuarioAtual} onTrocarUsuario={trocarUsuario} />} />
-        <Route path="/publicacoes/:id"    element={<PublicacaoPage />} />
+        <Route path="/publicacoes/:id"    element={<PublicacaoPage usuarioAtual={usuarioAtual} />} />
       </Routes>
     </HashRouter>
   )

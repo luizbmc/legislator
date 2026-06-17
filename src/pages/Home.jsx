@@ -82,6 +82,24 @@ function normaTemTagVm(norma) {
   return (norma.tags || []).some(tag => normalizarBusca(tag) === 'vm')
 }
 
+function dataCurta(valor) {
+  if (!valor) return ''
+  const data = new Date(valor)
+  if (Number.isNaN(data.getTime())) return ''
+  return data.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+  })
+}
+
+function textoAtualizacaoNorma(norma) {
+  const data = dataCurta(norma?.atualizado_em)
+  if (!data) return ''
+  const usuario = String(norma?.atualizado_por || '').trim()
+  return usuario ? `Atualizado por ${usuario} em ${data}` : `Atualizado em ${data}`
+}
+
 function AvisoAtualizacaoPendente({ norma }) {
   if (!norma?.atualizacao_pendente) return null
   return <span className="norma-pendente-icone" title="Atualização pendente">⚠️</span>
@@ -270,7 +288,7 @@ export default function Home({ usuarioAtual, onTrocarUsuario }) {
                 )}
                 <div className="norma-card-footer">
                   <span className="norma-data">
-                    Atualizado em {new Date(n.atualizado_em).toLocaleDateString('pt-BR')}
+                    {textoAtualizacaoNorma(n)}
                   </span>
                   <div className="norma-card-acoes">
                     <button className="btn-ghost btn-sm" onClick={e => duplicar(e, n.id)} title="Duplicar norma">

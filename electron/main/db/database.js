@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS normas (
   conteudo_doc  TEXT NOT NULL DEFAULT '{"type":"doc","content":[]}',
   conteudo_txt  TEXT NOT NULL DEFAULT '',
   status        TEXT NOT NULL DEFAULT 'rascunho',
+  atualizado_por TEXT,
   criado_em     TEXT NOT NULL DEFAULT (datetime('now')),
   atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -250,6 +251,10 @@ export async function initDatabase() {
   if (!colsNormas.includes('caminho_rede')) {
     _sqlDb.exec('ALTER TABLE normas ADD COLUMN caminho_rede TEXT')
     console.log('Migration: coluna caminho_rede adicionada')
+  }
+  if (!colsNormas.includes('atualizado_por')) {
+    _sqlDb.exec('ALTER TABLE normas ADD COLUMN atualizado_por TEXT')
+    console.log('Migration: coluna atualizado_por adicionada')
   }
   _sqlDb.exec("UPDATE normas SET vigencia = 'Vigente' WHERE vigencia IS NULL OR trim(vigencia) = ''")
   _sqlDb.exec("UPDATE normas SET tipo = 'Lei Ordinária' WHERE tipo = 'Lei'")

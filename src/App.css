@@ -2620,6 +2620,19 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   color: var(--warn);
 }
 
+.excecoes-acoes {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 8px 0;
+}
+
+.excecoes-toggle-concluidas {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 .excecoes-painel .excecoes-lista {
   padding: 6px;
   gap: 4px;
@@ -2628,6 +2641,15 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 .excecoes-painel .excecao-item {
   padding: 0;
   border-bottom: 0;
+}
+
+.excecoes-painel .excecao-item.concluida {
+  opacity: .68;
+}
+
+.excecoes-painel .excecao-item.concluida .excecao-corpo {
+  background: #f8fafc;
+  border-color: var(--border-soft);
 }
 
 .excecoes-painel .excecao-corpo {
@@ -2648,6 +2670,11 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 
 .excecoes-painel .excecao-ok {
   margin: 7px 6px 0 0;
+}
+
+.excecoes-painel .excecao-item.concluida .excecao-ok {
+  background: #eef2ff;
+  color: #4f46e5;
 }
 
 .busca-linha {

@@ -1,22 +1,8 @@
 import { useEffect, useState } from 'react'
+import { selecionarTextoNoEditor } from '../editor/selecionarTexto.js'
 
 function selecionarEExibir(editor, from, to) {
-  if (!editor || !Number.isFinite(from) || !Number.isFinite(to) || to <= from) return
-
-  editor
-    .chain()
-    .focus()
-    .setTextSelection({ from, to })
-    .scrollIntoView()
-    .run()
-
-  requestAnimationFrame(() => {
-    try {
-      const { node } = editor.view.domAtPos(from)
-      const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement
-      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    } catch (_) {}
-  })
+  selecionarTextoNoEditor(editor, { from, to })
 }
 
 function blocoOcultoPorModoVm(node, modoVadeMecum = false) {
@@ -176,12 +162,25 @@ function irParaExcecao(editor, exc, modoVadeMecum = false) {
   selecionarEExibir(editor, from, to)
 }
 
-export default function PainelExcecoes({ excecoes = [], onResolver, editor, aberto = true, onFechar, modoVadeMecum = false }) {
+export default function PainelExcecoes({
+  excecoes = [],
+  onResolver,
+  onReabrir,
+  editor,
+  aberto = true,
+  onFechar,
+  modoVadeMecum = false,
+}) {
   const pendentes = excecoes.filter(e => !e.resolvida)
+  const concluidas = excecoes.filter(e => e.resolvida)
+  const [mostrarConcluidas, setMostrarConcluidas] = useState(false)
   const [ativa, setAtiva] = useState(-1)
 
   useEffect(() => {
-    if (!aberto) setAtiva(-1)
+    if (!aberto) {
+      setAtiva(-1)
+      setMostrarConcluidas(false)
+    }
   }, [aberto])
 
   if (!aberto) return null
@@ -190,6 +189,8 @@ export default function PainelExcecoes({ excecoes = [], onResolver, editor, aber
     setAtiva(idx)
     irParaExcecao(editor, exc, modoVadeMecum)
   }
+
+  const visiveis = mostrarConcluidas ? excecoes : pendentes
 
   return (
     <div className="notas-painel excecoes-painel" role="dialog" aria-label="Navegador de exceções">
@@ -201,27 +202,46 @@ export default function PainelExcecoes({ excecoes = [], onResolver, editor, aber
         {onFechar && <button className="btn-ghost notas-fechar" onClick={onFechar} title="Fechar">x</button>}
       </div>
 
-      {pendentes.length === 0 ? (
+      {concluidas.length > 0 && (
+        <div className="excecoes-acoes">
+          <button
+            type="button"
+            className="btn-ghost excecoes-toggle-concluidas"
+            onClick={() => setMostrarConcluidas(v => !v)}
+          >
+            {mostrarConcluidas ? 'Ocultar concluídas' : `Exibir concluídas (${concluidas.length})`}
+          </button>
+        </div>
+      )}
+
+      {visiveis.length === 0 ? (
         <p className="notas-vazio">✓ Sem exceções pendentes</p>
       ) : (
         <ul className="notas-lista excecoes-lista">
-          {excecoes.map((exc, i) => exc.resolvida ? null : (
-            <li key={i} className="excecao-item">
-              <div
-                className={`excecao-corpo${i === ativa ? ' ativa' : ''}`}
-                onClick={() => selecionarExcecao(exc, i)}
-                title="Ir para este trecho"
-                style={{ cursor: editor ? 'pointer' : 'default' }}
-              >
-                <span className="excecao-linha">L{exc.linha}</span>
-                <span className="excecao-desc">{exc.descricao}</span>
-                <code className="excecao-texto">"{exc.alvoTexto || exc.texto}"</code>
-              </div>
-              <button className="excecao-ok" onClick={() => onResolver(i)} title="Marcar como resolvida">
-                ✓
-              </button>
-            </li>
-          ))}
+          {excecoes.map((exc, i) => {
+            if (!mostrarConcluidas && exc.resolvida) return null
+            return (
+              <li key={exc.assinatura || i} className={`excecao-item${exc.resolvida ? ' concluida' : ''}`}>
+                <div
+                  className={`excecao-corpo${i === ativa ? ' ativa' : ''}`}
+                  onClick={() => selecionarExcecao(exc, i)}
+                  title="Ir para este trecho"
+                  style={{ cursor: editor ? 'pointer' : 'default' }}
+                >
+                  <span className="excecao-linha">L{exc.linha}</span>
+                  <span className="excecao-desc">{exc.descricao}</span>
+                  <code className="excecao-texto">"{exc.alvoTexto || exc.texto}"</code>
+                </div>
+                <button
+                  className="excecao-ok"
+                  onClick={() => exc.resolvida ? onReabrir?.(i) : onResolver?.(i)}
+                  title={exc.resolvida ? 'Voltar a exibir como pendente' : 'Marcar como concluída'}
+                >
+                  {exc.resolvida ? '↺' : '✓'}
+                </button>
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>

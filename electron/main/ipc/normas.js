@@ -11,7 +11,7 @@ export function registerNormasHandlers() {
       SELECT n.id, n.tipo, n.epigrafe, n.apelido, n.ementa, n.status,
              n.dados_publicacao, n.data_ultima_alteracao, n.vigencia,
              n.atualizacao_pendente, n.link_acesso, n.anexo, n.observacoes,
-             n.criado_em, n.atualizado_em,
+             n.criado_em, n.atualizado_em, n.atualizado_por,
              GROUP_CONCAT(t.nome, '|||') AS tags_str
       FROM normas n
       LEFT JOIN norma_tags nt ON nt.norma_id = n.id
@@ -79,15 +79,16 @@ export function registerNormasHandlers() {
       conteudo_doc,
       conteudo_txt,
       status = 'rascunho',
+      atualizado_por,
       tags = [],
     } = dados
     const result = db.prepare(`
       INSERT INTO normas (
         tipo, epigrafe, apelido, ementa, dados_publicacao,
         data_ultima_alteracao, atualizacao_pendente, vigencia, link_acesso, anexo, observacoes,
-        conteudo_doc, conteudo_txt, status
+        conteudo_doc, conteudo_txt, status, atualizado_por
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       tipo,
       epigrafe,
@@ -103,6 +104,7 @@ export function registerNormasHandlers() {
       conteudo_doc ?? '{"type":"doc","content":[]}',
       conteudo_txt ?? '',
       status || 'rascunho',
+      atualizado_por || null,
     )
     const id = result.lastInsertRowid
 
@@ -121,7 +123,7 @@ export function registerNormasHandlers() {
   })
 
   // ── Salvar (cria versão automática) ───────────────────────────
-  ipcMain.handle('normas:salvar', (_, id, { conteudo_doc, conteudo_txt, status, data_atualizacao }) => {
+  ipcMain.handle('normas:salvar', (_, id, { conteudo_doc, conteudo_txt, status, data_atualizacao, atualizado_por }) => {
     const db = getDb()
 
     // Guarda versão anterior antes de sobrescrever
@@ -146,9 +148,10 @@ export function registerNormasHandlers() {
           conteudo_txt      = ?,
           status            = COALESCE(?, status),
           data_atualizacao  = COALESCE(?, data_atualizacao),
+          atualizado_por    = COALESCE(?, atualizado_por),
           atualizado_em     = datetime('now')
         WHERE id = ?
-      `).run(conteudo_doc, conteudo_txt ?? '', status ?? null, data_atualizacao ?? null, id)
+      `).run(conteudo_doc, conteudo_txt ?? '', status ?? null, data_atualizacao ?? null, atualizado_por || null, id)
     })()
 
     return db.prepare('SELECT * FROM normas WHERE id = ?').get(id)
@@ -167,6 +170,7 @@ export function registerNormasHandlers() {
     link_acesso,
     anexo,
     observacoes,
+    atualizado_por,
     tags = [],
   }) => {
     const db = getDb()
@@ -184,6 +188,7 @@ export function registerNormasHandlers() {
         link_acesso   = ?,
         anexo         = ?,
         observacoes   = ?,
+        atualizado_por = COALESCE(?, atualizado_por),
         atualizado_em = datetime('now')
       WHERE id = ?
     `).run(
@@ -198,6 +203,7 @@ export function registerNormasHandlers() {
       link_acesso || null,
       anexo || null,
       observacoes || null,
+      atualizado_por || null,
       id,
     )
 
