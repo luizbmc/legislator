@@ -832,7 +832,7 @@ function extrairRecortesDaNorma(doc, especificacao, tipoNorma = '') {
 
     return {
       entrada,
-      erro: selecionados.length <= 1 && parsed.tipo !== 'caput' ? 'Nenhum dispositivo específico encontrado no artigo.' : null,
+      erro: selecionados.length <= 1 && !['caput', 'artigoInteiro'].includes(parsed.tipo) ? 'Nenhum dispositivo específico encontrado no artigo.' : null,
       textos: exibidos.map(textoNoRecorte),
       blocos: exibidos,
       total: selecionados.length,
