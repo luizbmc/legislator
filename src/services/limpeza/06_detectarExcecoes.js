@@ -15,6 +15,12 @@ const RE_TERMO_ITALICO_OBRIGATORIO = /\b(?:Diário|[Cc]aput|DOU)\b/
 const RE_NOTA_PARENTETICA_INICIAL = /^\((?:Vide|Revogad[oa]|Incluíd[oa]|Incluid[oa]|Acrescid[oa]|Renumerad[oa]|Redação dada|Com redação|Vigência|(?:Artigo|Inciso|Alínea|Alinea|Item|Parágrafo|Paragrafo)\s+(?:revogad[oa]|incluíd[oa]|incluid[oa]|acrescid[oa]|renumerad[oa]))/i
 const ESTILOS_ENUMERACAO = new Set(['inciso', 'alinea', 'item'])
 const NIVEL_ENUMERACAO = { inciso: 1, alinea: 2, item: 3 }
+const ESTILOS_FECHAM_ENUMERACAO = new Set([
+  'paragrafo',
+  'artigo',
+  'parte-livro-tit-cap',
+  'secao-subsecao',
+])
 
 function alvoRegex(texto, regex) {
   const match = String(texto || '').match(regex)
@@ -97,6 +103,29 @@ function textoPrincipalEnumeracao(linha) {
   return textoSemNotas(linha).replace(/[ \u00a0]+$/g, '')
 }
 
+function textoDepoisDoRotuloEnumeracao(linha) {
+  const texto = textoPrincipalEnumeracao(linha).trim()
+  return removerRotuloEnumeracao(linha, texto)
+}
+
+function textoCompletoDepoisDoRotuloEnumeracao(linha) {
+  const texto = String(linha?.text || '').trim()
+  return removerRotuloEnumeracao(linha, texto)
+}
+
+function removerRotuloEnumeracao(linha, texto) {
+  if (linha?.style === 'inciso') {
+    return texto.replace(/^[IVXLCDM]+(?:-[A-Z])?\s*[–—-]\.?\s*/i, '').trim()
+  }
+  if (linha?.style === 'alinea') {
+    return texto.replace(/^[a-zà-ÿ]\)\s*/i, '').trim()
+  }
+  if (linha?.style === 'item') {
+    return texto.replace(/^\d+[.)]?\s*/, '').trim()
+  }
+  return texto
+}
+
 function ultimoCharPrincipal(linha) {
   const texto = textoPrincipalEnumeracao(linha)
   return texto ? texto.charAt(texto.length - 1) : ''
@@ -121,6 +150,30 @@ function proximoSignificativo(linhas, inicio) {
     if (linhas[i]?.style !== 'vazio') return i
   }
   return -1
+}
+
+function incisoSeguinteSoNotaRevogadoOuVetado(linhas, indiceInciso) {
+  const inciso = linhas[indiceInciso]
+  if (inciso?.style !== 'inciso') return false
+
+  const textoInciso = textoCompletoDepoisDoRotuloEnumeracao(inciso)
+  if (!/^\((?:Vetado|Revogado)/i.test(textoInciso)) return false
+
+  const depoisDoInciso = proximoSignificativo(linhas, indiceInciso + 1)
+  return depoisDoInciso >= 0 && ESTILOS_FECHAM_ENUMERACAO.has(linhas[depoisDoInciso]?.style)
+}
+
+function pontuacaoEsperadaUltimoEnumeracao(linhas, estilo, indiceSeguinte) {
+  if (estilo !== 'alinea' && estilo !== 'item') return 'ponto'
+  if (indiceSeguinte < 0) return 'ponto'
+
+  const estiloSeguinte = linhas[indiceSeguinte]?.style
+  if (ESTILOS_FECHAM_ENUMERACAO.has(estiloSeguinte)) return 'ponto'
+  if (estiloSeguinte === 'inciso' && incisoSeguinteSoNotaRevogadoOuVetado(linhas, indiceSeguinte)) {
+    return 'ponto'
+  }
+
+  return 'ponto-e-virgula'
 }
 
 function numeroArtigoParaInteiro(valor) {
@@ -374,6 +427,7 @@ function adicionarExcecoesPontuacaoEnumeracoes(linhas, excecoes) {
     const ultimoIntroduzSublista =
       ESTILOS_ENUMERACAO.has(estiloSeguinte) &&
       NIVEL_ENUMERACAO[estiloSeguinte] > NIVEL_ENUMERACAO[estilo]
+    const pontuacaoEsperadaUltimo = pontuacaoEsperadaUltimoEnumeracao(linhas, estilo, depoisDoGrupo)
 
     for (let g = 0; g < grupoComTexto.length; g++) {
       const indice = grupoComTexto[g]
@@ -392,12 +446,21 @@ function adicionarExcecoesPontuacaoEnumeracoes(linhas, excecoes) {
         ))
       }
 
-      if (ultimo && final !== '.' && final !== ':') {
+      if (ultimo && pontuacaoEsperadaUltimo === 'ponto' && final !== '.' && final !== ':') {
         excecoes.push(criarExcecaoPontuacaoEnumeracao(
           linha,
           indice,
           'enumeracao_final_sem_ponto',
           'Último elemento de enumeração deve terminar com ponto final',
+        ))
+      }
+
+      if (ultimo && pontuacaoEsperadaUltimo === 'ponto-e-virgula' && final !== ';') {
+        excecoes.push(criarExcecaoPontuacaoEnumeracao(
+          linha,
+          indice,
+          'enumeracao_final_sem_ponto_e_virgula',
+          'Último elemento desta enumeração deve terminar com ponto e vírgula',
         ))
       }
     }
