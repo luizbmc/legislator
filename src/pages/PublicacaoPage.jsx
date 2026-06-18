@@ -270,8 +270,14 @@ function normalizarTextoRecorte(valor) {
 }
 
 function numeroArtigoNode(node) {
-  const texto = textoComMarcaRecorte(node, 'boldArtigo')
-  const match = texto.match(ROTULO_ARTIGO_RE)
+  const textoBoldArtigo = textoComMarcaRecorte(node, 'boldArtigo')
+  const matchBoldArtigo = textoBoldArtigo.match(ROTULO_ARTIGO_RE)
+  if (matchBoldArtigo) return normalizarNumeroArtigo(matchBoldArtigo[1])
+
+  const texto = textoBlocoRecorte(node)
+  const match = (node?.type === 'artigo' || node?.type === 'artigoTitulo')
+    ? texto.match(ROTULO_ARTIGO_RE)
+    : null
   return match ? normalizarNumeroArtigo(match[1]) : ''
 }
 
