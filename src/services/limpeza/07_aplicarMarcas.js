@@ -28,6 +28,7 @@ import { substituirTextoEmNota, RE_EMENDA_CONSTITUCIONAL_NOTA, RE_PARENTESE_INTE
 
 const ABRE_ASPAS_CIT  = /^["\u201C\u201D\u201E\u201F\u00AB\u00BB\u2033\u2036\u02BA]/
 const FECHA_ASPAS_CIT = /["\u201C\u201D\u201E\u201F\u00AB\u00BB\u2033\u2036\u02BA]\s*(?:\([^)]{0,160}\))?\s*$/
+const TERMINA_COM_DOIS_PONTOS_OU_NOTA_CIT = /:\s*(?:\([^)]{0,260}\)\s*)*$/
 
 // Estilos que nunca são reclassificados como citação (equivalente ao
 // TIPOS_FIXOS do aplicarCitacoes.js, mas com os nomes de style do pipeline)
@@ -53,7 +54,7 @@ function reclassificarCitacoes(linhas) {
 
     if (!emCitacao) {
       const abre = ABRE_ASPAS_CIT.test(text)
-      const prevTerminouComDoisPontos = /:\s*$/.test(prevNaoVazioText)
+      const prevTerminouComDoisPontos = TERMINA_COM_DOIS_PONTOS_OU_NOTA_CIT.test(prevNaoVazioText)
 
       if (abre && (prevTerminouComDoisPontos || prevFoiCitFechada)) {
         emCitacao         = true

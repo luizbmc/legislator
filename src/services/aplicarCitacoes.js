@@ -36,6 +36,7 @@ function getNodeText(node) {
 // ── Padrões de abertura e fechamento ─────────────────────────────
 const ABRE_ASPAS  = /^["\u201C\u201D\u201E\u201F\u00AB\u00BB\u2033\u2036\u02BA]/
 const FECHA_ASPAS = /["\u201C\u201D\u201E\u201F\u00AB\u00BB\u2033\u2036\u02BA]\s*(?:\([^)]{0,160}\))?\s*$/
+const TERMINA_COM_DOIS_PONTOS_OU_NOTA = /:\s*(?:\([^)]{0,260}\)\s*)*$/
 
 // ── Tipos que nunca são reclassificados como citação ──────────────
 const TIPOS_FIXOS = new Set([
@@ -180,7 +181,7 @@ export function aplicarCitacoes(doc) {
     if (!emCitacao) {
       const abre = ABRE_ASPAS.test(text)
       const prevTexto = prevNaoVazio ? getNodeText(prevNaoVazio).trimEnd() : ''
-      const prevTerminouComDoisPontos = /:\s*$/.test(prevTexto)
+      const prevTerminouComDoisPontos = TERMINA_COM_DOIS_PONTOS_OU_NOTA.test(prevTexto)
 
       if (abre && (prevTerminouComDoisPontos || prevFoiCitFechada)) {
         emCitacao         = true

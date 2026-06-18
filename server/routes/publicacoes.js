@@ -3,6 +3,12 @@ const router = express.Router()
 const db = require('../db')
 
 const SECOES_PADRAO = ['Normas principais', 'Normas correlatas', 'Outras normas']
+const EXPORTACOES_VALIDAS = new Set(['ignorar', 'atualizacao', 'completa'])
+
+function exportacaoParaSalvar(norma) {
+  if (norma?.status !== 'finalizado' || norma?.atualizacao_pendente) return 'ignorar'
+  return EXPORTACOES_VALIDAS.has(norma?.exportacao) ? norma.exportacao : 'completa'
+}
 
 function buscarCompleto(id) {
   const pub = db.prepare(`SELECT * FROM publicacoes WHERE id = ?`).get(id)
@@ -27,26 +33,92 @@ function buscarCompleto(id) {
   return pub
 }
 
+function idNumerico(valor) {
+  const numero = Number(valor)
+  return Number.isInteger(numero) && numero > 0 ? numero : null
+}
+
+function normaIdPublicacao(norma) {
+  return idNumerico(norma?.norma_id ?? norma?.normaId ?? norma?.id)
+}
+
+function valoresDiferentes(a, b) {
+  return String(a ?? '') !== String(b ?? '')
+}
+
 function salvarSecoes(publicacaoId, secoes) {
-  db.prepare(`DELETE FROM publicacao_secoes WHERE publicacao_id = ?`).run(publicacaoId)
+  const secoesAtuais = db.prepare(`
+    SELECT id, titulo, ordem FROM publicacao_secoes WHERE publicacao_id = ?
+  `).all(publicacaoId)
+  const secoesPorId = new Map(secoesAtuais.map(secao => [Number(secao.id), secao]))
+  const secoesMantidas = new Set()
 
   for (let i = 0; i < secoes.length; i++) {
     const secao = secoes[i]
-    const result = db.prepare(`
-      INSERT INTO publicacao_secoes (publicacao_id, titulo, ordem) VALUES (?, ?, ?)
-    `).run(publicacaoId, secao.titulo, i)
+    let secaoId = idNumerico(secao.id)
+    const secaoAtual = secaoId ? secoesPorId.get(secaoId) : null
 
-    const secaoId = result.lastInsertRowid
-
-    if (secao.normas && secao.normas.length) {
-      for (let j = 0; j < secao.normas.length; j++) {
-        const norma = secao.normas[j]
-        const normaId = norma.norma_id || norma.id
-        const exportacao = norma.exportacao || (norma.status === 'finalizado' && !norma.atualizacao_pendente ? 'completa' : 'ignorar')
+    if (secaoAtual) {
+      secoesMantidas.add(secaoId)
+      if (valoresDiferentes(secaoAtual.titulo, secao.titulo) || Number(secaoAtual.ordem) !== i) {
         db.prepare(`
+          UPDATE publicacao_secoes SET titulo = ?, ordem = ? WHERE id = ? AND publicacao_id = ?
+        `).run(secao.titulo, i, secaoId, publicacaoId)
+      }
+    } else {
+      const result = db.prepare(`
+        INSERT INTO publicacao_secoes (publicacao_id, titulo, ordem) VALUES (?, ?, ?)
+      `).run(publicacaoId, secao.titulo, i)
+      secaoId = result.lastInsertRowid
+      secoesMantidas.add(secaoId)
+    }
+
+    const normasAtuais = db.prepare(`
+      SELECT id, norma_id, ordem, exportacao FROM publicacao_normas WHERE secao_id = ?
+    `).all(secaoId)
+    const normasPorPnId = new Map(normasAtuais.map(norma => [Number(norma.id), norma]))
+    const normasMantidas = new Set()
+
+    for (let j = 0; j < (secao.normas || []).length; j++) {
+      const norma = secao.normas[j]
+      const normaId = normaIdPublicacao(norma)
+      if (!normaId) continue
+
+      const exportacao = exportacaoParaSalvar(norma)
+      const pnId = idNumerico(norma.pn_id)
+      const normaAtual = pnId ? normasPorPnId.get(pnId) : null
+
+      if (normaAtual) {
+        normasMantidas.add(pnId)
+        if (
+          Number(normaAtual.norma_id) !== normaId ||
+          Number(normaAtual.ordem) !== j ||
+          valoresDiferentes(normaAtual.exportacao, exportacao)
+        ) {
+          db.prepare(`
+            UPDATE publicacao_normas
+            SET norma_id = ?, ordem = ?, exportacao = ?
+            WHERE id = ? AND secao_id = ?
+          `).run(normaId, j, exportacao, pnId, secaoId)
+        }
+      } else {
+        const result = db.prepare(`
           INSERT INTO publicacao_normas (secao_id, norma_id, ordem, exportacao) VALUES (?, ?, ?, ?)
         `).run(secaoId, normaId, j, exportacao)
+        normasMantidas.add(result.lastInsertRowid)
       }
+    }
+
+    for (const atual of normasAtuais) {
+      if (!normasMantidas.has(Number(atual.id))) {
+        db.prepare('DELETE FROM publicacao_normas WHERE id = ? AND secao_id = ?').run(atual.id, secaoId)
+      }
+    }
+  }
+
+  for (const atual of secoesAtuais) {
+    if (!secoesMantidas.has(Number(atual.id))) {
+      db.prepare('DELETE FROM publicacao_secoes WHERE id = ? AND publicacao_id = ?').run(atual.id, publicacaoId)
     }
   }
 }
@@ -140,15 +212,18 @@ router.put('/:id', (req, res) => {
     const { titulo, edicao, organizador, lancado_em, descricao, caminho_rede, cor_capa, status, ultima_edicao, secoes } = req.body
     const agora = new Date().toISOString()
 
-    db.prepare(`
-      UPDATE publicacoes
-      SET titulo = ?, edicao = ?, organizador = ?, lancado_em = ?, descricao = ?, caminho_rede = ?, cor_capa = ?, status = ?, ultima_edicao = ?, atualizado_em = ?
-      WHERE id = ?
-    `).run(titulo, edicao, organizador, lancado_em, descricao, caminho_rede || null, cor_capa || null, status, ultima_edicao ? 1 : 0, agora, id)
+    const salvar = db.transaction(() => {
+      db.prepare(`
+        UPDATE publicacoes
+        SET titulo = ?, edicao = ?, organizador = ?, lancado_em = ?, descricao = ?, caminho_rede = ?, cor_capa = ?, status = ?, ultima_edicao = ?, atualizado_em = ?
+        WHERE id = ?
+      `).run(titulo, edicao, organizador, lancado_em, descricao, caminho_rede || null, cor_capa || null, status, ultima_edicao ? 1 : 0, agora, id)
 
-    if (secoes) {
-      salvarSecoes(id, secoes)
-    }
+      if (Array.isArray(secoes)) {
+        salvarSecoes(id, secoes)
+      }
+    })
+    salvar()
 
     const pub = buscarCompleto(id)
     res.json(pub)

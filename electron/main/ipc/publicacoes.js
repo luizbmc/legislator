@@ -100,22 +100,92 @@ function buscarCompleto(db, id) {
 }
 
 // ── Helper: salva seções + normas dentro de uma transação ─────────
+function idNumerico(valor) {
+  const numero = Number(valor)
+  return Number.isInteger(numero) && numero > 0 ? numero : null
+}
+
+function normaIdPublicacao(norma) {
+  return idNumerico(norma?.norma_id ?? norma?.normaId ?? norma?.id)
+}
+
+function valoresDiferentes(a, b) {
+  return String(a ?? '') !== String(b ?? '')
+}
+
 function salvarSecoes(db, publicacaoId, secoes) {
-  db.prepare('DELETE FROM publicacao_secoes WHERE publicacao_id = ?').run(publicacaoId)
+  const secoesAtuais = db.prepare(`
+    SELECT id, titulo, ordem FROM publicacao_secoes WHERE publicacao_id = ?
+  `).all(publicacaoId)
+  const secoesPorId = new Map(secoesAtuais.map(secao => [Number(secao.id), secao]))
+  const secoesMantidas = new Set()
 
   for (let i = 0; i < secoes.length; i++) {
     const s = secoes[i]
-    const res = db.prepare(`
-      INSERT INTO publicacao_secoes (publicacao_id, titulo, ordem) VALUES (?, ?, ?)
-    `).run(publicacaoId, s.titulo, i)
+    let secaoId = idNumerico(s.id)
+    const secaoAtual = secaoId ? secoesPorId.get(secaoId) : null
 
-    const secaoId = res.lastInsertRowid
+    if (secaoAtual) {
+      secoesMantidas.add(secaoId)
+      if (valoresDiferentes(secaoAtual.titulo, s.titulo) || Number(secaoAtual.ordem) !== i) {
+        db.prepare(`
+          UPDATE publicacao_secoes SET titulo = ?, ordem = ? WHERE id = ? AND publicacao_id = ?
+        `).run(s.titulo, i, secaoId, publicacaoId)
+      }
+    } else {
+      const res = db.prepare(`
+        INSERT INTO publicacao_secoes (publicacao_id, titulo, ordem) VALUES (?, ?, ?)
+      `).run(publicacaoId, s.titulo, i)
+      secaoId = res.lastInsertRowid
+      secoesMantidas.add(secaoId)
+    }
+
     const normas  = s.normas ?? []
+    const normasAtuais = db.prepare(`
+      SELECT id, norma_id, ordem, exportacao FROM publicacao_normas WHERE secao_id = ?
+    `).all(secaoId)
+    const normasPorPnId = new Map(normasAtuais.map(norma => [Number(norma.id), norma]))
+    const normasMantidas = new Set()
+
     for (let j = 0; j < normas.length; j++) {
+      const normaId = normaIdPublicacao(normas[j])
+      if (!normaId) continue
+
       const exportacao = exportacaoParaSalvar(normas[j])
-      db.prepare(`
-        INSERT INTO publicacao_normas (secao_id, norma_id, ordem, exportacao) VALUES (?, ?, ?, ?)
-      `).run(secaoId, normas[j].norma_id, j, exportacao)
+      const pnId = idNumerico(normas[j].pn_id)
+      const normaAtual = pnId ? normasPorPnId.get(pnId) : null
+
+      if (normaAtual) {
+        normasMantidas.add(pnId)
+        if (
+          Number(normaAtual.norma_id) !== normaId ||
+          Number(normaAtual.ordem) !== j ||
+          valoresDiferentes(normaAtual.exportacao, exportacao)
+        ) {
+          db.prepare(`
+            UPDATE publicacao_normas
+            SET norma_id = ?, ordem = ?, exportacao = ?
+            WHERE id = ? AND secao_id = ?
+          `).run(normaId, j, exportacao, pnId, secaoId)
+        }
+      } else {
+        const res = db.prepare(`
+          INSERT INTO publicacao_normas (secao_id, norma_id, ordem, exportacao) VALUES (?, ?, ?, ?)
+        `).run(secaoId, normaId, j, exportacao)
+        normasMantidas.add(res.lastInsertRowid)
+      }
+    }
+
+    for (const atual of normasAtuais) {
+      if (!normasMantidas.has(Number(atual.id))) {
+        db.prepare('DELETE FROM publicacao_normas WHERE id = ? AND secao_id = ?').run(atual.id, secaoId)
+      }
+    }
+  }
+
+  for (const atual of secoesAtuais) {
+    if (!secoesMantidas.has(Number(atual.id))) {
+      db.prepare('DELETE FROM publicacao_secoes WHERE id = ? AND publicacao_id = ?').run(atual.id, publicacaoId)
     }
   }
 }
@@ -209,7 +279,9 @@ export function registerPublicacoesHandlers() {
         WHERE id = ?
       `).run(titulo, edicao || null, organizador || null, lancado_em || null, descricao || null, caminho_rede || null, status || 'previsto', cor_capa || null, ultima_edicao ? 1 : 0, id)
 
-      salvarSecoes(db, id, secoes ?? [])
+      if (Array.isArray(secoes)) {
+        salvarSecoes(db, id, secoes)
+      }
     })
     salvar()
 

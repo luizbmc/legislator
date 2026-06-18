@@ -48,6 +48,8 @@ const EXPORTACAO_OPCOES = [
   { valor: 'completa', label: 'Completa' },
 ]
 
+const NUMERO_ARTIGO_RE = '(?:\\d{1,3}(?:\\.\\d{3})+|\\d+)(?:[ºª°])?(?:\\s*[-\\u2010\\u2011\\u2012\\u2013\\u2014]\\s*[A-Z])?'
+
 function statusNormaInfo(status) {
   return STATUS_NORMA[status] || STATUS_NORMA.rascunho
 }
@@ -235,6 +237,8 @@ function montarDocRecorte(norma, itens) {
 function normalizarNumeroArtigo(valor) {
   return String(valor || '')
     .trim()
+    .replace(/[\u2010\u2011\u2012\u2013\u2014]/g, '-')
+    .replace(/\s*-\s*/g, '-')
     .replace(/\s+/g, '')
     .replace(/^arts?\.?/i, '')
     .replace(/^artigos?/i, '')
@@ -253,7 +257,7 @@ function normalizarTextoRecorte(valor) {
 
 function numeroArtigoNode(node) {
   const texto = textoBlocoRecorte(node)
-  const match = texto.match(/^(?:Art(?:s)?\.?|Artigos?)\s*((?:\d{1,3}(?:\.\d{3})+|\d+)(?:-[A-Z])?)/i)
+  const match = texto.match(new RegExp(`^(?:Art(?:s)?\\.?|Artigos?)\\s*(${NUMERO_ARTIGO_RE})`, 'i'))
   return match ? normalizarNumeroArtigo(match[1]) : ''
 }
 
@@ -469,12 +473,25 @@ function parseGrupoRecorte(conteudo) {
 
 function parseItemRecorte(entrada) {
   const texto = entrada.trim()
+  const grupoFlex = texto.match(new RegExp(`^Art\\.\\s*(${NUMERO_ARTIGO_RE})\\s*\\{([\\s\\S]+)\\}$`, 'i'))
+  const matchFlex = texto.match(new RegExp(`^Art\\.\\s*(${NUMERO_ARTIGO_RE})(.*)$`, 'i'))
   const range = texto.match(/^Arts?\.\s*((?:\d{1,3}(?:\.\d{3})+|\d+))[ºª°]?\s+a\s*((?:\d{1,3}(?:\.\d{3})+|\d+))[ºª°]?$/i)
   if (range) {
     return {
       tipo: 'artigosRange',
       inicio: normalizarNumeroArtigo(range[1]),
       fim: normalizarNumeroArtigo(range[2]),
+    }
+  }
+
+  if (grupoFlex) {
+    const itens = parseGrupoRecorte(grupoFlex[2])
+    const erro = itens.find(item => item.erro)
+    if (erro) return { erro: erro.erro }
+    return {
+      tipo: 'artigoGrupo',
+      numero: normalizarNumeroArtigo(grupoFlex[1]),
+      itens,
     }
   }
 
@@ -488,6 +505,17 @@ function parseItemRecorte(entrada) {
       numero: normalizarNumeroArtigo(grupo[1]),
       itens,
     }
+  }
+
+  if (matchFlex) {
+    const numero = normalizarNumeroArtigo(matchFlex[1])
+    const resto = matchFlex[2].replace(/^,/, '').trim()
+    if (resto === '.') return { tipo: 'artigoInteiro', numero }
+    const detalhe = parseDetalheDispositivo(resto)
+    if (detalhe.erro) return detalhe
+
+    if (detalhe.tipo === 'caput' && !resto) return { tipo: 'artigoInteiro', numero }
+    return { ...detalhe, numero }
   }
 
   const match = texto.match(/^Art\.\s*((?:\d{1,3}(?:\.\d{3})+|\d+)(?:-[A-Z])?)[ºª°]?(.*)$/i)
@@ -801,6 +829,7 @@ export default function PublicacaoPage({ usuarioAtual }) {
   const [secoes,    setSecoes]    = useState([])
   const [salvando,  setSalvando]  = useState(false)
   const [modificado,setModificado]= useState(false)
+  const [estruturaModificada, setEstruturaModificada] = useState(false)
   const [dragNorma, setDragNorma] = useState(null)
 
   // Modal adicionar norma
@@ -852,21 +881,28 @@ export default function PublicacaoPage({ usuarioAtual }) {
     })
     setSecoes(data.secoes ?? [])
     setModificado(false)
+    setEstruturaModificada(false)
   }
 
   // ── Salvar ──────────────────────────────────────────────────────
   const salvar = useCallback(async () => {
     setSalvando(true)
     try {
-      const atualizada = await window.legislator.publicacoes.salvar(parseInt(id), { ...form, secoes })
+      const payload = estruturaModificada ? { ...form, secoes } : { ...form }
+      const atualizada = await window.legislator.publicacoes.salvar(parseInt(id), payload)
       setPub(atualizada)
       setModificado(false)
+      setEstruturaModificada(false)
     } finally {
       setSalvando(false)
     }
-  }, [id, form, secoes])
+  }, [id, form, secoes, estruturaModificada])
 
   function marcarModificado() { setModificado(true) }
+  function marcarEstruturaModificada() {
+    setModificado(true)
+    setEstruturaModificada(true)
+  }
   const setField = campo => e => { setForm(f => ({ ...f, [campo]: e.target.value })); marcarModificado() }
   const setCorCapa = cor => { setForm(f => ({ ...f, cor_capa: cor })); marcarModificado() }
 
@@ -876,17 +912,17 @@ export default function PublicacaoPage({ usuarioAtual }) {
     const destino = idx + dir
     if (destino < 0 || destino >= s.length) return;
     [s[idx], s[destino]] = [s[destino], s[idx]]
-    setSecoes(s); marcarModificado()
+    setSecoes(s); marcarEstruturaModificada()
   }
 
   function excluirSecao(idx) {
     if (!confirm(`Excluir a seção "${secoes[idx].titulo}"? As normas serão removidas dela.`)) return
-    setSecoes(s => s.filter((_, i) => i !== idx)); marcarModificado()
+    setSecoes(s => s.filter((_, i) => i !== idx)); marcarEstruturaModificada()
   }
 
   function renomearSecao(idx, titulo) {
     setSecoes(s => s.map((sec, i) => i === idx ? { ...sec, titulo } : sec))
-    marcarModificado()
+    marcarEstruturaModificada()
   }
 
   function adicionarSecao() {
@@ -894,7 +930,7 @@ export default function PublicacaoPage({ usuarioAtual }) {
     setSecoes(s => [...s, { titulo: novaSecaoTit.trim(), normas: [] }])
     setNovaSecaoTit('')
     setModalSecao(false)
-    marcarModificado()
+    marcarEstruturaModificada()
   }
 
   // ── Normas nas seções ───────────────────────────────────────────
@@ -902,7 +938,7 @@ export default function PublicacaoPage({ usuarioAtual }) {
     setSecoes(s => s.map((sec, i) =>
       i === secaoIdx ? { ...sec, normas: sec.normas.filter(n => n.pn_id !== pnId) } : sec
     ))
-    marcarModificado()
+    marcarEstruturaModificada()
   }
 
   function moverNorma(secaoIdx, normaIdx, dir) {
@@ -914,7 +950,7 @@ export default function PublicacaoPage({ usuarioAtual }) {
       [ns[normaIdx], ns[dest]] = [ns[dest], ns[normaIdx]]
       return { ...sec, normas: ns }
     })
-    setSecoes(s); marcarModificado()
+    setSecoes(s); marcarEstruturaModificada()
   }
 
   function alterarExportacaoNorma(secaoIdx, normaIdx, exportacao) {
@@ -927,7 +963,7 @@ export default function PublicacaoPage({ usuarioAtual }) {
         ),
       }
     }))
-    marcarModificado()
+    marcarEstruturaModificada()
   }
 
   function moverNormaPorDrag(origem, destino) {
@@ -952,7 +988,7 @@ export default function PublicacaoPage({ usuarioAtual }) {
       next[destino.secaoIdx].normas.splice(destinoIdx, 0, item)
       return next
     })
-    marcarModificado()
+    marcarEstruturaModificada()
   }
 
   function moverNormaParaFimPorDrag(origem, secaoIdx) {
@@ -1052,7 +1088,7 @@ export default function PublicacaoPage({ usuarioAtual }) {
         ? { ...sec, normas: [...sec.normas, { pn_id: Date.now(), norma_id: norma.id, tipo: norma.tipo, epigrafe: norma.epigrafe, apelido: norma.apelido, status: norma.status, atualizacao_pendente: norma.atualizacao_pendente, exportacao: exportacaoEfetiva(norma) }] }
         : sec
     ))
-    marcarModificado()
+    marcarEstruturaModificada()
   }
 
   // ── Export ──────────────────────────────────────────────────────
