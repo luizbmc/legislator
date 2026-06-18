@@ -49,6 +49,7 @@ const EXPORTACAO_OPCOES = [
 ]
 
 const NUMERO_ARTIGO_RE = '(?:\\d{1,3}(?:\\.\\d{3})+|\\d+)(?:[ºª°])?(?:\\s*[-\\u2010\\u2011\\u2012\\u2013\\u2014]\\s*[A-Z])?'
+const ROTULO_ARTIGO_RE = new RegExp(`^Art(?:s)?\\.?\\s*(${NUMERO_ARTIGO_RE})(?=\\s|\\.|$)`, 'i')
 
 function statusNormaInfo(status) {
   return STATUS_NORMA[status] || STATUS_NORMA.rascunho
@@ -104,12 +105,25 @@ function textoInlineRecorte(content = []) {
   return content.map(node => {
     if (node.type === 'text') return node.text || ''
     if (node.type === 'hardBreak') return ' '
+    if (Array.isArray(node.content)) return textoInlineRecorte(node.content)
     return ''
   }).join('').replace(/\s+/g, ' ').trim()
 }
 
 function textoBlocoRecorte(node) {
   return textoInlineRecorte(node?.content || [])
+}
+
+function nodeTemMarcaRecorte(node, marca) {
+  return Array.isArray(node?.marks) && node.marks.some(mark => mark?.type === marca)
+}
+
+function textoComMarcaRecorte(node, marca) {
+  if (!node) return ''
+  if (node.type === 'text') return nodeTemMarcaRecorte(node, marca) ? (node.text || '') : ''
+  if (node.type === 'hardBreak') return ''
+  if (!Array.isArray(node.content)) return ''
+  return node.content.map(child => textoComMarcaRecorte(child, marca)).join('')
 }
 
 function textoNoRecorte(node) {
@@ -256,8 +270,8 @@ function normalizarTextoRecorte(valor) {
 }
 
 function numeroArtigoNode(node) {
-  const texto = textoBlocoRecorte(node)
-  const match = texto.match(new RegExp(`^(?:Art(?:s)?\\.?|Artigos?)\\s*(${NUMERO_ARTIGO_RE})`, 'i'))
+  const texto = textoComMarcaRecorte(node, 'boldArtigo')
+  const match = texto.match(ROTULO_ARTIGO_RE)
   return match ? normalizarNumeroArtigo(match[1]) : ''
 }
 
@@ -321,7 +335,7 @@ function normalizarParagrafoDispositivo(valor) {
 
 function nodeEhArtigo(node, tipoNorma = '') {
   if (isTipoTratado(tipoNorma)) return node?.type === 'artigoTitulo'
-  return node?.type === 'artigo' || node?.type === 'artigoTitulo'
+  return Boolean(numeroArtigoNode(node))
 }
 
 function nivelHeadingRecorte(node) {
