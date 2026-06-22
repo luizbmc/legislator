@@ -15,6 +15,10 @@ function exportacaoEfetiva(norma) {
   return exportacaoParaSalvar(norma)
 }
 
+function publicacaoUsaVadeMecum(pub) {
+  return String(pub?.titulo || '').trimStart().toLocaleLowerCase('pt-BR').startsWith('vade')
+}
+
 function nomeArquivoSeguro(texto, fallback = 'arquivo') {
   const nome = String(texto || fallback)
     .normalize('NFD')
@@ -366,6 +370,8 @@ export function registerPublicacoesHandlers() {
     if (!pastaBase) return { cancelado: true }
 
     const { gerarDocx } = await import('../services/exportDocx.js')
+    const { aplicarEstiloVadeMecumDoc } = await import('../../../src/services/estiloVadeMecum.js')
+    const forcarVadeMecum = publicacaoUsaVadeMecum(pub)
     let contador = 1
     let gerados = 0
 
@@ -380,7 +386,18 @@ export function registerPublicacoesHandlers() {
         const norma = normaCompleta(db, item.norma_id)
         if (!norma) continue
         const nome = `${numero}_${nomeArquivoSeguro(norma.epigrafe, 'norma')}.docx`
-        const buffer = await gerarDocx(norma)
+        let normaExport = norma
+        if (forcarVadeMecum) {
+          let doc
+          try { doc = JSON.parse(norma.conteudo_doc) }
+          catch { doc = { type: 'doc', content: [] } }
+          normaExport = {
+            ...norma,
+            conteudo_doc: JSON.stringify(aplicarEstiloVadeMecumDoc(doc, true).doc),
+            modoVadeMecum: true,
+          }
+        }
+        const buffer = await gerarDocx(normaExport)
         writeFileSync(join(pastaSecao, nome), buffer)
         gerados++
       }
@@ -404,6 +421,8 @@ export function registerPublicacoesHandlers() {
     if (!pastaBase) return { cancelado: true }
 
     const { tiptapParaXml } = await import('../../../src/services/exportarXml.js')
+    const { aplicarEstiloVadeMecumDoc } = await import('../../../src/services/estiloVadeMecum.js')
+    const forcarVadeMecum = publicacaoUsaVadeMecum(pub)
     let contador = 1
     let gerados = 0
 
@@ -427,10 +446,14 @@ export function registerPublicacoesHandlers() {
           let doc
           try { doc = JSON.parse(norma.conteudo_doc) }
           catch { doc = { type: 'doc', content: [] } }
+          if (forcarVadeMecum) doc = aplicarEstiloVadeMecumDoc(doc, true).doc
           xml = tiptapParaXml(
             doc,
             { tipo: norma.tipo, epigrafe: norma.epigrafe },
-            exportacao === 'atualizacao' ? { modo: 'atualizacao' } : {},
+            {
+              ...(exportacao === 'atualizacao' ? { modo: 'atualizacao' } : {}),
+              modoVadeMecum: forcarVadeMecum,
+            },
           )
         }
 

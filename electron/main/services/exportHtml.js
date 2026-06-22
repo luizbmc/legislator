@@ -8,6 +8,8 @@
  */
 
 // ── Mapa: node TipTap → tag + classe HTML ───────────────────────
+import { aplicarEstiloVadeMecumDoc } from '../../../src/services/estiloVadeMecum.js'
+
 const NODE_TAG = {
   epigrafe:           { tag: 'p', cls: 'epigrafe' },
   partelivroTitCap:   { tag: 'p', cls: 'parte-livro-tit-cap' },
@@ -29,6 +31,10 @@ const NODE_TAG = {
 }
 
 const DEFAULT_TAG = { tag: 'p', cls: 'texto-lei' }
+
+function publicacaoUsaVadeMecum(pub) {
+  return String(pub?.titulo || '').trimStart().toLocaleLowerCase('pt-BR').startsWith('vade')
+}
 
 function filtrarNoPorModoVadeMecum(no, modoVadeMecum = false) {
   if (!no || typeof no !== 'object') return no
@@ -162,6 +168,7 @@ ${blocos}
 export function gerarHtmlPublicacao(pub, db) {
   const secaoCSS = `.secao-pub { text-align:center; font-weight:bold; text-transform:uppercase; font-size:14pt; margin:2em 0 1em; border-bottom:1px solid #999; padding-bottom:.3em; }`
   const blocos = []
+  const forcarVadeMecum = publicacaoUsaVadeMecum(pub)
 
   for (const secao of pub.secoes ?? []) {
     blocos.push(`<h2 class="secao-pub">${esc(secao.titulo)}</h2>`)
@@ -171,7 +178,8 @@ export function gerarHtmlPublicacao(pub, db) {
       let doc
       try   { doc = JSON.parse(norma.conteudo_doc) }
       catch { doc = { type: 'doc', content: [] } }
-      doc = docPorModoVadeMecum(doc, item.modoVadeMecum === true)
+      if (forcarVadeMecum) doc = aplicarEstiloVadeMecumDoc(doc, true).doc
+      doc = docPorModoVadeMecum(doc, forcarVadeMecum || item.modoVadeMecum === true)
       blocos.push('<div class="norma">')
       blocos.push((doc.content ?? []).map(renderizarBloco).join('\n'))
       blocos.push('</div>')
