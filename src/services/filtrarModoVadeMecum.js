@@ -53,13 +53,16 @@ function prepararTextoPorModoVadeMecum(no, modoVadeMecum) {
     const segmentos = parseVmSegments(notaMark.attrs.vmSegments)
     const marksBase = limparMarksNotaVm(out.marks || [])
     const notaBase = marksBase.find(mark => mark.type === 'nota') || { type: 'nota' }
-    const semItalic = marksBase.filter(mark => mark.type !== 'italic' && mark.type !== 'italicoLight')
+    const semEstilosNota = marksBase.filter(mark => mark.type !== 'italic' && mark.type !== 'italicoLight' && mark.type !== 'notaSobrescrito')
     return segmentos.map(seg => ({
       ...out,
       text: seg.text,
-      marks: seg.italic
-        ? dedupeMarks([...semItalic, notaBase, { type: 'italic' }])
-        : dedupeMarks([...semItalic, notaBase]),
+      marks: dedupeMarks([
+        ...semEstilosNota,
+        notaBase,
+        ...(seg.italic ? [{ type: 'italic' }] : []),
+        ...(seg.superscript ? [{ type: 'notaSobrescrito' }] : []),
+      ]),
     })).filter(item => item.text)
   }
 
@@ -86,7 +89,7 @@ function parseVmSegments(value) {
     const parsed = JSON.parse(value || '[]')
     if (!Array.isArray(parsed)) return []
     return parsed
-      .map(seg => ({ text: String(seg?.text || ''), italic: !!seg?.italic }))
+      .map(seg => ({ text: String(seg?.text || ''), italic: !!seg?.italic, superscript: !!seg?.superscript }))
       .filter(seg => seg.text)
   } catch {
     return []

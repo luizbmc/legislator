@@ -2180,6 +2180,12 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 .nota-texto-italico {
   font-style: italic;
 }
+.nota-texto-sobrescrito {
+  color: #1d6fd1;
+  font-size: 0.75em;
+  line-height: 0;
+  vertical-align: super;
+}
 .nota-vm-preview {
     width: 100%;
     display: flex;
@@ -2257,6 +2263,7 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 .nota-edicao-toolbar {
   display: flex;
   justify-content: flex-start;
+  gap: 8px;
   padding: 0 14px;
 }
 .nota-italico-btn {
@@ -2265,7 +2272,20 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   color: #1d4ed8;
   font-style: italic;
 }
-.nota-italico-btn:hover {
+.nota-sobrescrito-btn {
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  color: #1d4ed8;
+}
+.nota-sobrescrito-btn::after {
+  content: "2";
+  margin-left: 2px;
+  font-size: 0.75em;
+  line-height: 0;
+  vertical-align: super;
+}
+.nota-italico-btn:hover,
+.nota-sobrescrito-btn:hover {
   background: #dbeafe;
   border-color: #93c5fd;
   color: #1d4ed8;

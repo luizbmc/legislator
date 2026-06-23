@@ -416,6 +416,13 @@
   vertical-align: super;
 }
 
+.leg-nota-vm-sobrescrito {
+  font-size: 0.72em;
+  color: #1d6fd1;
+  line-height: 0;
+  vertical-align: super;
+}
+
 .leg-nota-rodape {
   position: relative;
   display: inline-block;

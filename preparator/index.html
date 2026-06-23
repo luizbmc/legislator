@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Preparator</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">P</span>
+      <div>
+        <h1>Preparator</h1>
+        <p>Preparação editorial com marcações baseadas no guia de revisão.</p>
+      </div>
+    </div>
+    <div class="actions">
+      <label class="file-button">
+        Importar DOCX
+        <input id="docxInput" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+      </label>
+      <button id="pasteModeBtn" type="button">Colar texto</button>
+      <button id="runBtn" type="button" class="primary">Executar marcações</button>
+      <button id="clearBtn" type="button">Limpar marcações</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <div class="panel-head">
+        <h2>Ocorrências</h2>
+        <span id="countBadge">0</span>
+      </div>
+      <div class="filters" id="filters"></div>
+      <div id="occurrences" class="occurrences empty">
+        Nenhuma marcação executada.
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <div id="dropZone" class="drop-zone">
+        <strong>Importe um DOCX</strong> ou cole o texto abaixo para começar.
+      </div>
+      <article id="editor" class="editor" contenteditable="true" spellcheck="true">
+        <p>Cole aqui um texto para preparação editorial.</p>
+      </article>
+    </section>
+
+    <aside class="rightbar">
+      <h2>Tipos de marcação</h2>
+      <dl>
+        <dt class="dot segura">Segura</dt>
+        <dd>Regra objetiva, boa candidata a correção automática futura.</dd>
+        <dt class="dot revisar">Revisar</dt>
+        <dd>Ocorrência depende de contexto editorial.</dd>
+        <dt class="dot padrao">Padrão</dt>
+        <dd>Padronização de grafia, maiúsculas, abreviações ou destaque.</dd>
+      </dl>
+      <p class="hint">
+        Nesta versão inicial, o app marca suspeitas e navega entre elas. Ele não substitui o texto automaticamente.
+      </p>
+    </aside>
+  </main>
+
+  <script src="../node_modules/mammoth/mammoth.browser.min.js"></script>
+  <script src="./rules.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

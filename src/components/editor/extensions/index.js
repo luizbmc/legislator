@@ -174,7 +174,7 @@ function vmNoteRenderNodes(attrs = {}) {
     const parsed = JSON.parse(attrs.vmSegments || '[]')
     if (Array.isArray(parsed)) {
       segments = parsed
-        .map(seg => ({ text: String(seg?.text || ''), italic: !!seg?.italic }))
+        .map(seg => ({ text: String(seg?.text || ''), italic: !!seg?.italic, superscript: !!seg?.superscript }))
         .filter(seg => seg.text)
     }
   } catch {
@@ -182,14 +182,17 @@ function vmNoteRenderNodes(attrs = {}) {
   }
 
   if (!segments.length && attrs.vmText) {
-    segments = [{ text: String(attrs.vmText), italic: false }]
+    segments = [{ text: String(attrs.vmText), italic: false, superscript: false }]
   }
 
-  return segments.map(seg => (
-    seg.italic
+  return segments.map(seg => {
+    const inner = seg.italic
       ? ['i', { class: 'leg-nota-vm-italico' }, seg.text]
       : ['span', {}, seg.text]
-  ))
+    return seg.superscript
+      ? ['sup', { class: 'leg-nota-vm-sobrescrito' }, inner]
+      : inner
+  })
 }
 
 export const Nota = Mark.create({

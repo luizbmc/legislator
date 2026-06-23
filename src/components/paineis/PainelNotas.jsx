@@ -14,6 +14,10 @@ function isItalic(node) {
   return hasMark(node, 'italic') || hasMark(node, 'italicoLight')
 }
 
+function isNotaSobrescrito(node) {
+  return hasMark(node, 'notaSobrescrito')
+}
+
 function notaMark(node) {
   return (node.marks || []).find(mark => mark.type.name === 'nota')
 }
@@ -24,10 +28,10 @@ function normalizeSegments(segments) {
     const text = (seg.text || '').replace(/\s+/g, ' ')
     if (!text) continue
     const last = normalized[normalized.length - 1]
-    if (last && last.italic === seg.italic) {
+    if (last && last.italic === seg.italic && last.superscript === seg.superscript) {
       last.text += text
     } else {
-      normalized.push({ text, italic: !!seg.italic })
+      normalized.push({ text, italic: !!seg.italic, superscript: !!seg.superscript })
     }
   }
 
@@ -50,6 +54,7 @@ function parseSegmentsAttr(value) {
     return normalizeSegments(parsed.map(seg => ({
       text: String(seg?.text || ''),
       italic: !!seg?.italic,
+      superscript: !!seg?.superscript,
     })))
   } catch {
     return []
@@ -60,7 +65,11 @@ function segmentsEqual(a = [], b = []) {
   const aa = normalizeSegments(a)
   const bb = normalizeSegments(b)
   if (aa.length !== bb.length) return false
-  return aa.every((seg, idx) => seg.text === bb[idx].text && !!seg.italic === !!bb[idx].italic)
+  return aa.every((seg, idx) => (
+    seg.text === bb[idx].text
+    && !!seg.italic === !!bb[idx].italic
+    && !!seg.superscript === !!bb[idx].superscript
+  ))
 }
 
 function escapeHtml(text) {
@@ -73,33 +82,36 @@ function escapeHtml(text) {
 
 function segmentsToHtml(segments = []) {
   return normalizeSegments(segments).map(seg => {
-    const texto = escapeHtml(seg.text)
-    return seg.italic ? `<i>${texto}</i>` : texto
+    let texto = escapeHtml(seg.text)
+    if (seg.italic) texto = `<i>${texto}</i>`
+    if (seg.superscript) texto = `<sup>${texto}</sup>`
+    return texto
   }).join('')
 }
 
 function segmentsFromEditable(root) {
   const out = []
 
-  function walk(node, italic = false) {
+  function walk(node, italic = false, superscript = false) {
     if (!node) return
     if (node.nodeType === Node.TEXT_NODE) {
-      out.push({ text: node.nodeValue || '', italic })
+      out.push({ text: node.nodeValue || '', italic, superscript })
       return
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return
 
     const tag = node.tagName?.toLowerCase?.() || ''
     const isItalic = italic || tag === 'i' || tag === 'em' || node.style?.fontStyle === 'italic'
+    const isSuperscript = superscript || tag === 'sup' || node.style?.verticalAlign === 'super'
     if (tag === 'br') {
-      out.push({ text: ' ', italic })
+      out.push({ text: ' ', italic, superscript })
       return
     }
-    node.childNodes.forEach(child => walk(child, isItalic))
-    if (tag === 'div' || tag === 'p') out.push({ text: ' ', italic })
+    node.childNodes.forEach(child => walk(child, isItalic, isSuperscript))
+    if (tag === 'div' || tag === 'p') out.push({ text: ' ', italic, superscript })
   }
 
-  root?.childNodes?.forEach(node => walk(node, false))
+  root?.childNodes?.forEach(node => walk(node, false, false))
   return normalizeSegments(out)
 }
 
@@ -120,7 +132,7 @@ function collectNotesFromBlock(node, pos) {
   if (node.type.name === 'notaTitulo') {
     const segments = []
     node.descendants(child => {
-      if (child.isText) segments.push({ text: child.text, italic: isItalic(child) })
+      if (child.isText) segments.push({ text: child.text, italic: isItalic(child), superscript: isNotaSobrescrito(child) })
       return true
     })
     const normalizedSegments = normalizeSegments(segments)
@@ -166,17 +178,17 @@ function collectNotesFromBlock(node, pos) {
     }
 
     const texto = child.text
-    const segment = { text: texto, italic: isItalic(child) }
+    const segment = { text: texto, italic: isItalic(child), superscript: isNotaSobrescrito(child) }
     let vmSegments = []
     const vmSegmentsAttr = parseSegmentsAttr(markNota?.attrs?.vmSegments)
     if (vmSegmentsAttr.length) {
       vmSegments = vmSegmentsAttr
     } else if (markNota?.attrs?.vmText != null) {
-      vmSegments = [{ text: markNota.attrs.vmText, italic: false }]
+      vmSegments = [{ text: markNota.attrs.vmText, italic: false, superscript: false }]
     } else if (markNota?.attrs?.vmHidden) {
       vmSegments = []
     } else {
-      vmSegments = [{ text: texto, italic: isItalic(child) }]
+      vmSegments = [{ text: texto, italic: isItalic(child), superscript: isNotaSobrescrito(child) }]
     }
 
     if (current && current.tipo === tipo && current.to === from) {
@@ -276,9 +288,15 @@ function collectNotes(editor, modoVadeMecum = false) {
 }
 
 function renderNotaTexto(nota) {
-  const segments = nota.segments?.length ? nota.segments : [{ text: nota.texto, italic: false }]
+  const segments = nota.segments?.length ? nota.segments : [{ text: nota.texto, italic: false, superscript: false }]
   return segments.map((seg, idx) => (
-    <span key={idx} className={seg.italic ? 'nota-texto-italico' : undefined}>
+    <span
+      key={idx}
+      className={[
+        seg.italic ? 'nota-texto-italico' : '',
+        seg.superscript ? 'nota-texto-sobrescrito' : '',
+      ].filter(Boolean).join(' ') || undefined}
+    >
       {seg.text}
     </span>
   ))
@@ -293,6 +311,7 @@ function renderVmPreview(preview) {
 function criarNodesNota(schema, nota, normalSegments, vmSegments) {
   const notaType = schema.marks.nota
   const italicType = schema.marks.italic
+  const notaSobrescritoType = schema.marks.notaSobrescrito
   if (!notaType) return []
 
   const normal = normalizeSegments(normalSegments)
@@ -317,6 +336,7 @@ function criarNodesNota(schema, nota, normalSegments, vmSegments) {
           : { vmHidden: true }
     const marks = [notaType.create(attrs)]
     if (seg.italic && italicType) marks.push(italicType.create())
+    if (seg.superscript && notaSobrescritoType) marks.push(notaSobrescritoType.create())
     return schema.text(seg.text, marks)
   })
 }
@@ -441,6 +461,13 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
     document.execCommand('italic')
   }
 
+  function aplicarNotaSobrescrito() {
+    const alvo = campoAtivoRef.current || normalRef.current
+    if (!alvo) return
+    alvo.focus()
+    document.execCommand('superscript')
+  }
+
   function salvarEdicaoNota() {
     const normalSegments = segmentsFromEditable(normalRef.current)
     const vmSegments = segmentsFromEditable(vmRef.current)
@@ -530,6 +557,14 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
                 onClick={aplicarNotaItalico}
               >
                 Aplicar nota itálico
+              </button>
+              <button
+                type="button"
+                className="btn-ghost btn-sm nota-sobrescrito-btn"
+                onMouseDown={event => event.preventDefault()}
+                onClick={aplicarNotaSobrescrito}
+              >
+                Aplicar nota sobrescrito
               </button>
             </div>
             <label className="nota-edicao-campo">
