@@ -4,6 +4,8 @@ dist/
 server-data/
 
 *.db
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
 

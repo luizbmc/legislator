@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Normando Railway PoC</title>
+  <style>
+    :root {
+      font-family: Arial, sans-serif;
+      color: #252810;
+      background: #f4f5f0;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header {
+      padding: 18px 24px;
+      border-bottom: 1px solid #d8dacd;
+      background: #fff;
+    }
+    header h1 { margin: 0; font-size: 22px; }
+    header p { margin: 4px 0 0; color: #666b57; }
+    main {
+      width: min(1040px, calc(100% - 32px));
+      margin: 22px auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    section {
+      padding: 16px;
+      border: 1px solid #d8dacd;
+      border-radius: 6px;
+      background: #fff;
+    }
+    section.full { grid-column: 1 / -1; }
+    h2 { margin: 0 0 12px; font-size: 16px; }
+    label { display: grid; gap: 5px; margin-bottom: 10px; font-size: 13px; }
+    input, textarea {
+      width: 100%;
+      padding: 8px 9px;
+      border: 1px solid #bfc3b3;
+      border-radius: 4px;
+      font: inherit;
+    }
+    textarea { min-height: 80px; resize: vertical; }
+    button {
+      padding: 8px 12px;
+      border: 1px solid #697544;
+      border-radius: 4px;
+      background: #75804f;
+      color: #fff;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button.secondary { background: #fff; color: #4e582e; }
+    button:disabled { opacity: .5; cursor: wait; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    pre {
+      min-height: 80px;
+      max-height: 280px;
+      overflow: auto;
+      margin: 12px 0 0;
+      padding: 10px;
+      border: 1px solid #e0e2d8;
+      background: #f8f9f5;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 7px; border-bottom: 1px solid #e0e2d8; text-align: left; }
+    .status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #999; }
+    .dot.ok { background: #4d8a35; }
+    .dot.error { background: #b53c3c; }
+    @media (max-width: 760px) {
+      main { grid-template-columns: 1fr; }
+      section.full { grid-column: auto; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Normando Railway + SQLite</h1>
+    <p>Ambiente isolado para validar API, volume persistente e concorrência.</p>
+  </header>
+  <main>
+    <section>
+      <h2>Acesso e saúde</h2>
+      <label>
+        Chave da PoC
+        <input id="apiKey" type="password" autocomplete="off" placeholder="POC_API_KEY">
+      </label>
+      <div class="actions">
+        <button id="healthBtn" class="secondary">Verificar saúde</button>
+        <button id="infoBtn">Consultar banco</button>
+      </div>
+      <p class="status"><span id="statusDot" class="dot"></span><span id="statusText">Não verificado</span></p>
+      <pre id="diagnostico"></pre>
+    </section>
+
+    <section>
+      <h2>Criar registro persistente</h2>
+      <label>
+        Título
+        <input id="titulo" value="Teste de persistência">
+      </label>
+      <label>
+        Conteúdo
+        <textarea id="conteudo">Este registro deve permanecer depois de um redeploy.</textarea>
+      </label>
+      <div class="actions">
+        <button id="criarBtn">Criar registro</button>
+        <button id="transacaoBtn" class="secondary">Inserir 100 em transação</button>
+      </div>
+      <pre id="resultado"></pre>
+    </section>
+
+    <section class="full">
+      <div class="actions">
+        <h2 style="margin-right:auto">Registros encontrados</h2>
+        <button id="listarBtn" class="secondary">Atualizar lista</button>
+      </div>
+      <table>
+        <thead>
+          <tr><th>ID</th><th>Título</th><th>Revisão</th><th>Atualizado</th></tr>
+        </thead>
+        <tbody id="registros"></tbody>
+      </table>
+    </section>
+  </main>
+  <script>
+    const $ = id => document.getElementById(id)
+
+    function headers() {
+      return {
+        'content-type': 'application/json',
+        'x-api-key': $('apiKey').value,
+      }
+    }
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, {
+        ...options,
+        headers: { ...headers(), ...(options.headers || {}) },
+      })
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`)
+      return body
+    }
+
+    function output(id, value) {
+      $(id).textContent = JSON.stringify(value, null, 2)
+    }
+
+    async function withButton(button, action) {
+      button.disabled = true
+      try {
+        await action()
+      } catch (error) {
+        output('resultado', { error: error.message })
+      } finally {
+        button.disabled = false
+      }
+    }
+
+    $('healthBtn').onclick = () => withButton($('healthBtn'), async () => {
+      const data = await api('/health')
+      output('diagnostico', data)
+      $('statusDot').className = 'dot ok'
+      $('statusText').textContent = data.volumeMounted ? 'Saudável, com volume' : 'Saudável, sem volume Railway'
+    })
+
+    $('infoBtn').onclick = () => withButton($('infoBtn'), async () => {
+      const data = await api('/api/info')
+      output('diagnostico', data)
+      $('statusDot').className = 'dot ok'
+      $('statusText').textContent = 'Banco acessível'
+    })
+
+    $('criarBtn').onclick = () => withButton($('criarBtn'), async () => {
+      const data = await api('/api/registros', {
+        method: 'POST',
+        body: JSON.stringify({ titulo: $('titulo').value, conteudo: $('conteudo').value }),
+      })
+      output('resultado', data)
+      await listar()
+    })
+
+    $('transacaoBtn').onclick = () => withButton($('transacaoBtn'), async () => {
+      const data = await api('/api/teste-transacao', {
+        method: 'POST',
+        body: JSON.stringify({ quantidade: 100 }),
+      })
+      output('resultado', data)
+      await listar()
+    })
+
+    async function listar() {
+      const rows = await api('/api/registros')
+      $('registros').replaceChildren(...rows.map(row => {
+        const tr = document.createElement('tr')
+        for (const value of [row.id, row.titulo, row.revisao, row.atualizado_em]) {
+          const td = document.createElement('td')
+          td.textContent = value
+          tr.appendChild(td)
+        }
+        return tr
+      }))
+    }
+
+    $('listarBtn').onclick = () => withButton($('listarBtn'), listar)
+  </script>
+</body>
+</html>

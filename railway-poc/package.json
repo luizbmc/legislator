@@ -1,0 +1,20 @@
+{
+  "name": "normando-railway-sqlite-poc",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Prova de conceito isolada do Normando com SQLite persistente no Railway",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node test.js"
+  },
+  "engines": {
+    "node": ">=20 <25"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.4.1",
+    "express": "^4.21.2",
+    "helmet": "^8.1.0"
+  }
+}
