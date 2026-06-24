@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Homologação do Normando</title>
+  <style>
+    :root { font-family: Arial, sans-serif; color: #252810; background: #f4f5f0; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 16px; padding: 13px 20px; border-bottom: 1px solid #d8dacd; background: #fff; }
+    header div { min-width: 0; }
+    header h1 { margin: 0; font-size: 20px; }
+    header p { margin: 3px 0 0; color: #666b57; font-size: 13px; }
+    header a { margin-left: auto; color: #596335; }
+    main { width: min(1280px, calc(100% - 28px)); margin: 18px auto; display: grid; grid-template-columns: minmax(0, 1fr) 430px; gap: 14px; align-items: start; }
+    .stack { display: grid; gap: 14px; }
+    section, aside { padding: 14px; border: 1px solid #d8dacd; border-radius: 6px; background: #fff; }
+    aside { position: sticky; top: 82px; max-height: calc(100vh - 98px); overflow: auto; }
+    h2 { margin: 0; font-size: 16px; }
+    h3 { margin: 14px 0 7px; font-size: 14px; }
+    .section-head, .toolbar, .pagination { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .section-head { margin-bottom: 12px; }
+    .section-head span { margin-left: auto; color: #6b705d; font-size: 12px; }
+    .toolbar { margin-bottom: 10px; }
+    input, select { min-width: 0; padding: 8px 9px; border: 1px solid #bfc3b3; border-radius: 4px; background: #fff; font: inherit; }
+    input[type="search"] { flex: 1 1 260px; }
+    button { padding: 8px 11px; border: 1px solid #697544; border-radius: 4px; background: #75804f; color: #fff; cursor: pointer; font-weight: 600; }
+    button.secondary { background: #fff; color: #4e582e; }
+    button:disabled { opacity: .45; cursor: default; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { padding: 7px 6px; border-bottom: 1px solid #e5e7de; text-align: left; vertical-align: top; }
+    th { color: #616653; font-size: 11px; text-transform: uppercase; }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover { background: #f5f7ee; }
+    .epigrafe { font-weight: 700; }
+    .muted { color: #75796a; }
+    .pagination { margin-top: 10px; justify-content: flex-end; }
+    .pagination span { margin-right: auto; color: #6b705d; font-size: 12px; }
+    .cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+    .metric { padding: 10px; border: 1px solid #e0e2d8; border-radius: 5px; background: #f8f9f5; }
+    .metric strong { display: block; font-size: 20px; }
+    .metric span { color: #6b705d; font-size: 11px; }
+    pre { max-height: 280px; overflow: auto; margin: 8px 0 0; padding: 10px; border: 1px solid #e0e2d8; background: #f8f9f5; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
+    .detail-empty { color: #777b6c; text-align: center; padding: 30px 12px; }
+    .detail-meta { display: grid; grid-template-columns: auto 1fr; gap: 5px 10px; margin-top: 10px; font-size: 12px; }
+    .detail-meta dt { color: #737866; }
+    .detail-meta dd { margin: 0; }
+    .section-list { display: grid; gap: 9px; margin-top: 10px; }
+    .section-item { padding: 9px; border: 1px solid #e0e2d8; border-radius: 5px; }
+    .section-item strong { font-size: 12px; }
+    .section-item ol { margin: 7px 0 0; padding-left: 22px; font-size: 12px; }
+    .section-item li { margin: 3px 0; }
+    .error { color: #a33131; }
+    @media (max-width: 980px) { main { grid-template-columns: 1fr; } aside { position: static; max-height: none; } }
+    @media (max-width: 680px) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  </style>
+</head>
+<body>
+  <header>
+    <div><h1>Homologação somente leitura</h1><p>Navegação na cópia do banco real hospedada no Railway.</p></div>
+    <a href="/">Voltar ao diagnóstico</a>
+  </header>
+  <main>
+    <div class="stack">
+      <section>
+        <div class="section-head"><h2>Acesso e resumo</h2><span id="accessStatus">Informe a chave</span></div>
+        <div class="toolbar">
+          <input id="apiKey" type="password" autocomplete="off" placeholder="POC_API_KEY">
+          <button id="connectBtn">Conectar</button>
+          <button id="benchmarkBtn" class="secondary">Medir consultas</button>
+        </div>
+        <div id="summary" class="cards"></div>
+        <pre id="benchmark" hidden></pre>
+      </section>
+      <section>
+        <div class="section-head"><h2>Normas</h2><span id="normasTime"></span></div>
+        <form id="normasForm" class="toolbar">
+          <input id="normasBusca" type="search" placeholder="Epígrafe ou apelido">
+          <select id="normasStatus">
+            <option value="">Todos os status</option>
+            <option value="rascunho">Rascunho</option>
+            <option value="em revisão">Em revisão</option>
+            <option value="finalizado">Finalizado</option>
+          </select>
+          <label class="muted"><input id="buscarConteudo" type="checkbox"> conteúdo</label>
+          <button>Buscar</button>
+        </form>
+        <table><thead><tr><th>Tipo</th><th>Epígrafe</th><th>Status</th><th>Tamanho</th></tr></thead><tbody id="normasBody"></tbody></table>
+        <div class="pagination"><span id="normasPage"></span><button id="normasPrev" class="secondary">Anterior</button><button id="normasNext" class="secondary">Próxima</button></div>
+      </section>
+      <section>
+        <div class="section-head"><h2>Publicações</h2><span id="publicacoesTime"></span></div>
+        <form id="publicacoesForm" class="toolbar"><input id="publicacoesBusca" type="search" placeholder="Título, edição ou organizador"><button>Buscar</button></form>
+        <table><thead><tr><th>Publicação</th><th>Status</th><th>Seções</th><th>Normas</th></tr></thead><tbody id="publicacoesBody"></tbody></table>
+        <div class="pagination"><span id="publicacoesPage"></span><button id="publicacoesPrev" class="secondary">Anterior</button><button id="publicacoesNext" class="secondary">Próxima</button></div>
+      </section>
+    </div>
+    <aside id="detail"><h2>Detalhes</h2><p class="detail-empty">Clique numa norma ou publicação para abrir.</p></aside>
+  </main>
+  <script>
+    const $ = id => document.getElementById(id)
+    const state = { normasPage: 1, normasTotalPages: 1, publicacoesPage: 1, publicacoesTotalPages: 1 }
+    const headers = () => ({ 'x-api-key': $('apiKey').value })
+    async function api(path) {
+      const started = performance.now()
+      const response = await fetch(path, { headers: headers() })
+      const body = await response.json()
+      if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`)
+      return { body, networkMs: performance.now() - started }
+    }
+    function formatBytes(value) {
+      const bytes = Number(value || 0)
+      if (bytes < 1024) return `${bytes} B`
+      if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`
+      return `${(bytes / 1048576).toFixed(1)} MB`
+    }
+    const text = value => value == null || value === '' ? '—' : String(value)
+    function cell(value, className = '') {
+      const td = document.createElement('td')
+      td.textContent = text(value)
+      if (className) td.className = className
+      return td
+    }
+    function showError(error) {
+      $('accessStatus').textContent = error.message
+      $('accessStatus').className = 'error'
+    }
+    function appendMeta(container, pairs) {
+      const meta = document.createElement('dl')
+      meta.className = 'detail-meta'
+      for (const [label, value] of pairs) {
+        const dt = document.createElement('dt')
+        const dd = document.createElement('dd')
+        dt.textContent = label
+        dd.textContent = text(value)
+        meta.append(dt, dd)
+      }
+      container.appendChild(meta)
+    }
+    async function connect() {
+      try {
+        const { body, networkMs } = await api('/api/homologacao/resumo')
+        $('accessStatus').textContent = `Conectado · rede ${networkMs.toFixed(1)} ms · banco ${body.duracaoMs.toFixed(2)} ms`
+        $('accessStatus').className = ''
+        $('summary').replaceChildren(...[
+          ['Normas', body.normas], ['Publicações', body.publicacoes], ['Seções', body.secoes], ['Versões', body.versoes ?? '—'],
+        ].map(([label, value]) => {
+          const div = document.createElement('div')
+          div.className = 'metric'
+          const strong = document.createElement('strong')
+          const span = document.createElement('span')
+          strong.textContent = value
+          span.textContent = label
+          div.append(strong, span)
+          return div
+        }))
+        await Promise.all([loadNormas(), loadPublicacoes()])
+      } catch (error) { showError(error) }
+    }
+    async function loadNormas() {
+      try {
+        const params = new URLSearchParams({ page: state.normasPage, limit: 30, busca: $('normasBusca').value, status: $('normasStatus').value, buscarConteudo: $('buscarConteudo').checked })
+        const { body, networkMs } = await api(`/api/homologacao/normas?${params}`)
+        state.normasTotalPages = body.totalPages
+        $('normasTime').textContent = `${body.total} resultados · rede ${networkMs.toFixed(1)} ms · banco ${body.duracaoMs.toFixed(2)} ms`
+        $('normasPage').textContent = `Página ${body.page} de ${body.totalPages}`
+        $('normasPrev').disabled = body.page <= 1
+        $('normasNext').disabled = body.page >= body.totalPages
+        $('normasBody').replaceChildren(...body.items.map(norma => {
+          const tr = document.createElement('tr')
+          tr.append(cell(norma.tipo), cell(norma.apelido ? `${norma.epigrafe} (${norma.apelido})` : norma.epigrafe, 'epigrafe'), cell(norma.status), cell(formatBytes(norma.tamanho_doc)))
+          tr.onclick = () => openNorma(norma.id)
+          return tr
+        }))
+      } catch (error) { showError(error) }
+    }
+    async function openNorma(id) {
+      $('detail').replaceChildren(Object.assign(document.createElement('h2'), { textContent: 'Carregando norma...' }))
+      try {
+        const { body, networkMs } = await api(`/api/homologacao/normas/${id}`)
+        const n = body.norma
+        $('detail').replaceChildren(Object.assign(document.createElement('h2'), { textContent: n.epigrafe }))
+        appendMeta($('detail'), [
+          ['ID', n.id], ['Tipo', n.tipo], ['Apelido', n.apelido], ['Status', n.status], ['Tags', (n.tags || []).join(', ')],
+          ['Versões', n.total_versoes], ['Atualizado por', n.atualizado_por], ['Atualizado em', n.atualizado_em],
+          ['Documento', formatBytes(body.metricas.tamanhoDocBytes)], ['Texto', formatBytes(body.metricas.tamanhoTextoBytes)],
+          ['Tempo', `rede ${networkMs.toFixed(1)} ms · banco ${body.metricas.duracaoMs.toFixed(2)} ms`],
+        ])
+        const heading = Object.assign(document.createElement('h3'), { textContent: 'Prévia do texto' })
+        const preview = Object.assign(document.createElement('pre'), { textContent: String(n.conteudo_txt || '').slice(0, 6000) || 'Sem conteúdo textual.' })
+        $('detail').append(heading, preview)
+      } catch (error) { showError(error) }
+    }
+    async function loadPublicacoes() {
+      try {
+        const params = new URLSearchParams({ page: state.publicacoesPage, limit: 30, busca: $('publicacoesBusca').value })
+        const { body, networkMs } = await api(`/api/homologacao/publicacoes?${params}`)
+        state.publicacoesTotalPages = body.totalPages
+        $('publicacoesTime').textContent = `${body.total} resultados · rede ${networkMs.toFixed(1)} ms · banco ${body.duracaoMs.toFixed(2)} ms`
+        $('publicacoesPage').textContent = `Página ${body.page} de ${body.totalPages}`
+        $('publicacoesPrev').disabled = body.page <= 1
+        $('publicacoesNext').disabled = body.page >= body.totalPages
+        $('publicacoesBody').replaceChildren(...body.items.map(pub => {
+          const tr = document.createElement('tr')
+          tr.append(cell(pub.edicao ? `${pub.titulo} · ${pub.edicao}` : pub.titulo, 'epigrafe'), cell(pub.status), cell(pub.total_secoes), cell(pub.total_normas))
+          tr.onclick = () => openPublicacao(pub.id)
+          return tr
+        }))
+      } catch (error) { showError(error) }
+    }
+    async function openPublicacao(id) {
+      $('detail').replaceChildren(Object.assign(document.createElement('h2'), { textContent: 'Carregando publicação...' }))
+      try {
+        const { body, networkMs } = await api(`/api/homologacao/publicacoes/${id}`)
+        const p = body.publicacao
+        $('detail').replaceChildren(Object.assign(document.createElement('h2'), { textContent: p.titulo }))
+        appendMeta($('detail'), [
+          ['ID', p.id], ['Edição', p.edicao], ['Organizador', p.organizador], ['Status', p.status],
+          ['Seções', body.metricas.totalSecoes], ['Normas', body.metricas.totalNormas],
+          ['Tempo', `rede ${networkMs.toFixed(1)} ms · banco ${body.metricas.duracaoMs.toFixed(2)} ms`],
+        ])
+        const sections = document.createElement('div')
+        sections.className = 'section-list'
+        for (const section of p.secoes) {
+          const item = document.createElement('div')
+          item.className = 'section-item'
+          item.appendChild(Object.assign(document.createElement('strong'), { textContent: `${section.titulo} · ${section.normas.length} norma(s)` }))
+          const list = document.createElement('ol')
+          for (const norma of section.normas) list.appendChild(Object.assign(document.createElement('li'), { textContent: norma.epigrafe }))
+          item.appendChild(list)
+          sections.appendChild(item)
+        }
+        $('detail').appendChild(sections)
+      } catch (error) { showError(error) }
+    }
+    $('connectBtn').onclick = connect
+    $('benchmarkBtn').onclick = async () => {
+      try {
+        const { body, networkMs } = await api('/api/homologacao/benchmark?runs=7')
+        $('benchmark').hidden = false
+        $('benchmark').textContent = JSON.stringify({ networkMs, ...body }, null, 2)
+      } catch (error) { showError(error) }
+    }
+    $('normasForm').onsubmit = event => { event.preventDefault(); state.normasPage = 1; loadNormas() }
+    $('publicacoesForm').onsubmit = event => { event.preventDefault(); state.publicacoesPage = 1; loadPublicacoes() }
+    $('normasPrev').onclick = () => { state.normasPage--; loadNormas() }
+    $('normasNext').onclick = () => { state.normasPage++; loadNormas() }
+    $('publicacoesPrev').onclick = () => { state.publicacoesPage--; loadPublicacoes() }
+    $('publicacoesNext').onclick = () => { state.publicacoesPage++; loadPublicacoes() }
+  </script>
+</body>
+</html>

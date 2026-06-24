@@ -83,6 +83,35 @@ function countTable(name) {
   return Number(db.prepare(`SELECT COUNT(*) AS total FROM "${name}"`).get().total)
 }
 
+function requireNormandoSchema(req, res, next) {
+  const required = [
+    'normas',
+    'publicacoes',
+    'publicacao_secoes',
+    'publicacao_normas',
+    'tags',
+    'norma_tags',
+  ]
+  const missing = required.filter(name => !tableExists(name))
+  if (missing.length) {
+    return res.status(503).json({
+      error: 'A cópia carregada não contém o esquema completo do Normando.',
+      missing,
+    })
+  }
+  next()
+}
+
+function positiveInteger(value, fallback, max) {
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < 1) return fallback
+  return Math.min(parsed, max)
+}
+
+function elapsedMs(start) {
+  return Number(process.hrtime.bigint() - start) / 1e6
+}
+
 app.get('/health', (req, res) => {
   const check = db.prepare('SELECT 1 AS ok').get()
   res.json({
@@ -116,6 +145,284 @@ app.get('/api/registros', (req, res) => {
     ORDER BY id DESC
   `).all()
   res.json(rows)
+})
+
+app.use('/api/homologacao', requireNormandoSchema)
+
+app.get('/api/homologacao/resumo', (req, res) => {
+  const start = process.hrtime.bigint()
+  const normasPorStatus = db.prepare(`
+    SELECT COALESCE(status, 'sem status') AS status, COUNT(*) AS total
+    FROM normas
+    GROUP BY status
+    ORDER BY total DESC
+  `).all()
+  const normasPorTipo = db.prepare(`
+    SELECT COALESCE(tipo, 'sem tipo') AS tipo, COUNT(*) AS total
+    FROM normas
+    GROUP BY tipo
+    ORDER BY total DESC, tipo
+    LIMIT 20
+  `).all()
+
+  res.json({
+    somenteLeitura: true,
+    normas: countTable('normas'),
+    publicacoes: countTable('publicacoes'),
+    secoes: countTable('publicacao_secoes'),
+    vinculosPublicacao: countTable('publicacao_normas'),
+    versoes: countTable('normas_versoes'),
+    normasPorStatus,
+    normasPorTipo,
+    duracaoMs: elapsedMs(start),
+  })
+})
+
+app.get('/api/homologacao/normas', (req, res) => {
+  const start = process.hrtime.bigint()
+  const page = positiveInteger(req.query.page, 1, 100000)
+  const limit = positiveInteger(req.query.limit, 30, 100)
+  const offset = (page - 1) * limit
+  const busca = String(req.query.busca || '').trim()
+  const tipo = String(req.query.tipo || '').trim()
+  const status = String(req.query.status || '').trim()
+  const buscarConteudo = req.query.buscarConteudo === 'true'
+  const where = []
+  const params = []
+
+  if (busca) {
+    const like = `%${busca}%`
+    if (buscarConteudo) {
+      where.push('(n.epigrafe LIKE ? OR n.apelido LIKE ? OR n.ementa LIKE ? OR n.conteudo_txt LIKE ?)')
+      params.push(like, like, like, like)
+    } else {
+      where.push('(n.epigrafe LIKE ? OR n.apelido LIKE ?)')
+      params.push(like, like)
+    }
+  }
+  if (tipo) {
+    where.push('n.tipo = ?')
+    params.push(tipo)
+  }
+  if (status) {
+    where.push('n.status = ?')
+    params.push(status)
+  }
+
+  const clause = where.length ? `WHERE ${where.join(' AND ')}` : ''
+  const total = Number(db.prepare(`
+    SELECT COUNT(*) AS total
+    FROM normas n
+    ${clause}
+  `).get(...params).total)
+
+  const items = db.prepare(`
+    SELECT
+      n.id, n.tipo, n.epigrafe, n.apelido, n.ementa, n.status,
+      n.atualizacao_pendente, n.vigencia, n.atualizado_por,
+      n.criado_em, n.atualizado_em,
+      length(COALESCE(n.conteudo_doc, '')) AS tamanho_doc,
+      length(COALESCE(n.conteudo_txt, '')) AS tamanho_texto,
+      (
+        SELECT GROUP_CONCAT(t.nome, '|||')
+        FROM norma_tags nt
+        JOIN tags t ON t.id = nt.tag_id
+        WHERE nt.norma_id = n.id
+      ) AS tags_str
+    FROM normas n
+    ${clause}
+    ORDER BY n.atualizado_em DESC, n.id DESC
+    LIMIT ? OFFSET ?
+  `).all(...params, limit, offset).map(row => {
+    const { tags_str, ...norma } = row
+    return {
+      ...norma,
+      tags: tags_str ? tags_str.split('|||') : [],
+    }
+  })
+
+  res.json({
+    page,
+    limit,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+    items,
+    duracaoMs: elapsedMs(start),
+  })
+})
+
+app.get('/api/homologacao/normas/:id', (req, res) => {
+  const start = process.hrtime.bigint()
+  const id = Number(req.params.id)
+  if (!Number.isInteger(id) || id < 1) {
+    return res.status(400).json({ error: 'ID inválido.' })
+  }
+
+  const norma = db.prepare('SELECT * FROM normas WHERE id = ?').get(id)
+  if (!norma) return res.status(404).json({ error: 'Norma não encontrada.' })
+
+  norma.tags = db.prepare(`
+    SELECT t.nome
+    FROM tags t
+    JOIN norma_tags nt ON nt.tag_id = t.id
+    WHERE nt.norma_id = ?
+    ORDER BY t.nome COLLATE NOCASE
+  `).all(id).map(row => row.nome)
+  norma.total_versoes = tableExists('normas_versoes')
+    ? Number(db.prepare('SELECT COUNT(*) AS total FROM normas_versoes WHERE norma_id = ?').get(id).total)
+    : 0
+
+  res.json({
+    norma,
+    metricas: {
+      tamanhoDocBytes: Buffer.byteLength(String(norma.conteudo_doc || ''), 'utf8'),
+      tamanhoTextoBytes: Buffer.byteLength(String(norma.conteudo_txt || ''), 'utf8'),
+      duracaoMs: elapsedMs(start),
+    },
+  })
+})
+
+app.get('/api/homologacao/publicacoes', (req, res) => {
+  const start = process.hrtime.bigint()
+  const page = positiveInteger(req.query.page, 1, 100000)
+  const limit = positiveInteger(req.query.limit, 30, 100)
+  const offset = (page - 1) * limit
+  const busca = String(req.query.busca || '').trim()
+  const status = String(req.query.status || '').trim()
+  const where = []
+  const params = []
+
+  if (busca) {
+    const like = `%${busca}%`
+    where.push('(p.titulo LIKE ? OR p.edicao LIKE ? OR p.organizador LIKE ?)')
+    params.push(like, like, like)
+  }
+  if (status) {
+    where.push('p.status = ?')
+    params.push(status)
+  }
+
+  const clause = where.length ? `WHERE ${where.join(' AND ')}` : ''
+  const total = Number(db.prepare(`
+    SELECT COUNT(*) AS total
+    FROM publicacoes p
+    ${clause}
+  `).get(...params).total)
+  const items = db.prepare(`
+    SELECT
+      p.id, p.titulo, p.edicao, p.organizador, p.status,
+      p.ultima_edicao, p.cor_capa, p.criado_em, p.atualizado_em,
+      COUNT(DISTINCT ps.id) AS total_secoes,
+      COUNT(DISTINCT pn.id) AS total_normas
+    FROM publicacoes p
+    LEFT JOIN publicacao_secoes ps ON ps.publicacao_id = p.id
+    LEFT JOIN publicacao_normas pn ON pn.secao_id = ps.id
+    ${clause}
+    GROUP BY p.id
+    ORDER BY p.atualizado_em DESC, p.id DESC
+    LIMIT ? OFFSET ?
+  `).all(...params, limit, offset)
+
+  res.json({
+    page,
+    limit,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+    items,
+    duracaoMs: elapsedMs(start),
+  })
+})
+
+app.get('/api/homologacao/publicacoes/:id', (req, res) => {
+  const start = process.hrtime.bigint()
+  const id = Number(req.params.id)
+  if (!Number.isInteger(id) || id < 1) {
+    return res.status(400).json({ error: 'ID inválido.' })
+  }
+
+  const publicacao = db.prepare('SELECT * FROM publicacoes WHERE id = ?').get(id)
+  if (!publicacao) return res.status(404).json({ error: 'Publicação não encontrada.' })
+
+  publicacao.secoes = db.prepare(`
+    SELECT id, titulo, ordem
+    FROM publicacao_secoes
+    WHERE publicacao_id = ?
+    ORDER BY ordem, id
+  `).all(id).map(secao => ({
+    ...secao,
+    normas: db.prepare(`
+      SELECT
+        pn.id AS vinculo_id, pn.ordem, pn.exportacao,
+        n.id, n.tipo, n.epigrafe, n.apelido, n.status,
+        n.atualizacao_pendente, n.atualizado_em
+      FROM publicacao_normas pn
+      JOIN normas n ON n.id = pn.norma_id
+      WHERE pn.secao_id = ?
+      ORDER BY pn.ordem, pn.id
+    `).all(secao.id),
+  }))
+
+  res.json({
+    publicacao,
+    metricas: {
+      totalSecoes: publicacao.secoes.length,
+      totalNormas: publicacao.secoes.reduce((total, secao) => total + secao.normas.length, 0),
+      duracaoMs: elapsedMs(start),
+    },
+  })
+})
+
+app.get('/api/homologacao/benchmark', (req, res) => {
+  const runs = positiveInteger(req.query.runs, 5, 20)
+  const samples = []
+  const queries = [
+    ['contar_normas', 'SELECT COUNT(*) AS total FROM normas'],
+    ['listar_30_normas', `
+      SELECT id, epigrafe, apelido, status, atualizado_em
+      FROM normas
+      ORDER BY atualizado_em DESC, id DESC
+      LIMIT 30
+    `],
+    ['buscar_texto_catalogo', `
+      SELECT id, epigrafe
+      FROM normas
+      WHERE epigrafe LIKE '%Lei%'
+      LIMIT 30
+    `],
+    ['listar_publicacoes', `
+      SELECT p.id, p.titulo, COUNT(pn.id) AS total_normas
+      FROM publicacoes p
+      LEFT JOIN publicacao_secoes ps ON ps.publicacao_id = p.id
+      LEFT JOIN publicacao_normas pn ON pn.secao_id = ps.id
+      GROUP BY p.id
+      ORDER BY p.atualizado_em DESC
+      LIMIT 30
+    `],
+  ]
+
+  for (const [nome, sql] of queries) {
+    const durations = []
+    const statement = db.prepare(sql)
+    for (let i = 0; i < runs; i++) {
+      const start = process.hrtime.bigint()
+      statement.all()
+      durations.push(elapsedMs(start))
+    }
+    durations.sort((a, b) => a - b)
+    samples.push({
+      nome,
+      runs,
+      minimoMs: durations[0],
+      medianaMs: durations[Math.floor(durations.length / 2)],
+      maximoMs: durations[durations.length - 1],
+    })
+  }
+
+  res.json({
+    somenteLeitura: true,
+    databaseSizeBytes: fs.statSync(DATABASE_PATH).size,
+    samples,
+  })
 })
 
 app.post('/api/registros', (req, res) => {

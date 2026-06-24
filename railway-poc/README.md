@@ -56,6 +56,23 @@ O Railway fornece automaticamente `PORT` e `RAILWAY_VOLUME_MOUNT_PATH`.
 Abra o domínio gerado. A página de diagnóstico permite informar a chave,
 consultar o banco e criar registros persistentes diretamente pelo navegador.
 
+Para navegar pela cópia real sem editar nada, abra:
+
+```text
+https://SEU-DOMINIO/homologacao.html
+```
+
+A homologação oferece:
+
+- catálogo paginado de normas;
+- busca por epígrafe, apelido ou conteúdo;
+- abertura sob demanda do conteúdo da norma;
+- catálogo e estrutura de publicações;
+- tempos separados de rede e consulta SQLite;
+- benchmark de consultas comuns.
+
+Todas as rotas em `/api/homologacao` são exclusivamente `GET`.
+
 ## Verificação
 
 Sem chave:
@@ -116,7 +133,8 @@ de `normas` e `publicacoes`. A PoC criará somente tabelas prefixadas com
 
 ## Limites deliberados
 
-- Esta PoC não expõe as normas nem permite editá-las.
+- A homologação expõe normas e publicações somente para leitura e exige a chave.
+- Nenhuma rota de homologação permite editar ou excluir dados reais.
 - Não há integração com o aplicativo Electron.
 - Não existe login de usuário; apenas uma chave de teste.
 - Não substitui o servidor atual.
