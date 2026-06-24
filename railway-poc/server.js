@@ -40,6 +40,32 @@ db.exec(`
     instancia TEXT NOT NULL,
     iniciado_em TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS railway_homologacao_normas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    norma_origem_id INTEGER NOT NULL UNIQUE,
+    epigrafe TEXT NOT NULL,
+    conteudo_doc TEXT NOT NULL DEFAULT '{"type":"doc","content":[]}',
+    conteudo_txt TEXT NOT NULL DEFAULT '',
+    revisao INTEGER NOT NULL DEFAULT 1,
+    criado_por TEXT,
+    atualizado_por TEXT,
+    criado_em TEXT NOT NULL,
+    atualizado_em TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS railway_homologacao_versoes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    homologacao_norma_id INTEGER NOT NULL
+      REFERENCES railway_homologacao_normas(id) ON DELETE CASCADE,
+    revisao INTEGER NOT NULL,
+    epigrafe TEXT NOT NULL,
+    conteudo_doc TEXT NOT NULL,
+    conteudo_txt TEXT NOT NULL,
+    salvo_por TEXT,
+    criado_em TEXT NOT NULL,
+    UNIQUE (homologacao_norma_id, revisao)
+  );
 `)
 
 const instanceId = crypto.randomUUID()
@@ -52,7 +78,7 @@ db.prepare(`
 const app = express()
 app.disable('x-powered-by')
 app.use(helmet({ contentSecurityPolicy: false }))
-app.use(express.json({ limit: '5mb' }))
+app.use(express.json({ limit: '50mb' }))
 app.use(express.static(path.join(__dirname, 'public')))
 
 function safeEqual(received, expected) {
@@ -423,6 +449,260 @@ app.get('/api/homologacao/benchmark', (req, res) => {
     databaseSizeBytes: fs.statSync(DATABASE_PATH).size,
     samples,
   })
+})
+
+function edicaoHomologacao(id) {
+  return db.prepare(`
+    SELECT
+      h.*,
+      n.tipo,
+      n.apelido,
+      n.status AS status_origem,
+      n.atualizado_em AS origem_atualizado_em,
+      (
+        SELECT COUNT(*)
+        FROM railway_homologacao_versoes v
+        WHERE v.homologacao_norma_id = h.id
+      ) AS total_versoes
+    FROM railway_homologacao_normas h
+    JOIN normas n ON n.id = h.norma_origem_id
+    WHERE h.id = ?
+  `).get(id)
+}
+
+app.get('/api/homologacao/edicoes', (req, res) => {
+  const items = db.prepare(`
+    SELECT
+      h.id, h.norma_origem_id, h.epigrafe, h.revisao,
+      h.criado_por, h.atualizado_por, h.criado_em, h.atualizado_em,
+      length(h.conteudo_doc) AS tamanho_doc,
+      length(h.conteudo_txt) AS tamanho_texto,
+      n.tipo,
+      (
+        SELECT COUNT(*)
+        FROM railway_homologacao_versoes v
+        WHERE v.homologacao_norma_id = h.id
+      ) AS total_versoes
+    FROM railway_homologacao_normas h
+    JOIN normas n ON n.id = h.norma_origem_id
+    ORDER BY h.atualizado_em DESC, h.id DESC
+  `).all()
+  res.json({ items })
+})
+
+app.post('/api/homologacao/edicoes', (req, res) => {
+  const normaId = Number(req.body?.normaId)
+  const usuario = String(req.body?.usuario || 'Homologação').trim().slice(0, 120)
+  if (!Number.isInteger(normaId) || normaId < 1) {
+    return res.status(400).json({ error: 'Informe uma norma válida.' })
+  }
+
+  const existente = db.prepare(`
+    SELECT id
+    FROM railway_homologacao_normas
+    WHERE norma_origem_id = ?
+  `).get(normaId)
+  if (existente) {
+    return res.json({ criada: false, edicao: edicaoHomologacao(existente.id) })
+  }
+
+  const norma = db.prepare(`
+    SELECT id, epigrafe, conteudo_doc, conteudo_txt
+    FROM normas
+    WHERE id = ?
+  `).get(normaId)
+  if (!norma) return res.status(404).json({ error: 'Norma de origem não encontrada.' })
+
+  const agora = new Date().toISOString()
+  const result = db.prepare(`
+    INSERT INTO railway_homologacao_normas (
+      norma_origem_id, epigrafe, conteudo_doc, conteudo_txt,
+      revisao, criado_por, atualizado_por, criado_em, atualizado_em
+    ) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)
+  `).run(
+    norma.id,
+    norma.epigrafe || '',
+    norma.conteudo_doc || '{"type":"doc","content":[]}',
+    norma.conteudo_txt || '',
+    usuario,
+    usuario,
+    agora,
+    agora,
+  )
+
+  res.status(201).json({
+    criada: true,
+    edicao: edicaoHomologacao(result.lastInsertRowid),
+  })
+})
+
+app.get('/api/homologacao/edicoes/:id', (req, res) => {
+  const id = Number(req.params.id)
+  if (!Number.isInteger(id) || id < 1) {
+    return res.status(400).json({ error: 'ID inválido.' })
+  }
+  const edicao = edicaoHomologacao(id)
+  if (!edicao) return res.status(404).json({ error: 'Cópia de homologação não encontrada.' })
+  res.json({ edicao })
+})
+
+app.put('/api/homologacao/edicoes/:id', (req, res) => {
+  const id = Number(req.params.id)
+  const revisao = Number(req.body?.revisao)
+  const epigrafe = String(req.body?.epigrafe || '').trim()
+  const conteudoDoc = String(req.body?.conteudo_doc || '')
+  const conteudoTxt = String(req.body?.conteudo_txt || '')
+  const usuario = String(req.body?.usuario || 'Homologação').trim().slice(0, 120)
+  if (!Number.isInteger(id) || id < 1 || !Number.isInteger(revisao) || revisao < 1 || !epigrafe) {
+    return res.status(400).json({ error: 'Dados de edição inválidos.' })
+  }
+  if (!conteudoDoc) {
+    return res.status(400).json({ error: 'O documento estruturado não pode ficar vazio.' })
+  }
+
+  const salvar = db.transaction(() => {
+    const atual = db.prepare(`
+      SELECT *
+      FROM railway_homologacao_normas
+      WHERE id = ?
+    `).get(id)
+    if (!atual) return { status: 404 }
+    if (Number(atual.revisao) !== revisao) return { status: 409, atual: edicaoHomologacao(id) }
+
+    const agora = new Date().toISOString()
+    db.prepare(`
+      INSERT INTO railway_homologacao_versoes (
+        homologacao_norma_id, revisao, epigrafe,
+        conteudo_doc, conteudo_txt, salvo_por, criado_em
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      atual.revisao,
+      atual.epigrafe,
+      atual.conteudo_doc,
+      atual.conteudo_txt,
+      atual.atualizado_por,
+      agora,
+    )
+
+    const result = db.prepare(`
+      UPDATE railway_homologacao_normas
+      SET
+        epigrafe = ?,
+        conteudo_doc = ?,
+        conteudo_txt = ?,
+        revisao = revisao + 1,
+        atualizado_por = ?,
+        atualizado_em = ?
+      WHERE id = ? AND revisao = ?
+    `).run(epigrafe, conteudoDoc, conteudoTxt, usuario, agora, id, revisao)
+
+    if (!result.changes) return { status: 409, atual: edicaoHomologacao(id) }
+    return { status: 200, edicao: edicaoHomologacao(id) }
+  })
+
+  const result = salvar()
+  if (result.status === 404) return res.status(404).json({ error: 'Cópia não encontrada.' })
+  if (result.status === 409) {
+    return res.status(409).json({
+      error: 'Esta cópia foi salva por outra sessão. Recarregue antes de tentar novamente.',
+      atual: result.atual,
+    })
+  }
+  res.json(result)
+})
+
+app.get('/api/homologacao/edicoes/:id/versoes', (req, res) => {
+  const id = Number(req.params.id)
+  if (!Number.isInteger(id) || id < 1) {
+    return res.status(400).json({ error: 'ID inválido.' })
+  }
+  const items = db.prepare(`
+    SELECT
+      id, homologacao_norma_id, revisao, epigrafe,
+      length(conteudo_doc) AS tamanho_doc,
+      length(conteudo_txt) AS tamanho_texto,
+      salvo_por, criado_em
+    FROM railway_homologacao_versoes
+    WHERE homologacao_norma_id = ?
+    ORDER BY revisao DESC
+  `).all(id)
+  res.json({ items })
+})
+
+app.post('/api/homologacao/edicoes/:id/restaurar/:versaoId', (req, res) => {
+  const id = Number(req.params.id)
+  const versaoId = Number(req.params.versaoId)
+  const revisaoAtual = Number(req.body?.revisao)
+  const usuario = String(req.body?.usuario || 'Homologação').trim().slice(0, 120)
+  if (
+    !Number.isInteger(id) || id < 1
+    || !Number.isInteger(versaoId) || versaoId < 1
+    || !Number.isInteger(revisaoAtual) || revisaoAtual < 1
+  ) {
+    return res.status(400).json({ error: 'Dados de restauração inválidos.' })
+  }
+
+  const restaurar = db.transaction(() => {
+    const corrente = db.prepare('SELECT * FROM railway_homologacao_normas WHERE id = ?').get(id)
+    if (!corrente) return { status: 404, tipo: 'edicao' }
+    if (Number(corrente.revisao) !== revisaoAtual) {
+      return { status: 409, atual: edicaoHomologacao(id) }
+    }
+
+    const versao = db.prepare(`
+      SELECT *
+      FROM railway_homologacao_versoes
+      WHERE id = ? AND homologacao_norma_id = ?
+    `).get(versaoId, id)
+    if (!versao) return { status: 404, tipo: 'versao' }
+
+    const agora = new Date().toISOString()
+    db.prepare(`
+      INSERT INTO railway_homologacao_versoes (
+        homologacao_norma_id, revisao, epigrafe,
+        conteudo_doc, conteudo_txt, salvo_por, criado_em
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      corrente.revisao,
+      corrente.epigrafe,
+      corrente.conteudo_doc,
+      corrente.conteudo_txt,
+      corrente.atualizado_por,
+      agora,
+    )
+    db.prepare(`
+      UPDATE railway_homologacao_normas
+      SET epigrafe = ?, conteudo_doc = ?, conteudo_txt = ?,
+          revisao = revisao + 1, atualizado_por = ?, atualizado_em = ?
+      WHERE id = ? AND revisao = ?
+    `).run(
+      versao.epigrafe,
+      versao.conteudo_doc,
+      versao.conteudo_txt,
+      usuario,
+      agora,
+      id,
+      revisaoAtual,
+    )
+    return { status: 200, edicao: edicaoHomologacao(id) }
+  })
+
+  const result = restaurar()
+  if (result.status === 404) {
+    const mensagem = result.tipo === 'versao'
+      ? 'Versão não encontrada.'
+      : 'Cópia não encontrada.'
+    return res.status(404).json({ error: mensagem })
+  }
+  if (result.status === 409) {
+    return res.status(409).json({
+      error: 'Esta cópia foi salva por outra sessão. Recarregue antes de restaurar.',
+      atual: result.atual,
+    })
+  }
+  res.json(result)
 })
 
 app.post('/api/registros', (req, res) => {

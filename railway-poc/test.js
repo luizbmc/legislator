@@ -187,7 +187,108 @@ async function run() {
     })
     assert.equal(forbiddenWrite.response.status, 404)
 
-    console.log('PoC validada: persistência, concorrência e homologação somente leitura.')
+    const cloned = await request('/api/homologacao/edicoes', {
+      method: 'POST',
+      body: JSON.stringify({ normaId: 1, usuario: 'Teste A' }),
+    })
+    assert.equal(cloned.response.status, 201)
+    assert.equal(cloned.body.criada, true)
+    assert.equal(cloned.body.edicao.revisao, 1)
+    assert.equal(cloned.body.edicao.conteudo_txt, 'Conteúdo da norma para homologação.')
+
+    const cloneAgain = await request('/api/homologacao/edicoes', {
+      method: 'POST',
+      body: JSON.stringify({ normaId: 1, usuario: 'Teste B' }),
+    })
+    assert.equal(cloneAgain.response.status, 200)
+    assert.equal(cloneAgain.body.criada, false)
+    assert.equal(cloneAgain.body.edicao.id, cloned.body.edicao.id)
+
+    const firstSave = await request(`/api/homologacao/edicoes/${cloned.body.edicao.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        revisao: 1,
+        epigrafe: 'LEI Nº 1, DE 2026 - CÓPIA',
+        conteudo_doc: cloned.body.edicao.conteudo_doc,
+        conteudo_txt: 'Primeira alteração controlada.',
+        usuario: 'Teste A',
+      }),
+    })
+    assert.equal(firstSave.response.status, 200)
+    assert.equal(firstSave.body.edicao.revisao, 2)
+    assert.equal(firstSave.body.edicao.conteudo_txt, 'Primeira alteração controlada.')
+
+    const staleSave = await request(`/api/homologacao/edicoes/${cloned.body.edicao.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        revisao: 1,
+        epigrafe: 'Sobrescrita antiga',
+        conteudo_doc: cloned.body.edicao.conteudo_doc,
+        conteudo_txt: 'Não deve ser salvo.',
+        usuario: 'Teste B',
+      }),
+    })
+    assert.equal(staleSave.response.status, 409)
+    assert.equal(staleSave.body.atual.revisao, 2)
+
+    const secondSave = await request(`/api/homologacao/edicoes/${cloned.body.edicao.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        revisao: 2,
+        epigrafe: 'LEI Nº 1, DE 2026 - CÓPIA',
+        conteudo_doc: cloned.body.edicao.conteudo_doc,
+        conteudo_txt: 'Segunda alteração controlada.',
+        usuario: 'Teste B',
+      }),
+    })
+    assert.equal(secondSave.response.status, 200)
+    assert.equal(secondSave.body.edicao.revisao, 3)
+
+    const versions = await request(
+      `/api/homologacao/edicoes/${cloned.body.edicao.id}/versoes`,
+    )
+    assert.equal(versions.response.status, 200)
+    assert.deepEqual(versions.body.items.map(item => item.revisao), [2, 1])
+
+    const versionOne = versions.body.items.find(item => item.revisao === 1)
+    const restored = await request(
+      `/api/homologacao/edicoes/${cloned.body.edicao.id}/restaurar/${versionOne.id}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ revisao: 3, usuario: 'Teste restauração' }),
+      },
+    )
+    assert.equal(restored.response.status, 200)
+    assert.equal(restored.body.edicao.revisao, 4)
+    assert.equal(restored.body.edicao.epigrafe, 'LEI Nº 1, DE 2026')
+    assert.equal(restored.body.edicao.conteudo_txt, 'Conteúdo da norma para homologação.')
+
+    const staleRestore = await request(
+      `/api/homologacao/edicoes/${cloned.body.edicao.id}/restaurar/${versionOne.id}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ revisao: 3, usuario: 'Teste B' }),
+      },
+    )
+    assert.equal(staleRestore.response.status, 409)
+    assert.equal(staleRestore.body.atual.revisao, 4)
+
+    const controlledEdits = await request('/api/homologacao/edicoes')
+    assert.equal(controlledEdits.response.status, 200)
+    assert.equal(controlledEdits.body.items.length, 1)
+    assert.equal(controlledEdits.body.items[0].total_versoes, 3)
+
+    const unchangedOriginal = await request('/api/homologacao/normas/1')
+    assert.equal(unchangedOriginal.response.status, 200)
+    assert.equal(unchangedOriginal.body.norma.epigrafe, 'LEI Nº 1, DE 2026')
+    assert.equal(
+      unchangedOriginal.body.norma.conteudo_txt,
+      'Conteúdo da norma para homologação.',
+    )
+
+    console.log(
+      'PoC validada: persistência, concorrência, leitura real e escrita isolada com histórico.',
+    )
   } finally {
     child.kill('SIGTERM')
     await new Promise(resolve => child.once('exit', resolve))

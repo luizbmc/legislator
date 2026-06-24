@@ -5,31 +5,95 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Homologação do Normando</title>
   <style>
-    :root { font-family: Arial, sans-serif; color: #252810; background: #f4f5f0; }
+    :root {
+      font-family: Arial, sans-serif;
+      color: #252810;
+      background: #f4f5f0;
+    }
     * { box-sizing: border-box; }
     body { margin: 0; }
-    header { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 16px; padding: 13px 20px; border-bottom: 1px solid #d8dacd; background: #fff; }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 13px 20px;
+      border-bottom: 1px solid #d8dacd;
+      background: #fff;
+    }
     header div { min-width: 0; }
     header h1 { margin: 0; font-size: 20px; }
     header p { margin: 3px 0 0; color: #666b57; font-size: 13px; }
     header a { margin-left: auto; color: #596335; }
-    main { width: min(1280px, calc(100% - 28px)); margin: 18px auto; display: grid; grid-template-columns: minmax(0, 1fr) 430px; gap: 14px; align-items: start; }
+    main {
+      width: min(1380px, calc(100% - 28px));
+      margin: 18px auto;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 500px;
+      gap: 14px;
+      align-items: start;
+    }
     .stack { display: grid; gap: 14px; }
-    section, aside { padding: 14px; border: 1px solid #d8dacd; border-radius: 6px; background: #fff; }
-    aside { position: sticky; top: 82px; max-height: calc(100vh - 98px); overflow: auto; }
+    section, aside {
+      padding: 14px;
+      border: 1px solid #d8dacd;
+      border-radius: 6px;
+      background: #fff;
+    }
+    aside {
+      position: sticky;
+      top: 82px;
+      max-height: calc(100vh - 98px);
+      overflow: auto;
+    }
     h2 { margin: 0; font-size: 16px; }
     h3 { margin: 14px 0 7px; font-size: 14px; }
-    .section-head, .toolbar, .pagination { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .section-head, .toolbar, .pagination, .editor-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
     .section-head { margin-bottom: 12px; }
     .section-head span { margin-left: auto; color: #6b705d; font-size: 12px; }
     .toolbar { margin-bottom: 10px; }
-    input, select { min-width: 0; padding: 8px 9px; border: 1px solid #bfc3b3; border-radius: 4px; background: #fff; font: inherit; }
+    input, select, textarea {
+      min-width: 0;
+      padding: 8px 9px;
+      border: 1px solid #bfc3b3;
+      border-radius: 4px;
+      background: #fff;
+      color: inherit;
+      font: inherit;
+    }
     input[type="search"] { flex: 1 1 260px; }
-    button { padding: 8px 11px; border: 1px solid #697544; border-radius: 4px; background: #75804f; color: #fff; cursor: pointer; font-weight: 600; }
+    textarea {
+      width: 100%;
+      min-height: 360px;
+      resize: vertical;
+      line-height: 1.45;
+    }
+    button {
+      padding: 8px 11px;
+      border: 1px solid #697544;
+      border-radius: 4px;
+      background: #75804f;
+      color: #fff;
+      cursor: pointer;
+      font-weight: 600;
+    }
     button.secondary { background: #fff; color: #4e582e; }
+    button.danger { border-color: #a44b42; background: #fff; color: #8d3028; }
     button:disabled { opacity: .45; cursor: default; }
     table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th, td { padding: 7px 6px; border-bottom: 1px solid #e5e7de; text-align: left; vertical-align: top; }
+    th, td {
+      padding: 7px 6px;
+      border-bottom: 1px solid #e5e7de;
+      text-align: left;
+      vertical-align: top;
+    }
     th { color: #616653; font-size: 11px; text-transform: uppercase; }
     tbody tr { cursor: pointer; }
     tbody tr:hover { background: #f5f7ee; }
@@ -37,44 +101,133 @@
     .muted { color: #75796a; }
     .pagination { margin-top: 10px; justify-content: flex-end; }
     .pagination span { margin-right: auto; color: #6b705d; font-size: 12px; }
-    .cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
-    .metric { padding: 10px; border: 1px solid #e0e2d8; border-radius: 5px; background: #f8f9f5; }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .metric {
+      padding: 10px;
+      border: 1px solid #e0e2d8;
+      border-radius: 5px;
+      background: #f8f9f5;
+    }
     .metric strong { display: block; font-size: 20px; }
     .metric span { color: #6b705d; font-size: 11px; }
-    pre { max-height: 280px; overflow: auto; margin: 8px 0 0; padding: 10px; border: 1px solid #e0e2d8; background: #f8f9f5; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
+    pre {
+      max-height: 280px;
+      overflow: auto;
+      margin: 8px 0 0;
+      padding: 10px;
+      border: 1px solid #e0e2d8;
+      background: #f8f9f5;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-size: 11px;
+    }
+    .notice {
+      margin: 0 0 12px;
+      padding: 9px 10px;
+      border: 1px solid #cfd5ae;
+      border-radius: 4px;
+      background: #f6f8e9;
+      color: #4c542d;
+      font-size: 12px;
+      line-height: 1.4;
+    }
     .detail-empty { color: #777b6c; text-align: center; padding: 30px 12px; }
-    .detail-meta { display: grid; grid-template-columns: auto 1fr; gap: 5px 10px; margin-top: 10px; font-size: 12px; }
+    .detail-meta {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 5px 10px;
+      margin-top: 10px;
+      font-size: 12px;
+    }
     .detail-meta dt { color: #737866; }
     .detail-meta dd { margin: 0; }
-    .section-list { display: grid; gap: 9px; margin-top: 10px; }
-    .section-item { padding: 9px; border: 1px solid #e0e2d8; border-radius: 5px; }
-    .section-item strong { font-size: 12px; }
+    .section-list, .history-list { display: grid; gap: 9px; margin-top: 10px; }
+    .section-item, .history-item {
+      padding: 9px;
+      border: 1px solid #e0e2d8;
+      border-radius: 5px;
+    }
+    .section-item strong, .history-item strong { font-size: 12px; }
     .section-item ol { margin: 7px 0 0; padding-left: 22px; font-size: 12px; }
     .section-item li { margin: 3px 0; }
+    .history-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .history-item span { display: block; margin-top: 3px; color: #747968; }
+    .editor-form { display: grid; gap: 9px; }
+    .editor-form label { display: grid; gap: 4px; color: #666b57; font-size: 12px; }
+    .editor-actions { position: sticky; bottom: -14px; padding: 10px 0 14px; background: #fff; }
+    .editor-status { margin-left: auto; font-size: 12px; }
+    .success { color: #36713d; }
     .error { color: #a33131; }
-    @media (max-width: 980px) { main { grid-template-columns: 1fr; } aside { position: static; max-height: none; } }
-    @media (max-width: 680px) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .conflict {
+      padding: 9px;
+      border: 1px solid #d99c95;
+      border-radius: 4px;
+      background: #fff2f0;
+      color: #8e3028;
+      font-size: 12px;
+    }
+    @media (max-width: 1080px) {
+      main { grid-template-columns: 1fr; }
+      aside { position: static; max-height: none; }
+    }
+    @media (max-width: 680px) {
+      .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
   </style>
 </head>
 <body>
   <header>
-    <div><h1>Homologação somente leitura</h1><p>Navegação na cópia do banco real hospedada no Railway.</p></div>
+    <div>
+      <h1>Homologação de escrita controlada</h1>
+      <p>Leitura do banco real e edição somente em cópias isoladas.</p>
+    </div>
     <a href="/">Voltar ao diagnóstico</a>
   </header>
   <main>
     <div class="stack">
       <section>
-        <div class="section-head"><h2>Acesso e resumo</h2><span id="accessStatus">Informe a chave</span></div>
+        <div class="section-head">
+          <h2>Acesso e resumo</h2>
+          <span id="accessStatus">Informe a chave</span>
+        </div>
         <div class="toolbar">
           <input id="apiKey" type="password" autocomplete="off" placeholder="POC_API_KEY">
+          <input id="usuario" type="text" value="Homologação" placeholder="Nome do testador">
           <button id="connectBtn">Conectar</button>
           <button id="benchmarkBtn" class="secondary">Medir consultas</button>
         </div>
         <div id="summary" class="cards"></div>
         <pre id="benchmark" hidden></pre>
       </section>
+
       <section>
-        <div class="section-head"><h2>Normas</h2><span id="normasTime"></span></div>
+        <div class="section-head">
+          <h2>Edições controladas</h2>
+          <span id="edicoesStatus">Nenhuma conexão</span>
+        </div>
+        <p class="notice">
+          Estas cópias vivem apenas nas tabelas <strong>railway_homologacao_*</strong>.
+          Salvar ou restaurar aqui não modifica a norma original.
+        </p>
+        <table>
+          <thead><tr><th>Norma</th><th>Revisão</th><th>Histórico</th><th>Atualizada por</th></tr></thead>
+          <tbody id="edicoesBody"></tbody>
+        </table>
+      </section>
+
+      <section>
+        <div class="section-head"><h2>Normas reais</h2><span id="normasTime"></span></div>
         <form id="normasForm" class="toolbar">
           <input id="normasBusca" type="search" placeholder="Epígrafe ou apelido">
           <select id="normasStatus">
@@ -86,46 +239,106 @@
           <label class="muted"><input id="buscarConteudo" type="checkbox"> conteúdo</label>
           <button>Buscar</button>
         </form>
-        <table><thead><tr><th>Tipo</th><th>Epígrafe</th><th>Status</th><th>Tamanho</th></tr></thead><tbody id="normasBody"></tbody></table>
-        <div class="pagination"><span id="normasPage"></span><button id="normasPrev" class="secondary">Anterior</button><button id="normasNext" class="secondary">Próxima</button></div>
+        <table>
+          <thead><tr><th>Tipo</th><th>Epígrafe</th><th>Status</th><th>Tamanho</th></tr></thead>
+          <tbody id="normasBody"></tbody>
+        </table>
+        <div class="pagination">
+          <span id="normasPage"></span>
+          <button id="normasPrev" class="secondary">Anterior</button>
+          <button id="normasNext" class="secondary">Próxima</button>
+        </div>
       </section>
+
       <section>
         <div class="section-head"><h2>Publicações</h2><span id="publicacoesTime"></span></div>
-        <form id="publicacoesForm" class="toolbar"><input id="publicacoesBusca" type="search" placeholder="Título, edição ou organizador"><button>Buscar</button></form>
-        <table><thead><tr><th>Publicação</th><th>Status</th><th>Seções</th><th>Normas</th></tr></thead><tbody id="publicacoesBody"></tbody></table>
-        <div class="pagination"><span id="publicacoesPage"></span><button id="publicacoesPrev" class="secondary">Anterior</button><button id="publicacoesNext" class="secondary">Próxima</button></div>
+        <form id="publicacoesForm" class="toolbar">
+          <input id="publicacoesBusca" type="search" placeholder="Título, edição ou organizador">
+          <button>Buscar</button>
+        </form>
+        <table>
+          <thead><tr><th>Publicação</th><th>Status</th><th>Seções</th><th>Normas</th></tr></thead>
+          <tbody id="publicacoesBody"></tbody>
+        </table>
+        <div class="pagination">
+          <span id="publicacoesPage"></span>
+          <button id="publicacoesPrev" class="secondary">Anterior</button>
+          <button id="publicacoesNext" class="secondary">Próxima</button>
+        </div>
       </section>
     </div>
-    <aside id="detail"><h2>Detalhes</h2><p class="detail-empty">Clique numa norma ou publicação para abrir.</p></aside>
+
+    <aside id="detail">
+      <h2>Detalhes</h2>
+      <p class="detail-empty">Clique numa norma, publicação ou cópia de edição.</p>
+    </aside>
   </main>
+
   <script>
     const $ = id => document.getElementById(id)
-    const state = { normasPage: 1, normasTotalPages: 1, publicacoesPage: 1, publicacoesTotalPages: 1 }
-    const headers = () => ({ 'x-api-key': $('apiKey').value })
-    async function api(path) {
+    const state = {
+      normasPage: 1,
+      normasTotalPages: 1,
+      publicacoesPage: 1,
+      publicacoesTotalPages: 1,
+      currentEdit: null,
+    }
+
+    function requestHeaders(hasBody) {
+      const result = { 'x-api-key': $('apiKey').value }
+      if (hasBody) result['content-type'] = 'application/json'
+      return result
+    }
+
+    async function api(path, options = {}) {
       const started = performance.now()
-      const response = await fetch(path, { headers: headers() })
-      const body = await response.json()
-      if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`)
+      const response = await fetch(path, {
+        ...options,
+        headers: {
+          ...requestHeaders(options.body != null),
+          ...(options.headers || {}),
+        },
+      })
+      const raw = await response.text()
+      let body
+      try { body = raw ? JSON.parse(raw) : {} }
+      catch { body = { error: raw || `HTTP ${response.status}` } }
+      if (!response.ok) {
+        const error = new Error(body.error || `HTTP ${response.status}`)
+        error.status = response.status
+        error.body = body
+        throw error
+      }
       return { body, networkMs: performance.now() - started }
     }
+
     function formatBytes(value) {
       const bytes = Number(value || 0)
       if (bytes < 1024) return `${bytes} B`
       if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`
       return `${(bytes / 1048576).toFixed(1)} MB`
     }
+
+    function formatDate(value) {
+      if (!value) return '—'
+      const date = new Date(value)
+      return Number.isNaN(date.getTime()) ? value : date.toLocaleString('pt-BR')
+    }
+
     const text = value => value == null || value === '' ? '—' : String(value)
+
     function cell(value, className = '') {
       const td = document.createElement('td')
       td.textContent = text(value)
       if (className) td.className = className
       return td
     }
+
     function showError(error) {
       $('accessStatus').textContent = error.message
       $('accessStatus').className = 'error'
     }
+
     function appendMeta(container, pairs) {
       const meta = document.createElement('dl')
       meta.className = 'detail-meta'
@@ -138,13 +351,18 @@
       }
       container.appendChild(meta)
     }
+
     async function connect() {
       try {
         const { body, networkMs } = await api('/api/homologacao/resumo')
-        $('accessStatus').textContent = `Conectado · rede ${networkMs.toFixed(1)} ms · banco ${body.duracaoMs.toFixed(2)} ms`
+        $('accessStatus').textContent =
+          `Conectado · rede ${networkMs.toFixed(1)} ms · banco ${body.duracaoMs.toFixed(2)} ms`
         $('accessStatus').className = ''
         $('summary').replaceChildren(...[
-          ['Normas', body.normas], ['Publicações', body.publicacoes], ['Seções', body.secoes], ['Versões', body.versoes ?? '—'],
+          ['Normas', body.normas],
+          ['Publicações', body.publicacoes],
+          ['Seções', body.secoes],
+          ['Versões', body.versoes ?? '—'],
         ].map(([label, value]) => {
           const div = document.createElement('div')
           div.className = 'metric'
@@ -155,99 +373,376 @@
           div.append(strong, span)
           return div
         }))
-        await Promise.all([loadNormas(), loadPublicacoes()])
-      } catch (error) { showError(error) }
+        await Promise.all([loadEdicoes(), loadNormas(), loadPublicacoes()])
+      } catch (error) {
+        showError(error)
+      }
     }
+
+    async function loadEdicoes() {
+      try {
+        const { body } = await api('/api/homologacao/edicoes')
+        $('edicoesStatus').textContent = `${body.items.length} cópia(s)`
+        $('edicoesBody').replaceChildren(...body.items.map(edicao => {
+          const tr = document.createElement('tr')
+          tr.append(
+            cell(edicao.epigrafe, 'epigrafe'),
+            cell(edicao.revisao),
+            cell(edicao.total_versoes),
+            cell(edicao.atualizado_por),
+          )
+          tr.onclick = () => openEdicao(edicao.id)
+          return tr
+        }))
+      } catch (error) {
+        showError(error)
+      }
+    }
+
     async function loadNormas() {
       try {
-        const params = new URLSearchParams({ page: state.normasPage, limit: 30, busca: $('normasBusca').value, status: $('normasStatus').value, buscarConteudo: $('buscarConteudo').checked })
+        const params = new URLSearchParams({
+          page: state.normasPage,
+          limit: 30,
+          busca: $('normasBusca').value,
+          status: $('normasStatus').value,
+          buscarConteudo: $('buscarConteudo').checked,
+        })
         const { body, networkMs } = await api(`/api/homologacao/normas?${params}`)
         state.normasTotalPages = body.totalPages
-        $('normasTime').textContent = `${body.total} resultados · rede ${networkMs.toFixed(1)} ms · banco ${body.duracaoMs.toFixed(2)} ms`
+        $('normasTime').textContent =
+          `${body.total} resultados · rede ${networkMs.toFixed(1)} ms · banco ${body.duracaoMs.toFixed(2)} ms`
         $('normasPage').textContent = `Página ${body.page} de ${body.totalPages}`
         $('normasPrev').disabled = body.page <= 1
         $('normasNext').disabled = body.page >= body.totalPages
         $('normasBody').replaceChildren(...body.items.map(norma => {
           const tr = document.createElement('tr')
-          tr.append(cell(norma.tipo), cell(norma.apelido ? `${norma.epigrafe} (${norma.apelido})` : norma.epigrafe, 'epigrafe'), cell(norma.status), cell(formatBytes(norma.tamanho_doc)))
+          tr.append(
+            cell(norma.tipo),
+            cell(norma.apelido ? `${norma.epigrafe} (${norma.apelido})` : norma.epigrafe, 'epigrafe'),
+            cell(norma.status),
+            cell(formatBytes(norma.tamanho_doc)),
+          )
           tr.onclick = () => openNorma(norma.id)
           return tr
         }))
-      } catch (error) { showError(error) }
+      } catch (error) {
+        showError(error)
+      }
     }
+
     async function openNorma(id) {
-      $('detail').replaceChildren(Object.assign(document.createElement('h2'), { textContent: 'Carregando norma...' }))
+      $('detail').replaceChildren(Object.assign(document.createElement('h2'), {
+        textContent: 'Carregando norma...',
+      }))
       try {
         const { body, networkMs } = await api(`/api/homologacao/normas/${id}`)
-        const n = body.norma
-        $('detail').replaceChildren(Object.assign(document.createElement('h2'), { textContent: n.epigrafe }))
+        const norma = body.norma
+        const title = Object.assign(document.createElement('h2'), { textContent: norma.epigrafe })
+        const notice = document.createElement('p')
+        notice.className = 'notice'
+        notice.textContent = 'Esta é a norma real em modo somente leitura.'
+        const cloneButton = document.createElement('button')
+        cloneButton.textContent = 'Criar ou abrir cópia de edição'
+        cloneButton.onclick = () => createEdicao(norma.id)
+        $('detail').replaceChildren(title, notice, cloneButton)
         appendMeta($('detail'), [
-          ['ID', n.id], ['Tipo', n.tipo], ['Apelido', n.apelido], ['Status', n.status], ['Tags', (n.tags || []).join(', ')],
-          ['Versões', n.total_versoes], ['Atualizado por', n.atualizado_por], ['Atualizado em', n.atualizado_em],
-          ['Documento', formatBytes(body.metricas.tamanhoDocBytes)], ['Texto', formatBytes(body.metricas.tamanhoTextoBytes)],
+          ['ID', norma.id],
+          ['Tipo', norma.tipo],
+          ['Apelido', norma.apelido],
+          ['Status', norma.status],
+          ['Tags', (norma.tags || []).join(', ')],
+          ['Versões', norma.total_versoes],
+          ['Atualizado por', norma.atualizado_por],
+          ['Atualizado em', formatDate(norma.atualizado_em)],
+          ['Documento', formatBytes(body.metricas.tamanhoDocBytes)],
+          ['Texto', formatBytes(body.metricas.tamanhoTextoBytes)],
           ['Tempo', `rede ${networkMs.toFixed(1)} ms · banco ${body.metricas.duracaoMs.toFixed(2)} ms`],
         ])
         const heading = Object.assign(document.createElement('h3'), { textContent: 'Prévia do texto' })
-        const preview = Object.assign(document.createElement('pre'), { textContent: String(n.conteudo_txt || '').slice(0, 6000) || 'Sem conteúdo textual.' })
+        const preview = Object.assign(document.createElement('pre'), {
+          textContent: String(norma.conteudo_txt || '').slice(0, 6000) || 'Sem conteúdo textual.',
+        })
         $('detail').append(heading, preview)
-      } catch (error) { showError(error) }
+      } catch (error) {
+        showError(error)
+      }
     }
+
+    async function createEdicao(normaId) {
+      try {
+        const { body } = await api('/api/homologacao/edicoes', {
+          method: 'POST',
+          body: JSON.stringify({
+            normaId,
+            usuario: $('usuario').value || 'Homologação',
+          }),
+        })
+        await loadEdicoes()
+        await openEdicao(body.edicao.id)
+      } catch (error) {
+        showError(error)
+      }
+    }
+
+    async function openEdicao(id) {
+      $('detail').replaceChildren(Object.assign(document.createElement('h2'), {
+        textContent: 'Carregando cópia...',
+      }))
+      try {
+        const { body } = await api(`/api/homologacao/edicoes/${id}`)
+        state.currentEdit = body.edicao
+        renderEditor()
+        await loadVersoes(id)
+      } catch (error) {
+        showError(error)
+      }
+    }
+
+    function renderEditor(message = '', messageClass = '') {
+      const edicao = state.currentEdit
+      const title = Object.assign(document.createElement('h2'), {
+        textContent: 'Cópia de edição',
+      })
+      const notice = document.createElement('p')
+      notice.className = 'notice'
+      notice.textContent =
+        `Norma real #${edicao.norma_origem_id} preservada. Você está editando a cópia isolada #${edicao.id}.`
+      const form = document.createElement('div')
+      form.className = 'editor-form'
+      form.innerHTML = `
+        <label>Epígrafe
+          <input id="editEpigrafe" type="text">
+        </label>
+        <label>Conteúdo textual da cópia
+          <textarea id="editConteudo"></textarea>
+        </label>
+      `
+      const actions = document.createElement('div')
+      actions.className = 'editor-actions'
+      const save = Object.assign(document.createElement('button'), { textContent: 'Salvar cópia' })
+      const reload = Object.assign(document.createElement('button'), {
+        textContent: 'Recarregar',
+        className: 'secondary',
+      })
+      const status = document.createElement('span')
+      status.id = 'editStatus'
+      status.className = `editor-status ${messageClass}`.trim()
+      status.textContent = message || `Revisão ${edicao.revisao} · ${formatDate(edicao.atualizado_em)}`
+      save.onclick = saveEdicao
+      reload.onclick = () => openEdicao(edicao.id)
+      actions.append(save, reload, status)
+      const historyTitle = Object.assign(document.createElement('h3'), { textContent: 'Histórico' })
+      const history = document.createElement('div')
+      history.id = 'historyList'
+      history.className = 'history-list'
+      $('detail').replaceChildren(title, notice, form, actions, historyTitle, history)
+      $('editEpigrafe').value = edicao.epigrafe
+      $('editConteudo').value = edicao.conteudo_txt
+    }
+
+    async function saveEdicao() {
+      const edicao = state.currentEdit
+      const status = $('editStatus')
+      status.textContent = 'Salvando...'
+      status.className = 'editor-status'
+      try {
+        const { body } = await api(`/api/homologacao/edicoes/${edicao.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            revisao: edicao.revisao,
+            epigrafe: $('editEpigrafe').value,
+            conteudo_doc: edicao.conteudo_doc,
+            conteudo_txt: $('editConteudo').value,
+            usuario: $('usuario').value || 'Homologação',
+          }),
+        })
+        state.currentEdit = body.edicao
+        renderEditor('Cópia salva com sucesso.', 'success')
+        await Promise.all([loadVersoes(edicao.id), loadEdicoes()])
+      } catch (error) {
+        if (error.status === 409) {
+          status.textContent =
+            `Conflito: sua tela estava na revisão ${edicao.revisao}, mas o servidor já está na revisão ${error.body.atual.revisao}.`
+          status.className = 'editor-status error'
+          const conflict = document.createElement('p')
+          conflict.className = 'conflict'
+          conflict.textContent =
+            'Seu texto local foi mantido na tela. Recarregue para receber a versão atual antes de editar novamente.'
+          $('detail').insertBefore(conflict, $('detail').querySelector('h3'))
+          return
+        }
+        status.textContent = error.message
+        status.className = 'editor-status error'
+      }
+    }
+
+    async function loadVersoes(id) {
+      const { body } = await api(`/api/homologacao/edicoes/${id}/versoes`)
+      const container = $('historyList')
+      if (!container) return
+      if (!body.items.length) {
+        container.textContent = 'O histórico será criado no primeiro salvamento.'
+        container.className = 'history-list muted'
+        return
+      }
+      container.className = 'history-list'
+      container.replaceChildren(...body.items.map(versao => {
+        const item = document.createElement('div')
+        item.className = 'history-item'
+        const info = document.createElement('div')
+        const strong = document.createElement('strong')
+        const meta = document.createElement('span')
+        strong.textContent = `Revisão ${versao.revisao} · ${versao.epigrafe}`
+        meta.textContent =
+          `${formatDate(versao.criado_em)} · ${versao.salvo_por || 'Sem usuário'} · ${formatBytes(versao.tamanho_texto)}`
+        info.append(strong, meta)
+        const restore = Object.assign(document.createElement('button'), {
+          textContent: 'Restaurar',
+          className: 'secondary',
+        })
+        restore.onclick = () => restoreVersao(versao.id, versao.revisao)
+        item.append(info, restore)
+        return item
+      }))
+    }
+
+    async function restoreVersao(versaoId, revisaoHistorica) {
+      if (!confirm(`Restaurar o conteúdo da revisão ${revisaoHistorica}? A versão atual será preservada no histórico.`)) {
+        return
+      }
+      const edicao = state.currentEdit
+      try {
+        const { body } = await api(
+          `/api/homologacao/edicoes/${edicao.id}/restaurar/${versaoId}`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              revisao: edicao.revisao,
+              usuario: $('usuario').value || 'Homologação',
+            }),
+          },
+        )
+        state.currentEdit = body.edicao
+        renderEditor(`Revisão ${revisaoHistorica} restaurada em uma nova revisão.`, 'success')
+        await Promise.all([loadVersoes(edicao.id), loadEdicoes()])
+      } catch (error) {
+        if (error.status === 409) {
+          alert(`${error.message} A revisão atual no servidor é ${error.body.atual.revisao}.`)
+          return
+        }
+        showError(error)
+      }
+    }
+
     async function loadPublicacoes() {
       try {
-        const params = new URLSearchParams({ page: state.publicacoesPage, limit: 30, busca: $('publicacoesBusca').value })
+        const params = new URLSearchParams({
+          page: state.publicacoesPage,
+          limit: 30,
+          busca: $('publicacoesBusca').value,
+        })
         const { body, networkMs } = await api(`/api/homologacao/publicacoes?${params}`)
         state.publicacoesTotalPages = body.totalPages
-        $('publicacoesTime').textContent = `${body.total} resultados · rede ${networkMs.toFixed(1)} ms · banco ${body.duracaoMs.toFixed(2)} ms`
+        $('publicacoesTime').textContent =
+          `${body.total} resultados · rede ${networkMs.toFixed(1)} ms · banco ${body.duracaoMs.toFixed(2)} ms`
         $('publicacoesPage').textContent = `Página ${body.page} de ${body.totalPages}`
         $('publicacoesPrev').disabled = body.page <= 1
         $('publicacoesNext').disabled = body.page >= body.totalPages
-        $('publicacoesBody').replaceChildren(...body.items.map(pub => {
+        $('publicacoesBody').replaceChildren(...body.items.map(publicacao => {
           const tr = document.createElement('tr')
-          tr.append(cell(pub.edicao ? `${pub.titulo} · ${pub.edicao}` : pub.titulo, 'epigrafe'), cell(pub.status), cell(pub.total_secoes), cell(pub.total_normas))
-          tr.onclick = () => openPublicacao(pub.id)
+          tr.append(
+            cell(publicacao.edicao ? `${publicacao.titulo} · ${publicacao.edicao}` : publicacao.titulo, 'epigrafe'),
+            cell(publicacao.status),
+            cell(publicacao.total_secoes),
+            cell(publicacao.total_normas),
+          )
+          tr.onclick = () => openPublicacao(publicacao.id)
           return tr
         }))
-      } catch (error) { showError(error) }
+      } catch (error) {
+        showError(error)
+      }
     }
+
     async function openPublicacao(id) {
-      $('detail').replaceChildren(Object.assign(document.createElement('h2'), { textContent: 'Carregando publicação...' }))
+      $('detail').replaceChildren(Object.assign(document.createElement('h2'), {
+        textContent: 'Carregando publicação...',
+      }))
       try {
         const { body, networkMs } = await api(`/api/homologacao/publicacoes/${id}`)
-        const p = body.publicacao
-        $('detail').replaceChildren(Object.assign(document.createElement('h2'), { textContent: p.titulo }))
+        const publicacao = body.publicacao
+        $('detail').replaceChildren(Object.assign(document.createElement('h2'), {
+          textContent: publicacao.titulo,
+        }))
         appendMeta($('detail'), [
-          ['ID', p.id], ['Edição', p.edicao], ['Organizador', p.organizador], ['Status', p.status],
-          ['Seções', body.metricas.totalSecoes], ['Normas', body.metricas.totalNormas],
+          ['ID', publicacao.id],
+          ['Edição', publicacao.edicao],
+          ['Organizador', publicacao.organizador],
+          ['Status', publicacao.status],
+          ['Seções', body.metricas.totalSecoes],
+          ['Normas', body.metricas.totalNormas],
           ['Tempo', `rede ${networkMs.toFixed(1)} ms · banco ${body.metricas.duracaoMs.toFixed(2)} ms`],
         ])
         const sections = document.createElement('div')
         sections.className = 'section-list'
-        for (const section of p.secoes) {
+        for (const section of publicacao.secoes) {
           const item = document.createElement('div')
           item.className = 'section-item'
-          item.appendChild(Object.assign(document.createElement('strong'), { textContent: `${section.titulo} · ${section.normas.length} norma(s)` }))
+          item.appendChild(Object.assign(document.createElement('strong'), {
+            textContent: `${section.titulo} · ${section.normas.length} norma(s)`,
+          }))
           const list = document.createElement('ol')
-          for (const norma of section.normas) list.appendChild(Object.assign(document.createElement('li'), { textContent: norma.epigrafe }))
+          for (const norma of section.normas) {
+            list.appendChild(Object.assign(document.createElement('li'), {
+              textContent: norma.epigrafe,
+            }))
+          }
           item.appendChild(list)
           sections.appendChild(item)
         }
         $('detail').appendChild(sections)
-      } catch (error) { showError(error) }
+      } catch (error) {
+        showError(error)
+      }
     }
+
     $('connectBtn').onclick = connect
     $('benchmarkBtn').onclick = async () => {
       try {
         const { body, networkMs } = await api('/api/homologacao/benchmark?runs=7')
         $('benchmark').hidden = false
         $('benchmark').textContent = JSON.stringify({ networkMs, ...body }, null, 2)
-      } catch (error) { showError(error) }
+      } catch (error) {
+        showError(error)
+      }
     }
-    $('normasForm').onsubmit = event => { event.preventDefault(); state.normasPage = 1; loadNormas() }
-    $('publicacoesForm').onsubmit = event => { event.preventDefault(); state.publicacoesPage = 1; loadPublicacoes() }
-    $('normasPrev').onclick = () => { state.normasPage--; loadNormas() }
-    $('normasNext').onclick = () => { state.normasPage++; loadNormas() }
-    $('publicacoesPrev').onclick = () => { state.publicacoesPage--; loadPublicacoes() }
-    $('publicacoesNext').onclick = () => { state.publicacoesPage++; loadPublicacoes() }
+    $('normasForm').onsubmit = event => {
+      event.preventDefault()
+      state.normasPage = 1
+      loadNormas()
+    }
+    $('publicacoesForm').onsubmit = event => {
+      event.preventDefault()
+      state.publicacoesPage = 1
+      loadPublicacoes()
+    }
+    $('normasPrev').onclick = () => {
+      state.normasPage--
+      loadNormas()
+    }
+    $('normasNext').onclick = () => {
+      state.normasPage++
+      loadNormas()
+    }
+    $('publicacoesPrev').onclick = () => {
+      state.publicacoesPage--
+      loadPublicacoes()
+    }
+    $('publicacoesNext').onclick = () => {
+      state.publicacoesPage++
+      loadPublicacoes()
+    }
   </script>
 </body>
 </html>
