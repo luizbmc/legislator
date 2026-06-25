@@ -11,6 +11,10 @@ files:
   - node_modules/**/*
   - "!node_modules/.cache"
 
+extraResources:
+  - from: build/railway-default.json
+    to: railway-default.json
+
 publish:
   provider: github
   owner: luizbmc
