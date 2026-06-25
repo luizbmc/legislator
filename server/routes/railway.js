@@ -10,14 +10,27 @@ const {
 const router = express.Router()
 const configDir = process.env.DB_DIR || path.join(__dirname, '..', '..', 'server-data')
 const configPath = path.join(configDir, 'railway-remoto.json')
+const defaultConfigPath = path.join(__dirname, '..', '..', 'build', 'railway-default.json')
+
+function lerArquivoConfiguracao(arquivo) {
+  if (!fs.existsSync(arquivo)) return null
+  try {
+    const config = JSON.parse(fs.readFileSync(arquivo, 'utf8'))
+    if (!config.url || !config.chave) return null
+    return {
+      url: String(config.url).trim(),
+      chave: String(config.chave).trim(),
+      modo: config.modo === 'local' ? 'local' : 'railway',
+    }
+  } catch {
+    return null
+  }
+}
 
 function lerConfiguracao() {
-  if (!fs.existsSync(configPath)) return { url: '', chave: '', modo: 'local' }
-  try {
-    return JSON.parse(fs.readFileSync(configPath, 'utf8'))
-  } catch {
-    return { url: '', chave: '', modo: 'local' }
-  }
+  return lerArquivoConfiguracao(configPath)
+    || lerArquivoConfiguracao(defaultConfigPath)
+    || { url: '', chave: '', modo: 'local' }
 }
 
 function cliente() {

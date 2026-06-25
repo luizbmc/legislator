@@ -34,6 +34,29 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
+      - name: Preparar conexão padrão com o Railway
+        shell: pwsh
+        env:
+          NORMANDO_RAILWAY_URL: ${{ vars.NORMANDO_RAILWAY_URL || 'https://legislator-production.up.railway.app' }}
+          NORMANDO_RAILWAY_API_KEY: ${{ secrets.NORMANDO_RAILWAY_API_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:NORMANDO_RAILWAY_URL)) {
+            throw "Configure a variável NORMANDO_RAILWAY_URL no repositório."
+          }
+          if ([string]::IsNullOrWhiteSpace($env:NORMANDO_RAILWAY_API_KEY)) {
+            throw "Configure o secret NORMANDO_RAILWAY_API_KEY no repositório."
+          }
+          $config = @{
+            url = $env:NORMANDO_RAILWAY_URL
+            chave = $env:NORMANDO_RAILWAY_API_KEY
+            modo = "railway"
+          } | ConvertTo-Json
+          [IO.File]::WriteAllText(
+            (Join-Path $PWD "build/railway-default.json"),
+            $config,
+            [Text.UTF8Encoding]::new($false)
+          )
+
       - name: Gerar instalador e publicar Release
         run: npm run release:win
         env:
