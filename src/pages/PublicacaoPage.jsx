@@ -19,6 +19,7 @@ const COVER_COLORS = [
   'hsl(293 42% 78%)',
   'hsl(315 42% 78%)',
   'hsl(338 42% 78%)',
+  'hsl(0 0% 72%)',
 ]
 
 const DEFAULT_COVER_COLOR = COVER_COLORS[4]
@@ -1405,7 +1406,7 @@ export default function PublicacaoPage({ usuarioAtual }) {
                 className={`pub-cover-color${(form.cor_capa || DEFAULT_COVER_COLOR) === cor ? ' ativa' : ''}`}
                 style={{ '--cover-option-color': cor }}
                 onClick={() => setCorCapa(cor)}
-                title={`Cor ${idx + 1}`}
+                title={idx === COVER_COLORS.length - 1 ? 'Cinza' : `Cor ${idx + 1}`}
               />
             ))}
           </div>
