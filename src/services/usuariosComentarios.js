@@ -97,3 +97,43 @@ export function criarUsuarioComentario(nome, cor) {
   salvarUsuariosComentarios([...usuarios, usuario])
   return usuario
 }
+
+export async function sincronizarUsuariosComentarios() {
+  if (!window.legislator?.usuarios?.listar) return carregarUsuariosComentarios()
+  let lista = await window.legislator.usuarios.listar()
+  const locais = carregarUsuariosComentarios()
+  if (!lista?.length && locais.length && window.legislator.usuarios.criar) {
+    for (const usuario of locais) {
+      await window.legislator.usuarios.criar(usuario)
+    }
+    lista = await window.legislator.usuarios.listar()
+  }
+  return salvarUsuariosComentarios(lista || [])
+}
+
+export async function criarUsuarioComentarioNoBanco(nome, cor) {
+  const nomeLimpo = String(nome || '').trim()
+  if (!nomeLimpo) return null
+  if (!window.legislator?.usuarios?.criar) return criarUsuarioComentario(nomeLimpo, cor)
+  const usuario = await window.legislator.usuarios.criar({
+    nome: nomeLimpo,
+    cor: cor || CORES_USUARIO_COMENTARIO[0],
+  })
+  await sincronizarUsuariosComentarios()
+  return normalizarUsuario(usuario)
+}
+
+export async function excluirUsuarioComentarioNoBanco(usuario) {
+  if (!usuario?.id) return
+  if (window.legislator?.usuarios?.excluir) {
+    await window.legislator.usuarios.excluir(usuario.id)
+    salvarUsuariosComentarios(
+      carregarUsuariosComentarios().filter(item => item.id !== usuario.id),
+    )
+    await sincronizarUsuariosComentarios()
+    return
+  }
+  salvarUsuariosComentarios(
+    carregarUsuariosComentarios().filter(item => item.id !== usuario.id),
+  )
+}

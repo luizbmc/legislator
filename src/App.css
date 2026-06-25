@@ -3597,6 +3597,61 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   white-space: nowrap;
 }
 
+.editor-remoto-badge {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border: 1px solid #6f8f9e;
+  border-radius: 4px;
+  background: #edf6f9;
+  color: #315d70;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.editor-remoto-badge:hover {
+  background: #dfedf2;
+}
+
+.modal-historico-remoto {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.modal-historico-remoto .modal-header p {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.historico-remoto-lista {
+  display: grid;
+  gap: 8px;
+  max-height: 55vh;
+  overflow: auto;
+  padding: 12px 2px 2px;
+}
+
+.historico-remoto-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+
+.historico-remoto-item > span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.historico-remoto-item small {
+  color: var(--text-muted);
+}
+
 /* ══════════════════════════════════════════════════════════════════
    MODAL — ATUALIZAR NORMA
    ══════════════════════════════════════════════════════════════════ */
@@ -6254,4 +6309,324 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   justify-content: flex-end;
   gap: 8px;
   padding-top: 4px;
+}
+.trabalho-remoto {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.trabalho-remoto-busca {
+  width: 100%;
+  margin: 14px 0 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+}
+
+.trabalho-remoto-normas {
+  max-height: 340px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.trabalho-remoto-seletores {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.trabalho-remoto-seletores h3 {
+  margin: 0 0 7px;
+  font-size: 13px;
+}
+
+.trabalho-remoto-norma {
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  cursor: pointer;
+}
+
+.trabalho-remoto-norma:last-child {
+  border-bottom: 0;
+}
+
+.trabalho-remoto-norma:hover {
+  background: #f7f8f2;
+}
+
+.trabalho-remoto-norma span {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.trabalho-remoto-norma strong,
+.trabalho-remoto-norma small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trabalho-remoto-norma small,
+.trabalho-remoto-norma em {
+  color: var(--text-muted);
+}
+
+.trabalho-remoto-norma em {
+  font-size: 11px;
+  font-style: normal;
+  text-transform: uppercase;
+}
+
+.trabalho-remoto-colunas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.trabalho-remoto-pacotes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.trabalho-remoto-pacote {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fafafa;
+}
+
+.trabalho-remoto-pacote > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.trabalho-remoto-novas {
+  min-width: 0;
+  margin: 8px 0 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+
+.trabalho-remoto-novas legend {
+  padding: 0 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.trabalho-remoto-novas label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.trabalho-remoto-pacote span,
+.trabalho-remoto-pacote small {
+  color: var(--text-muted);
+}
+
+.trabalho-remoto-pacote span {
+  font-size: 12px;
+}
+
+.trabalho-remoto-pacote small {
+  font-size: 11px;
+}
+
+.trabalho-remoto-mensagem {
+  padding: 11px 13px;
+  border: 1px solid #becb8c;
+  border-radius: 6px;
+  background: #f5f8e9;
+  color: #3d4818;
+}
+
+.trabalho-remoto-relatorio {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.trabalho-remoto-relatorio h3 {
+  margin: 0 0 12px;
+}
+
+.trabalho-remoto-relatorio-grupo {
+  margin-top: 9px;
+  padding: 9px 11px;
+  border-left: 3px solid #9ca3af;
+  background: #f7f7f7;
+}
+
+.trabalho-remoto-relatorio-grupo.ok {
+  border-left-color: #708b35;
+  background: #f5f8e9;
+}
+
+.trabalho-remoto-relatorio-grupo.erro {
+  border-left-color: #b94747;
+  background: #fff3f3;
+}
+
+.trabalho-remoto-relatorio-grupo ul {
+  margin: 7px 0 0;
+  padding-left: 18px;
+}
+
+.railway-integracao {
+  display: grid;
+  gap: 16px;
+}
+
+.railway-config-form {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.5fr) minmax(240px, 1fr);
+  gap: 12px;
+}
+
+.railway-config-form .config-form-actions {
+  grid-column: 1 / -1;
+}
+
+.railway-modo-toggle {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #f8f8f6;
+  cursor: pointer;
+}
+
+.railway-modo-toggle.ativo {
+  border-color: #77929f;
+  background: #edf6f9;
+}
+
+.railway-modo-toggle > span {
+  display: grid;
+  gap: 3px;
+}
+
+.railway-modo-toggle small {
+  color: var(--text-muted);
+}
+
+.railway-conexao-mensagem {
+  grid-column: 1 / -1;
+  padding: 10px 12px;
+  border: 1px solid #d69b92;
+  border-radius: 5px;
+  background: #fff3f1;
+  color: #8b3027;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.railway-conexao-mensagem.sucesso {
+  border-color: #aebb7a;
+  background: #f5f8e9;
+  color: #42551d;
+}
+
+.railway-busca {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.railway-busca input {
+  flex: 1;
+}
+
+.railway-lista {
+  display: grid;
+  gap: 7px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.railway-item {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--text);
+  text-align: left;
+}
+
+button.railway-item {
+  cursor: pointer;
+}
+
+button.railway-item:hover,
+.railway-item:hover {
+  background: #f7f8f2;
+  border-color: #aeb68b;
+}
+
+.railway-item > span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.railway-item strong,
+.railway-item small {
+  overflow-wrap: anywhere;
+}
+
+.railway-item small {
+  color: var(--text-muted);
+}
+
+.railway-item em {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+@media (max-width: 1100px) {
+  .trabalho-remoto-colunas,
+  .trabalho-remoto-seletores {
+    grid-template-columns: 1fr;
+  }
+
+  .railway-config-form {
+    grid-template-columns: 1fr;
+  }
 }

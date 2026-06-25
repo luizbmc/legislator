@@ -73,6 +73,7 @@ export default function PublicacoesPage({ usuarioAtual, onTrocarUsuario }) {
         await window.legislator.publicacoes.salvar(pub.id, {
           ...form,
           secoes: duplicando.secoes || [],
+          revisao: pub.revisao,
         })
       }
       nav(`/publicacoes/${pub.id}`)

@@ -11,6 +11,9 @@ app.use('/api/publicacoes', require('./routes/publicacoes'))
 app.use('/api/exportar',    require('./routes/exportar'))
 app.use('/api/tags',        require('./routes/tags'))
 app.use('/api/excecoes',    require('./routes/excecoes'))
+app.use('/api/trabalho-remoto', require('./routes/trabalhoRemoto'))
+app.use('/api/railway', require('./routes/railway'))
+app.use('/api/usuarios', require('./routes/usuarios'))
 
 // Serve built frontend
 const staticDir = path.join(__dirname, '..', 'out', 'renderer')

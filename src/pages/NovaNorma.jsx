@@ -103,6 +103,7 @@ export default function NovaNorma({ usuarioAtual }) {
           status: duplicarNorma.status || 'rascunho',
           data_atualizacao: duplicarNorma.data_atualizacao || null,
           atualizado_por: usuarioAtual?.nome || '',
+          revisao: norma.revisao,
         })
       }
       nav(`/editor/${norma.id}`)

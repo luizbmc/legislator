@@ -13,11 +13,20 @@ import {
   iniciaisUsuario,
   limparUsuarioComentarioAtual,
   selecionarUsuarioComentario,
+  sincronizarUsuariosComentarios,
   USUARIO_COMENTARIO_CONVIDADO,
 } from './services/usuariosComentarios.js'
 
 function EntradaUsuario({ onEntrar }) {
-  const [usuarios] = useState(() => carregarUsuariosComentarios())
+  const [usuarios, setUsuarios] = useState(() => carregarUsuariosComentarios())
+  const [carregando, setCarregando] = useState(true)
+
+  useEffect(() => {
+    sincronizarUsuariosComentarios()
+      .then(setUsuarios)
+      .catch(() => setUsuarios(carregarUsuariosComentarios()))
+      .finally(() => setCarregando(false))
+  }, [])
   const opcoes = [...usuarios, USUARIO_COMENTARIO_CONVIDADO]
 
   function entrar(usuario) {
@@ -30,6 +39,7 @@ function EntradaUsuario({ onEntrar }) {
       <section className="usuario-entrada-card">
         <h1>Normando</h1>
         <p>Selecione seu nome para identificar comentários feitos nas normas.</p>
+        {carregando && <p className="usuario-entrada-carregando">Carregando usuários...</p>}
 
         <div className="usuario-entrada-lista">
           {opcoes.map(usuario => (
@@ -72,6 +82,7 @@ export default function App() {
         <Route path="/"                   element={<Home usuarioAtual={usuarioAtual} onTrocarUsuario={trocarUsuario} />} />
         <Route path="/nova"               element={<NovaNorma usuarioAtual={usuarioAtual} />} />
         <Route path="/editor/:id"         element={<Editor usuarioAtual={usuarioAtual} onTrocarUsuario={trocarUsuario} />} />
+        <Route path="/editor-remoto/:id"  element={<Editor remoto usuarioAtual={usuarioAtual} onTrocarUsuario={trocarUsuario} />} />
         <Route path="/configuracoes"      element={<Configuracoes />} />
         <Route path="/rotinas"            element={<Rotinas />} />
         <Route path="/publicacoes"        element={<PublicacoesPage usuarioAtual={usuarioAtual} onTrocarUsuario={trocarUsuario} />} />

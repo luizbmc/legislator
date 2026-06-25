@@ -14,7 +14,10 @@ if (!window.legislator) {
     const res = await fetch(BASE + path, opts)
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: res.statusText }))
-      throw new Error(err.error || res.statusText)
+      const error = new Error(err.error || res.statusText)
+      error.status = res.status
+      error.payload = err.remoto || err
+      throw error
     }
     return res.json()
   }
@@ -74,21 +77,41 @@ if (!window.legislator) {
     return qs ? `?${qs}` : ''
   }
 
+  let fonteCache = null
+  let fonteCacheEm = 0
+
+  async function usarRailway() {
+    if (fonteCache && Date.now() - fonteCacheEm < 2000) {
+      return fonteCache === 'railway'
+    }
+    const config = await api('GET', '/railway/configuracao')
+    fonteCache = config.modo || 'local'
+    fonteCacheEm = Date.now()
+    return fonteCache === 'railway'
+  }
+
+  async function dadosApi(method, path, body) {
+    if (await usarRailway()) {
+      return api(method, `/railway/dados${path}`, body)
+    }
+    return api(method, path, body)
+  }
+
   window.legislator = {
     normas: {
-      listar:        (filtros = {}) => api('GET', `/normas${toQuery(filtros)}`),
-      buscar:        (id)           => api('GET', `/normas/${id}`),
-      criar:         (dados)        => api('POST', '/normas', dados),
-      salvar:        (id, payload)  => api('PUT', `/normas/${id}`, payload),
-      atualizarMeta: (id, meta)     => api('PATCH', `/normas/${id}/meta`, meta),
-      tags:          ()             => api('GET', '/tags'),
-      excluir:       (id)           => api('DELETE', `/normas/${id}`),
-      versoes:       (id)           => api('GET', `/normas/${id}/versoes`),
-      restaurar:     (nId, vId)     => api('POST', `/normas/${nId}/restaurar/${vId}`),
+      listar:        (filtros = {}) => dadosApi('GET', `/normas${toQuery(filtros)}`),
+      buscar:        (id)           => dadosApi('GET', `/normas/${id}`),
+      criar:         (dados)        => dadosApi('POST', '/normas', dados),
+      salvar:        (id, payload)  => dadosApi('PUT', `/normas/${id}`, payload),
+      atualizarMeta: (id, meta)     => dadosApi('PATCH', `/normas/${id}/meta`, meta),
+      tags:          ()             => dadosApi('GET', '/tags'),
+      excluir:       (id)           => dadosApi('DELETE', `/normas/${id}`),
+      versoes:       (id)           => dadosApi('GET', `/normas/${id}/versoes`),
+      restaurar:     (nId, vId)     => dadosApi('POST', `/normas/${nId}/restaurar/${vId}`, {}),
     },
     excecoes: {
-      salvar:  (normaId, lista) => api('PUT', `/normas/${normaId}/excecoes`, lista),
-      resolver:(id)             => api('PATCH', `/excecoes/${id}/resolver`),
+      salvar:  (normaId, lista) => dadosApi('PUT', `/normas/${normaId}/excecoes`, lista),
+      resolver:(id)             => dadosApi('PATCH', `/excecoes/${id}/resolver`, {}),
     },
     exportar: {
       docx: (id) => download(`/exportar/norma/docx/${id}`),
@@ -109,16 +132,49 @@ if (!window.legislator) {
       },
     },
     publicacoes: {
-      listar:       (filtros = {}) => api('GET', `/publicacoes${toQuery(filtros)}`),
-      buscar:       (id)         => api('GET', `/publicacoes/${id}`),
-      criar:        (dados)      => api('POST', '/publicacoes', dados),
-      salvar:       (id, dados)  => api('PUT', `/publicacoes/${id}`, dados),
-      excluir:      (id)         => api('DELETE', `/publicacoes/${id}`),
-      duplicar:     (id)         => api('POST', `/publicacoes/${id}/duplicar`),
+      listar:       (filtros = {}) => dadosApi('GET', `/publicacoes${toQuery(filtros)}`),
+      buscar:       (id)         => dadosApi('GET', `/publicacoes/${id}`),
+      criar:        (dados)      => dadosApi('POST', '/publicacoes', dados),
+      salvar:       (id, dados)  => dadosApi('PUT', `/publicacoes/${id}`, dados),
+      excluir:      (id)         => dadosApi('DELETE', `/publicacoes/${id}`),
+      duplicar:     (id)         => dadosApi('POST', `/publicacoes/${id}/duplicar`, {}),
       exportarDocx: (id)         => download(`/exportar/publicacao/docx/${id}`),
       exportarHtml: (id)         => download(`/exportar/publicacao/html/${id}`),
       exportarWord: (id)         => download(`/exportar/publicacao/docx/${id}`),
       exportarInDesign: (id)     => download(`/exportar/publicacao/html/${id}`),
+    },
+    trabalhoRemoto: {
+      listar: () => api('GET', '/trabalho-remoto/pacotes'),
+      criarRetirada: (normaIds, criadoPor, publicacaoIds) => api('POST', '/trabalho-remoto/retirada', { normaIds, criadoPor, publicacaoIds }),
+      importarRetirada: (pacote, atualizadoPor) => api('POST', '/trabalho-remoto/retirada/importar', { pacote, atualizadoPor }),
+      criarDevolucao: (pacoteId, criadoPor, novaNormaIds) => api('POST', `/trabalho-remoto/devolucao/${pacoteId}`, { criadoPor, novaNormaIds }),
+      listarNormasNovas: (pacoteId) => api('GET', `/trabalho-remoto/pacotes/${pacoteId}/normas-novas`),
+      importarDevolucao: (pacote, atualizadoPor) => api('POST', '/trabalho-remoto/devolucao/importar', { pacote, atualizadoPor }),
+    },
+    railway: {
+      configuracao: () => api('GET', '/railway/configuracao'),
+      salvarConfiguracao: async dados => {
+        const resultado = await api('PUT', '/railway/configuracao', dados)
+        fonteCache = resultado.modo || 'local'
+        fonteCacheEm = Date.now()
+        return resultado
+      },
+      testar: () => api('GET', '/railway/testar'),
+      listarNormas: (filtros = {}) => api('GET', `/railway/normas${toQuery(filtros)}`),
+      listarEdicoes: () => api('GET', '/railway/edicoes'),
+      criarEdicao: (normaId, usuario) => api('POST', '/railway/edicoes', { normaId, usuario }),
+      buscarEdicao: id => api('GET', `/railway/edicoes/${id}`),
+      salvarEdicao: (id, dados) => api('PUT', `/railway/edicoes/${id}`, dados),
+      listarVersoes: id => api('GET', `/railway/edicoes/${id}/versoes`),
+      restaurarVersao: (id, versaoId, dados) => (
+        api('POST', `/railway/edicoes/${id}/restaurar/${versaoId}`, dados)
+      ),
+    },
+    usuarios: {
+      listar: () => dadosApi('GET', '/usuarios'),
+      criar: dados => dadosApi('POST', '/usuarios', dados),
+      salvar: (id, dados) => dadosApi('PUT', `/usuarios/${id}`, dados),
+      excluir: id => dadosApi('DELETE', `/usuarios/${id}`),
     },
   }
 }

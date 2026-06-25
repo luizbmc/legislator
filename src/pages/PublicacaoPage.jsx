@@ -908,7 +908,9 @@ export default function PublicacaoPage({ usuarioAtual }) {
   const salvar = useCallback(async () => {
     setSalvando(true)
     try {
-      const payload = estruturaModificada ? { ...form, secoes } : { ...form }
+      const payload = estruturaModificada
+        ? { ...form, secoes, revisao: pub?.revisao }
+        : { ...form, revisao: pub?.revisao }
       const atualizada = await window.legislator.publicacoes.salvar(parseInt(id), payload)
       setPub(atualizada)
       setModificado(false)
@@ -1216,6 +1218,7 @@ export default function PublicacaoPage({ usuarioAtual }) {
         status: 'rascunho',
         data_atualizacao: criada.data_atualizacao || null,
         atualizado_por: usuarioAtual?.nome || '',
+        revisao: criada.revisao,
       })
       const normaCriada = {
         ...criada,

@@ -15,9 +15,11 @@ fixture.exec(`
   CREATE TABLE normas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tipo TEXT, epigrafe TEXT, apelido TEXT, ementa TEXT,
-    conteudo_doc TEXT, conteudo_txt TEXT, status TEXT,
+    dados_publicacao TEXT, data_ultima_alteracao TEXT,
+    conteudo_raw TEXT, conteudo_doc TEXT, conteudo_txt TEXT, status TEXT,
     atualizacao_pendente INTEGER DEFAULT 0, vigencia TEXT,
-    atualizado_por TEXT, criado_em TEXT, atualizado_em TEXT
+    link_acesso TEXT, anexo TEXT, observacoes TEXT, caminho_rede TEXT,
+    data_atualizacao TEXT, atualizado_por TEXT, criado_em TEXT, atualizado_em TEXT
   );
   CREATE TABLE normas_versoes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -28,6 +30,7 @@ fixture.exec(`
   CREATE TABLE publicacoes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     titulo TEXT, edicao TEXT, organizador TEXT, status TEXT,
+    lancado_em TEXT, descricao TEXT, caminho_rede TEXT,
     ultima_edicao INTEGER DEFAULT 0, cor_capa TEXT,
     criado_em TEXT, atualizado_em TEXT
   );
@@ -186,6 +189,113 @@ async function run() {
       body: JSON.stringify({ epigrafe: 'Não deve salvar' }),
     })
     assert.equal(forbiddenWrite.response.status, 404)
+
+    const officialUser = await request('/api/usuarios', {
+      method: 'POST',
+      body: JSON.stringify({ id: 'usuario-teste', nome: 'Usuário teste', cor: '#2563eb' }),
+    })
+    assert.equal(officialUser.response.status, 201)
+    assert.equal(officialUser.body.id, 'usuario-teste')
+
+    const officialUsers = await request('/api/usuarios')
+    assert.equal(officialUsers.response.status, 200)
+    assert.equal(officialUsers.body.length, 1)
+
+    const officialNorm = await request('/api/normas', {
+      method: 'POST',
+      body: JSON.stringify({
+        tipo: 'Lei Ordinária',
+        epigrafe: 'LEI REMOTA DE TESTE',
+        conteudo_doc: '{"type":"doc","content":[]}',
+        conteudo_txt: 'Texto inicial remoto.',
+        status: 'rascunho',
+        tags: ['vm'],
+      }),
+    })
+    assert.equal(officialNorm.response.status, 201)
+    assert.equal(officialNorm.body.revisao, 1)
+    assert.deepEqual(officialNorm.body.tags, ['vm'])
+
+    const officialNormList = await request('/api/normas')
+    assert.equal(officialNormList.response.status, 200)
+    assert.equal(officialNormList.body.some(item => item.id === officialNorm.body.id), true)
+    assert.equal(officialNormList.body[0].conteudo_doc, undefined)
+
+    const officialSaved = await request(`/api/normas/${officialNorm.body.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        revisao: 1,
+        conteudo_doc: '{"type":"doc","content":[]}',
+        conteudo_txt: 'Texto remoto salvo.',
+        status: 'finalizado',
+        atualizado_por: 'Usuário teste',
+      }),
+    })
+    assert.equal(officialSaved.response.status, 200)
+    assert.equal(officialSaved.body.revisao, 2)
+    assert.equal(officialSaved.body.conteudo_txt, 'Texto remoto salvo.')
+
+    const officialConflict = await request(`/api/normas/${officialNorm.body.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        revisao: 1,
+        conteudo_doc: '{"type":"doc","content":[]}',
+        conteudo_txt: 'Texto antigo.',
+      }),
+    })
+    assert.equal(officialConflict.response.status, 409)
+    assert.equal(officialConflict.body.atual.revisao, 2)
+
+    const officialPublication = await request('/api/publicacoes', {
+      method: 'POST',
+      body: JSON.stringify({ titulo: 'Publicação remota', status: 'previsto' }),
+    })
+    assert.equal(officialPublication.response.status, 201)
+    assert.equal(officialPublication.body.revisao, 1)
+    assert.equal(officialPublication.body.secoes.length, 3)
+
+    const officialPublicationLight = await request(
+      `/api/publicacoes/${officialPublication.body.id}`,
+    )
+    assert.equal(officialPublicationLight.response.status, 200)
+    assert.equal(
+      officialPublicationLight.body.secoes
+        .flatMap(secao => secao.normas)
+        .some(item => item.conteudo_doc !== undefined),
+      false,
+    )
+
+    const officialPublicationSaved = await request(
+      `/api/publicacoes/${officialPublication.body.id}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          ...officialPublication.body,
+          titulo: 'PublicaÃ§Ã£o remota atualizada',
+          revisao: 1,
+        }),
+      },
+    )
+    assert.equal(officialPublicationSaved.response.status, 200)
+    assert.equal(officialPublicationSaved.body.revisao, 2)
+
+    const officialPublicationConflict = await request(
+      `/api/publicacoes/${officialPublication.body.id}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({
+          ...officialPublication.body,
+          titulo: 'Sobrescrita antiga',
+          revisao: 1,
+        }),
+      },
+    )
+    assert.equal(officialPublicationConflict.response.status, 409)
+
+    const officialPublicationFull = await request(
+      `/api/publicacoes/${officialPublication.body.id}?incluirConteudo=true`,
+    )
+    assert.equal(officialPublicationFull.response.status, 200)
 
     const cloned = await request('/api/homologacao/edicoes', {
       method: 'POST',

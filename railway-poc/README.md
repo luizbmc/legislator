@@ -1,20 +1,21 @@
-# Normando Railway SQLite PoC
+# Normando no Railway com SQLite
 
-Esta pasta é uma prova de conceito independente. Ela não importa módulos do
-Normando, não usa o banco oficial e não altera as rotas do aplicativo atual.
+Este serviço hospeda uma cópia completa do banco SQLite do Normando em um
+volume persistente do Railway. O aplicativo local continua executando a
+interface, as rotinas e as exportações; normas, publicações, tags, exceções e
+usuários podem ser lidos e gravados no banco online.
 
-## O que ela testa
+## Recursos
 
-- API Node/Express acessível por HTTPS no Railway;
-- SQLite nativo com `better-sqlite3`;
-- banco armazenado em volume persistente;
-- modo WAL e transações;
-- autenticação simples por chave;
-- bloqueio de sobrescrita concorrente por número de revisão;
-- leitura opcional das contagens de `normas` e `publicacoes` quando uma cópia
-  do banco real for colocada no volume.
-- edição controlada de cópias de normas, com histórico e restauração, sem
-  alterar as tabelas reais do Normando.
+- SQLite em volume persistente, com WAL, transações e `busy_timeout`;
+- API protegida por uma chave compartilhada;
+- catálogo e edição completa de normas e publicações;
+- cadastro compartilhado de usuários para comentários e autoria da última
+  atualização;
+- histórico de versões das normas;
+- proteção contra sobrescrita concorrente por número de revisão;
+- backup do banco remoto pelo aplicativo;
+- modo de cópias controladas mantido para homologação e testes.
 
 ## Teste local
 
@@ -28,111 +29,27 @@ npm start
 
 O banco local de teste será criado em `railway-poc\data\normando-poc.db`.
 
-## Implantação isolada no Railway
+## Implantação no Railway
 
-1. Envie esta pasta para o GitHub junto com o projeto.
-2. No Railway, crie um serviço novo a partir do repositório.
-3. Em **Settings > Source**, configure o diretório raiz como:
+1. Crie um serviço a partir do repositório do Normando.
+2. Em **Settings > Source**, defina o diretório raiz como `/railway-poc`.
+3. Crie `POC_API_KEY` com uma chave longa e aleatória.
+4. Adicione um volume montado em `/data`.
+5. Em **Networking**, gere um domínio público.
+6. Configure o healthcheck como `/health`.
 
-   ```text
-   /railway-poc
-   ```
+O Railway fornece automaticamente `PORT` e
+`RAILWAY_VOLUME_MOUNT_PATH`.
 
-4. Crie a variável:
+## Colocar o banco no volume
 
-   ```text
-   POC_API_KEY=<uma-chave-longa-e-aleatoria>
-   ```
-
-5. Adicione um volume ao serviço com o caminho:
-
-   ```text
-   /data
-   ```
-
-6. Em **Networking**, gere um domínio público.
-7. Configure o healthcheck como `/health`.
-
-O Railway fornece automaticamente `PORT` e `RAILWAY_VOLUME_MOUNT_PATH`.
-
-Abra o domínio gerado. A página de diagnóstico permite informar a chave,
-consultar o banco e criar registros persistentes diretamente pelo navegador.
-
-Para navegar pela cópia real e testar a edição isolada, abra:
-
-```text
-https://SEU-DOMINIO/homologacao.html
-```
-
-A homologação oferece:
-
-- catálogo paginado de normas;
-- busca por epígrafe, apelido ou conteúdo;
-- abertura sob demanda do conteúdo da norma;
-- catálogo e estrutura de publicações;
-- tempos separados de rede e consulta SQLite;
-- benchmark de consultas comuns.
-- criação de uma cópia de edição a partir de uma norma real;
-- salvamento com número de revisão e detecção de conflito;
-- histórico integral das versões anteriores;
-- restauração de uma versão como uma nova revisão.
-
-As rotas de escrita em `/api/homologacao/edicoes` modificam somente:
-
-```text
-railway_homologacao_normas
-railway_homologacao_versoes
-```
-
-As tabelas `normas`, `normas_versoes`, `publicacoes` e seus vínculos continuam
-em modo somente leitura durante toda esta prova de conceito.
-
-## Verificação
-
-Sem chave:
+Não envie o banco para o Git. Faça primeiro uma cópia de segurança do banco
+oficial e envie essa cópia:
 
 ```powershell
-Invoke-RestMethod https://SEU-DOMINIO/health
-```
-
-Com chave:
-
-```powershell
-$headers = @{ "x-api-key" = "SUA-CHAVE" }
-
-Invoke-RestMethod https://SEU-DOMINIO/api/info -Headers $headers
-
-$body = @{
-  titulo = "Registro persistente"
-  conteudo = "Criado antes de um redeploy"
-} | ConvertTo-Json
-
-Invoke-RestMethod `
-  https://SEU-DOMINIO/api/registros `
-  -Method Post `
-  -Headers $headers `
-  -ContentType "application/json" `
-  -Body $body
-```
-
-Faça um redeploy e consulte novamente:
-
-```powershell
-Invoke-RestMethod https://SEU-DOMINIO/api/registros -Headers $headers
-```
-
-O registro deve continuar presente e `/api/info` deve indicar
-`volumeMounted: true` no `/health`.
-
-## Teste com uma cópia do banco atual
-
-Não coloque `legislator.db` no Git.
-
-Depois de criar o volume, use o gerenciamento de arquivos do Railway CLI para
-enviar uma cópia do banco para:
-
-```text
-/data/legislator-copia.db
+railway volume files --volume NOME_DO_VOLUME upload `
+  "C:\temp\legislator-copia.db" `
+  "/legislator-copia.db"
 ```
 
 Configure no serviço:
@@ -141,32 +58,73 @@ Configure no serviço:
 DATABASE_NAME=legislator-copia.db
 ```
 
-Reinicie o serviço e consulte `/api/info`. O endpoint deve mostrar as contagens
-de `normas` e `publicacoes`. A PoC criará somente tabelas prefixadas com
-`railway_poc_` ou `railway_homologacao_` dentro dessa cópia.
+Reinicie o serviço. As migrações necessárias, como revisão concorrente e
+cadastro de usuários, são aplicadas automaticamente sem apagar dados
+existentes.
 
-## Teste de edição controlada
+## Ativar no Normando
 
-1. Abra `/homologacao.html` e informe a chave.
-2. Informe o nome do testador.
-3. Abra uma norma real e clique em **Criar ou abrir cópia de edição**.
-4. Modifique a epígrafe ou o conteúdo textual e salve.
-5. Confira o incremento da revisão e a nova entrada no histórico.
-6. Restaure uma revisão anterior e confira que a versão atual foi preservada.
-7. Volte à norma real e confirme que seu texto continua inalterado.
+1. Atualize o código local e execute `npm install` quando as dependências
+   tiverem mudado.
+2. Execute `npm run build` ou inicie com `npm run dev`.
+3. Abra **Configurações > Railway**.
+4. Informe o domínio público, sem acrescentar `/api`.
+5. Informe a mesma `POC_API_KEY`.
+6. Marque **Usar banco Railway no aplicativo**.
+7. Clique em **Salvar configuração e testar**.
 
-Para testar conflito, abra a mesma cópia em duas abas. Salve primeiro em uma
-delas e depois tente salvar a aba antiga. A segunda operação deve receber
-`HTTP 409`, manter o texto local na tela e solicitar recarregamento.
+Com o modo ativo, as telas normais do aplicativo passam a usar o banco
+Railway. Desmarcar a opção volta a usar o banco local, sem copiar ou mesclar
+dados entre as duas fontes.
 
-## Limites deliberados
+No Electron, a configuração fica no diretório de dados do usuário. No acesso
+por `localhost`, ela fica junto ao banco do servidor, em
+`railway-remoto.json`. Esse arquivo contém a chave e não deve ser enviado ao
+Git.
 
-- A homologação exige uma chave compartilhada; ainda não há autenticação por
-  usuário.
-- Nenhuma rota de homologação permite editar ou excluir dados reais.
-- O editor da PoC altera apenas o texto simples. O `conteudo_doc` estruturado é
-  preservado sem edição nesta etapa.
-- Não há integração com o aplicativo Electron.
-- Não existe login de usuário; apenas uma chave de teste.
-- Não substitui o servidor atual.
-- Deve ser removida ou protegida antes de qualquer uso real.
+## Usuários
+
+Os usuários continuam sendo apenas identificadores de autoria; não são contas
+de login. Eles ficam na tabela `usuarios` do mesmo SQLite selecionado.
+
+Em **Configurações > Usuários**, é possível adicionar, selecionar e excluir
+usuários. A escolha do usuário atual continua armazenada em cada computador,
+enquanto a lista de nomes e cores é compartilhada pelo banco.
+
+## Concorrência
+
+Normas e publicações possuem uma revisão numérica. Ao salvar, a API confirma
+que o registro ainda está na revisão carregada pelo usuário. Se outra pessoa
+salvou antes, a operação recebe `HTTP 409` e não sobrescreve silenciosamente o
+trabalho mais recente.
+
+O SQLite no Railway deve ser acessado por uma única instância do serviço.
+Não configure múltiplas réplicas apontando para o mesmo arquivo.
+
+## Backup
+
+Em modo Railway, **Configurações > Backup > Exportar banco** baixa uma cópia
+consistente do SQLite remoto. A restauração direta pelo aplicativo fica
+bloqueada por segurança; para restaurar, use uma janela de manutenção, pare o
+serviço e substitua o arquivo no volume.
+
+## Verificação
+
+```powershell
+$headers = @{ "x-api-key" = "SUA-CHAVE" }
+
+Invoke-RestMethod https://SEU-DOMINIO/health
+Invoke-RestMethod https://SEU-DOMINIO/api/info -Headers $headers
+```
+
+`/health` deve indicar `volumeMounted: true`. `/api/info` deve mostrar o
+caminho em `/data` e as contagens de normas e publicações.
+
+## Segurança
+
+- A API usa uma única chave compartilhada, não autenticação individual.
+- Use HTTPS do domínio Railway e uma chave longa.
+- Não registre a chave no repositório.
+- Faça backups periódicos.
+- As ações ficam atribuídas aos nomes cadastrados, mas isso não substitui uma
+  trilha de auditoria autenticada.

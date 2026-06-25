@@ -4,6 +4,7 @@ const path = require('path')
 const express = require('express')
 const helmet = require('helmet')
 const Database = require('better-sqlite3')
+const { registrarNormandoApi } = require('./normando-api')
 
 const PORT = Number(process.env.PORT || 3000)
 const DATABASE_DIR = process.env.RAILWAY_VOLUME_MOUNT_PATH
@@ -150,6 +151,7 @@ app.get('/health', (req, res) => {
 })
 
 app.use('/api', requireApiKey)
+registrarNormandoApi(app, db)
 
 app.get('/api/info', (req, res) => {
   const stat = fs.statSync(DATABASE_PATH)
@@ -162,6 +164,11 @@ app.get('/api/info', (req, res) => {
     normas: countTable('normas'),
     publicacoes: countTable('publicacoes'),
   })
+})
+
+app.get('/api/banco/backup', (req, res) => {
+  db.pragma('wal_checkpoint(TRUNCATE)')
+  res.download(DATABASE_PATH, `normando-railway-${new Date().toISOString().slice(0, 10)}.db`)
 })
 
 app.get('/api/registros', (req, res) => {
@@ -772,7 +779,12 @@ app.post('/api/teste-transacao', (req, res) => {
 
 app.use((err, req, res, next) => {
   console.error(err)
-  res.status(500).json({ error: 'Erro interno da prova de conceito.' })
+  if (err?.conflito) {
+    return res.status(409).json({
+      error: 'Este registro foi salvo por outra sessão. Recarregue antes de tentar novamente.',
+    })
+  }
+  res.status(err?.status || 500).json({ error: err?.message || 'Erro interno da prova de conceito.' })
 })
 
 const server = app.listen(PORT, '0.0.0.0', () => {

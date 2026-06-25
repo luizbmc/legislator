@@ -695,7 +695,7 @@ function docPorModoVadeMecum(doc, modoVadeMecum = false) {
   return filtrarDocPorModoVadeMecum(doc, modoVadeMecum)
 }
 
-export default function Editor({ usuarioAtual, onTrocarUsuario }) {
+export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }) {
   const { id } = useParams()
   const nav    = useNavigate()
   const location = useLocation()
@@ -718,6 +718,10 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
   const [excecoesConcluidas, setExcecoesConcluidas] = useState(() => carregarExcecoesConcluidas(id))
   const [editor,    setEditor]    = useState(null)
   const [salvando,  setSalvando]  = useState(false)
+  const [revisaoRemota, setRevisaoRemota] = useState(null)
+  const [versoesRemotas, setVersoesRemotas] = useState([])
+  const [historicoRemotoAberto, setHistoricoRemotoAberto] = useState(false)
+  const [historicoRemotoCarregando, setHistoricoRemotoCarregando] = useState(false)
   const [abaEsq,    setAbaEsq]    = useState('rotinas')
   const [status,           setStatus]           = useState('rascunho')
   const [modificado,       setModificado]       = useState(false)
@@ -797,12 +801,29 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
   }, [id])
 
   useEffect(() => {
-    window.legislator.normas.buscar(parseInt(id)).then(n => {
+    const carregar = remoto
+      ? window.legislator.railway.buscarEdicao(parseInt(id)).then(resultado => {
+          const edicao = resultado.edicao
+          setRevisaoRemota(Number(edicao.revisao))
+          return {
+            ...edicao,
+            id: Number(edicao.id),
+            tipo: edicao.tipo || '',
+            apelido: edicao.apelido || '',
+            status: edicao.status_origem || 'rascunho',
+            tags: [],
+            remoto: true,
+          }
+        })
+      : window.legislator.normas.buscar(parseInt(id))
+
+    carregar.then(n => {
+      if (!n) throw new Error('Norma não encontrada.')
       const textoComum = isTipoTextoComum(n.tipo)
       setNorma(n)
       setStatus(n.status ?? 'rascunho')
       setFase('editar')
-      setModoEdicaoManual(textoComum)
+      setModoEdicaoManual(remoto || textoComum)
       setModoVadeMecumAtivo(false)
       setMarcasAtualizacaoVisiveis(!textoComum)
       if (n.conteudo_doc && n.conteudo_doc !== DOC_VAZIO) {
@@ -810,20 +831,23 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
         setDocJson(doc)
         setAbaEsq('sumario')
       }
+    }).catch(err => {
+      alert(err?.message || 'Não foi possível carregar a norma.')
+      nav(remoto ? '/configuracoes' : '/')
     })
-  }, [id])
+  }, [id, remoto])
 
   useEffect(() => {
-    if (!editor || !isTipoTextoComum(norma?.tipo)) return
+    if (!editor || (!remoto && !isTipoTextoComum(norma?.tipo))) return
     setModoEdicaoManual(true)
-    setMarcasAtualizacaoVisiveis(false)
+    setMarcasAtualizacaoVisiveis(remoto ? true : false)
     editor.setEditable(true)
     window.setTimeout(() => {
       inicializarBaselineEdicaoManual()
       nodesAlteradosRef.current = {}
       manualTrackingSuspensoRef.current = false
     }, 0)
-  }, [editor, norma?.tipo])
+  }, [editor, norma?.tipo, remoto])
 
   useEffect(() => {
     if (!editor) return
@@ -1733,22 +1757,48 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
         conteudo_txt: txt,
         status,
         atualizado_por: usuarioAtual?.nome || '',
+        revisao: norma?.revisao,
       }
       if (opts.data_atualizacao) payload.data_atualizacao = opts.data_atualizacao
-      await window.legislator.normas.salvar(parseInt(id), payload)
-      if (excecoes.length) {
+      if (remoto) {
+        const resultado = await window.legislator.railway.salvarEdicao(parseInt(id), {
+          revisao: revisaoRemota,
+          epigrafe: norma?.epigrafe || '',
+          conteudo_doc: payload.conteudo_doc,
+          conteudo_txt: payload.conteudo_txt,
+          usuario: usuarioAtual?.nome || 'Convidado',
+        })
+        setRevisaoRemota(Number(resultado.edicao.revisao))
+        setNorma(prev => ({ ...prev, ...resultado.edicao, remoto: true }))
+      } else {
+        const atualizada = await window.legislator.normas.salvar(parseInt(id), payload)
+        setNorma(prev => ({ ...prev, ...atualizada }))
+      }
+      if (!remoto && excecoes.length) {
         await window.legislator.excecoes.salvar(parseInt(id), excecoes)
       }
       setModificado(false)
     } catch (err) {
-      alert(err?.message || 'Não foi possível salvar a norma.')
+      if (remoto && Number(err?.status) === 409) {
+        const atual = err?.payload?.atual || err?.payload?.remoto?.atual
+        alert(
+          `Esta cópia foi salva por outra sessão${atual?.revisao ? ` e já está na revisão ${atual.revisao}` : ''}. ` +
+          'Seu texto continua nesta tela. Recarregue a norma antes de tentar salvar novamente.',
+        )
+      } else {
+        alert(err?.message || 'Não foi possível salvar a norma.')
+      }
     } finally {
       setSalvando(false)
     }
-  }, [editor, id, excecoes, status, usuarioAtual])
+  }, [editor, id, excecoes, status, usuarioAtual, remoto, revisaoRemota, norma?.epigrafe])
 
   // ── Editar metadados ──────────────────────────────────────────
   async function abrirEditarMeta() {
+    if (remoto) {
+      alert('Nesta etapa, os metadados da cópia Railway permanecem vinculados à norma original. Edite apenas o conteúdo.')
+      return
+    }
     setEditForm({
       tipo:     norma.tipo     ?? '',
       epigrafe: norma.epigrafe ?? '',
@@ -1785,6 +1835,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
         ...editForm,
         tags: editTags,
         atualizado_por: usuarioAtual?.nome || '',
+        revisao: norma?.revisao,
       })
       setNorma(atualizada)
       setModalEditarMeta(false)
@@ -1792,6 +1843,59 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
       setEditErro(err.message || 'Erro ao salvar.')
     } finally {
       setEditSalvando(false)
+    }
+  }
+
+  async function abrirHistoricoRemoto() {
+    if (!remoto) return
+    setHistoricoRemotoAberto(true)
+    setHistoricoRemotoCarregando(true)
+    try {
+      const resultado = await window.legislator.railway.listarVersoes(parseInt(id))
+      setVersoesRemotas(resultado.items || [])
+    } catch (err) {
+      alert(err?.message || 'Não foi possível carregar o histórico remoto.')
+      setHistoricoRemotoAberto(false)
+    } finally {
+      setHistoricoRemotoCarregando(false)
+    }
+  }
+
+  async function restaurarVersaoRemota(versao) {
+    if (!remoto || !editor) return
+    if (modificado && !confirm('Há alterações não salvas nesta tela. Restaurar a versão descartará essas alterações. Continuar?')) {
+      return
+    }
+    if (!confirm(`Restaurar a revisão ${versao.revisao}? O estado atual será preservado no histórico.`)) {
+      return
+    }
+
+    setHistoricoRemotoCarregando(true)
+    try {
+      const resultado = await window.legislator.railway.restaurarVersao(
+        parseInt(id),
+        versao.id,
+        {
+          revisao: revisaoRemota,
+          usuario: usuarioAtual?.nome || 'Convidado',
+        },
+      )
+      const edicao = resultado.edicao
+      const { doc } = normalizarNotasVadeMecumLegado(JSON.parse(edicao.conteudo_doc || DOC_VAZIO))
+      editor.commands.setContent(doc, false)
+      setDocJson(doc)
+      setNorma(prev => ({ ...prev, ...edicao, remoto: true }))
+      setRevisaoRemota(Number(edicao.revisao))
+      setModificado(false)
+      setHistoricoRemotoAberto(false)
+    } catch (err) {
+      if (Number(err?.status) === 409) {
+        alert('A cópia foi alterada por outra sessão. Recarregue a norma antes de restaurar uma versão.')
+      } else {
+        alert(err?.message || 'Não foi possível restaurar a versão remota.')
+      }
+    } finally {
+      setHistoricoRemotoCarregando(false)
     }
   }
 
@@ -1841,6 +1945,10 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
   }
 
   async function handleExportar(formato) {
+    if (remoto && (formato === 'docx' || formato === 'html')) {
+      alert('A exportação completa em DOCX e HTML ainda usa o banco local. Para a cópia Railway, use uma saída XML ou exporte a seleção.')
+      return
+    }
     try {
       if (exportacaoBloqueadaPorAtualizacaoPendente()) return
 
@@ -2158,12 +2266,26 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
       // Aplica flags do ref como fallback (caso setNodeMarkup não tenha persistido)
       const doc = aplicarFlagsNoJSON(editor.getJSON(), nodesAlteradosRef.current)
       const txt = editor.getText()
-      await window.legislator.normas.salvar(parseInt(id), {
-        conteudo_doc: JSON.stringify(doc),
-        conteudo_txt: txt,
-        data_atualizacao: dataAtual,
-        atualizado_por: usuarioAtual?.nome || '',
-      })
+      if (remoto) {
+        const resultado = await window.legislator.railway.salvarEdicao(parseInt(id), {
+          revisao: revisaoRemota,
+          epigrafe: norma?.epigrafe || '',
+          conteudo_doc: JSON.stringify(doc),
+          conteudo_txt: txt,
+          usuario: usuarioAtual?.nome || 'Convidado',
+        })
+        setRevisaoRemota(Number(resultado.edicao.revisao))
+        setNorma(prev => ({ ...prev, ...resultado.edicao, remoto: true }))
+      } else {
+        const atualizada = await window.legislator.normas.salvar(parseInt(id), {
+          conteudo_doc: JSON.stringify(doc),
+          conteudo_txt: txt,
+          data_atualizacao: dataAtual,
+          atualizado_por: usuarioAtual?.nome || '',
+          revisao: norma?.revisao,
+        })
+        setNorma(prev => ({ ...prev, ...atualizada }))
+      }
       setNorma(prev => ({ ...prev, data_atualizacao: dataAtual }))
       editor.commands.clearDiffDecorations()
       setEmRevisao(false)
@@ -2239,10 +2361,14 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
   function voltarDoEditor() {
     const origem = location.state?.origem
     const publicacaoId = location.state?.publicacaoId
-    const destino = origem === 'publicacao' && publicacaoId
-      ? `/publicacoes/${publicacaoId}`
-      : '/'
-    const nomeDestino = origem === 'publicacao' ? 'publicação' : 'catálogo'
+    const destino = remoto || origem === 'railway'
+      ? '/configuracoes'
+      : origem === 'publicacao' && publicacaoId
+        ? `/publicacoes/${publicacaoId}`
+        : '/'
+    const nomeDestino = remoto || origem === 'railway'
+      ? 'configuração Railway'
+      : origem === 'publicacao' ? 'publicação' : 'catálogo'
 
     if (modificado && !confirm(`Há alterações não salvas. Deseja voltar à tela de ${nomeDestino} sem salvar?`)) return
     nav(destino)
@@ -2279,6 +2405,16 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
               🔄 {dataAtualizacaoFormatada}
             </span>
           )}
+          {remoto && (
+            <button
+              type="button"
+              className="editor-remoto-badge"
+              title="Abrir histórico da cópia Railway"
+              onClick={abrirHistoricoRemoto}
+            >
+              Railway · revisão {revisaoRemota ?? '—'}
+            </button>
+          )}
           {fase === 'editar' && !emRevisao && (
             <>
               <select
@@ -2286,6 +2422,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
                 value={status}
                 onChange={e => alterarStatusNorma(e.target.value)}
                 title="Status da norma"
+                disabled={remoto}
               >
                 <option value="rascunho">Rascunho</option>
                 <option value="revisao">Em revisão</option>
@@ -2308,6 +2445,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
                 <button
                   className="btn-ghost btn-atualizar-norma-topo"
                   onClick={() => setModalAtualizarAberto(true)}
+                  disabled={remoto}
                   title="Carregar nova versão da norma e revisar alterações"
                 >🔄 Atualizar norma</button>
               </div>
@@ -3303,6 +3441,51 @@ export default function Editor({ usuarioAtual, onTrocarUsuario }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {historicoRemotoAberto && (
+        <div className="modal-overlay" onMouseDown={e => {
+          if (e.target === e.currentTarget && !historicoRemotoCarregando) {
+            setHistoricoRemotoAberto(false)
+          }
+        }}>
+          <div className="modal-box modal-historico-remoto" onMouseDown={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3>Histórico da cópia Railway</h3>
+                <p>Revisão atual: {revisaoRemota ?? '—'}</p>
+              </div>
+              <button
+                className="btn-ghost modal-fechar"
+                disabled={historicoRemotoCarregando}
+                onClick={() => setHistoricoRemotoAberto(false)}
+              >✕</button>
+            </div>
+            <div className="historico-remoto-lista">
+              {historicoRemotoCarregando ? (
+                <p className="config-vazio">Carregando histórico...</p>
+              ) : versoesRemotas.length === 0 ? (
+                <p className="config-vazio">A primeira versão será criada quando a cópia for salva.</p>
+              ) : versoesRemotas.map(versao => (
+                <div className="historico-remoto-item" key={versao.id}>
+                  <span>
+                    <strong>Revisão {versao.revisao}</strong>
+                    <small>
+                      {versao.salvo_por || 'Sem usuário'} · {new Date(versao.criado_em).toLocaleString('pt-BR')}
+                    </small>
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm"
+                    onClick={() => restaurarVersaoRemota(versao)}
+                  >
+                    Restaurar
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

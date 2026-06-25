@@ -118,6 +118,52 @@ CREATE TABLE IF NOT EXISTS norma_tags (
   tag_id   INTEGER NOT NULL REFERENCES tags(id)   ON DELETE CASCADE,
   PRIMARY KEY (norma_id, tag_id)
 );
+
+CREATE TABLE IF NOT EXISTS trabalho_remoto_pacotes (
+  id            TEXT PRIMARY KEY,
+  papel         TEXT NOT NULL,
+  status        TEXT NOT NULL,
+  criado_em     TEXT NOT NULL,
+  criado_por    TEXT,
+  importado_em  TEXT,
+  concluido_em  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS trabalho_remoto_normas (
+  pacote_id          TEXT NOT NULL REFERENCES trabalho_remoto_pacotes(id) ON DELETE CASCADE,
+  norma_local_id     INTEGER NOT NULL REFERENCES normas(id) ON DELETE CASCADE,
+  norma_origem_id    INTEGER NOT NULL,
+  epigrafe           TEXT,
+  base_hash          TEXT NOT NULL,
+  base_atualizado_em TEXT,
+  PRIMARY KEY (pacote_id, norma_origem_id)
+);
+
+CREATE TABLE IF NOT EXISTS trabalho_remoto_publicacoes (
+  pacote_id              TEXT NOT NULL REFERENCES trabalho_remoto_pacotes(id) ON DELETE CASCADE,
+  publicacao_local_id    INTEGER NOT NULL REFERENCES publicacoes(id) ON DELETE CASCADE,
+  publicacao_origem_id   INTEGER NOT NULL,
+  titulo                 TEXT,
+  base_hash              TEXT NOT NULL,
+  base_atualizado_em     TEXT,
+  PRIMARY KEY (pacote_id, publicacao_origem_id)
+);
+
+CREATE TABLE IF NOT EXISTS trabalho_remoto_novas_normas (
+  pacote_id          TEXT NOT NULL REFERENCES trabalho_remoto_pacotes(id) ON DELETE CASCADE,
+  chave_local        TEXT NOT NULL,
+  norma_oficial_id   INTEGER NOT NULL REFERENCES normas(id) ON DELETE CASCADE,
+  PRIMARY KEY (pacote_id, chave_local)
+);
+
+CREATE TABLE IF NOT EXISTS usuarios (
+  id            TEXT PRIMARY KEY,
+  nome          TEXT NOT NULL,
+  cor           TEXT NOT NULL,
+  ativo         INTEGER NOT NULL DEFAULT 1,
+  criado_em     TEXT NOT NULL DEFAULT (datetime('now')),
+  atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
 `
 
 // ── Persistência ──────────────────────────────────────────────────

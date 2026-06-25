@@ -1,6 +1,51 @@
 const express = require('express')
+const fs = require('fs')
+const path = require('path')
 const router = express.Router()
 const db = require('../db')
+const { criarClienteRailway } = require('../../shared/railwayRemoto.cjs')
+
+function configuracaoRailway() {
+  const dir = process.env.DB_DIR || path.join(__dirname, '..', '..', 'server-data')
+  const arquivo = path.join(dir, 'railway-remoto.json')
+  if (!fs.existsSync(arquivo)) return null
+  try {
+    const config = JSON.parse(fs.readFileSync(arquivo, 'utf8'))
+    return config.modo === 'railway' ? config : null
+  } catch {
+    return null
+  }
+}
+
+async function buscarNormaFonte(id) {
+  const config = configuracaoRailway()
+  if (config) return criarClienteRailway(config).requisitar('GET', `/api/normas/${id}`)
+  return db.prepare('SELECT * FROM normas WHERE id = ?').get(id)
+}
+
+async function buscarPublicacaoFonte(id) {
+  const config = configuracaoRailway()
+  if (config) {
+    return criarClienteRailway(config).requisitar(
+      'GET',
+      `/api/publicacoes/${id}?incluirConteudo=true`,
+    )
+  }
+  return buscarPublicacaoCompleta(id)
+}
+
+function dbPublicacao(publicacao) {
+  const normas = new Map(
+    (publicacao.secoes || [])
+      .flatMap(secao => secao.normas || [])
+      .map(norma => [Number(norma.norma_id || norma.id), norma]),
+  )
+  return {
+    prepare() {
+      return { get: id => normas.get(Number(id)) }
+    },
+  }
+}
 
 function buscarPublicacaoCompleta(id) {
   const pub = db.prepare(`SELECT * FROM publicacoes WHERE id = ?`).get(id)
@@ -57,17 +102,17 @@ function publicacaoExportavel(pub, res) {
   return false
 }
 
-function payloadExportavel(payload = {}, res) {
+async function payloadExportavel(payload = {}, res) {
   const normaId = payload.norma_id || payload.id
   if (!normaId) return true
-  const norma = db.prepare(`SELECT id, epigrafe, atualizacao_pendente FROM normas WHERE id = ?`).get(normaId)
+  const norma = await buscarNormaFonte(normaId)
   return norma ? normaExportavel(norma, res) : true
 }
 
 // GET /norma/docx/:id
 router.get('/norma/docx/:id', async (req, res) => {
   try {
-    const norma = db.prepare(`SELECT * FROM normas WHERE id = ?`).get(req.params.id)
+    const norma = await buscarNormaFonte(req.params.id)
     if (!norma) return res.status(404).json({ error: 'Norma não encontrada' })
     if (!normaExportavel(norma, res)) return
 
@@ -86,7 +131,7 @@ router.get('/norma/docx/:id', async (req, res) => {
 // GET /norma/html/:id
 router.get('/norma/html/:id', async (req, res) => {
   try {
-    const norma = db.prepare(`SELECT * FROM normas WHERE id = ?`).get(req.params.id)
+    const norma = await buscarNormaFonte(req.params.id)
     if (!norma) return res.status(404).json({ error: 'Norma não encontrada' })
     if (!normaExportavel(norma, res)) return
 
@@ -105,7 +150,7 @@ router.get('/norma/html/:id', async (req, res) => {
 // POST /norma/docx-selecao
 router.post('/norma/docx-selecao', async (req, res) => {
   try {
-    if (!payloadExportavel(req.body, res)) return
+    if (!await payloadExportavel(req.body, res)) return
     const norma = selectionNormaPayload(req.body)
     const { gerarDocx } = await import('../../electron/main/services/exportDocx.js')
     const buffer = await gerarDocx(norma)
@@ -122,7 +167,7 @@ router.post('/norma/docx-selecao', async (req, res) => {
 // POST /norma/html-selecao
 router.post('/norma/html-selecao', async (req, res) => {
   try {
-    if (!payloadExportavel(req.body, res)) return
+    if (!await payloadExportavel(req.body, res)) return
     const norma = selectionNormaPayload(req.body)
     const { gerarHtml } = await import('../../electron/main/services/exportHtml.js')
     const html = await gerarHtml(norma)
@@ -139,12 +184,12 @@ router.post('/norma/html-selecao', async (req, res) => {
 // GET /publicacao/docx/:id
 router.get('/publicacao/docx/:id', async (req, res) => {
   try {
-    const pub = buscarPublicacaoCompleta(req.params.id)
+    const pub = await buscarPublicacaoFonte(req.params.id)
     if (!pub) return res.status(404).json({ error: 'Publicação não encontrada' })
     if (!publicacaoExportavel(pub, res)) return
 
     const { gerarDocxPublicacao } = await import('../../electron/main/services/exportDocx.js')
-    const buffer = await gerarDocxPublicacao(pub, db)
+    const buffer = await gerarDocxPublicacao(pub, configuracaoRailway() ? dbPublicacao(pub) : db)
 
     const filename = encodeURIComponent(`${pub.titulo || 'publicacao'}.docx`)
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
@@ -158,12 +203,12 @@ router.get('/publicacao/docx/:id', async (req, res) => {
 // GET /publicacao/html/:id
 router.get('/publicacao/html/:id', async (req, res) => {
   try {
-    const pub = buscarPublicacaoCompleta(req.params.id)
+    const pub = await buscarPublicacaoFonte(req.params.id)
     if (!pub) return res.status(404).json({ error: 'Publicação não encontrada' })
     if (!publicacaoExportavel(pub, res)) return
 
     const { gerarHtmlPublicacao } = await import('../../electron/main/services/exportHtml.js')
-    const html = await gerarHtmlPublicacao(pub, db)
+    const html = await gerarHtmlPublicacao(pub, configuracaoRailway() ? dbPublicacao(pub) : db)
 
     const filename = encodeURIComponent(`${pub.titulo || 'publicacao'}.html`)
     res.setHeader('Content-Type', 'text/html; charset=utf-8')

@@ -8,6 +8,10 @@ import { registerPublicacoesHandlers } from './ipc/publicacoes.js'
 import { registerOrtografiaHandlers }  from './ipc/ortografia.js'
 import { registerArquivosHandlers }    from './ipc/arquivos.js'
 import { registerBackupHandlers }      from './ipc/backup.js'
+import { registerTrabalhoRemotoHandlers } from './ipc/trabalhoRemoto.js'
+import { registerRailwayHandlers } from './ipc/railway.js'
+import { registerUsuariosHandlers } from './ipc/usuarios.js'
+import { registerRailwayExportarHandlers } from './ipc/railwayExportar.js'
 
 function configureSpellChecker(session) {
   try {
@@ -112,6 +116,10 @@ app.whenReady().then(async () => {
   registerOrtografiaHandlers()
   registerArquivosHandlers()
   registerBackupHandlers()
+  registerTrabalhoRemotoHandlers()
+  registerRailwayHandlers()
+  registerUsuariosHandlers()
+  registerRailwayExportarHandlers()
   createWindow()
 
   app.on('activate', () => {

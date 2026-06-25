@@ -2,6 +2,7 @@ node_modules/
 out/
 dist/
 server-data/
+railway-remoto.json
 
 *.db
 *.db-wal
