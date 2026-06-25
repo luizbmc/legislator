@@ -13,27 +13,6 @@ um controle em **Configurações > Atualizações**.
 O banco no Railway não faz parte do instalador e não é substituído durante a
 atualização.
 
-## Configuração padrão do Railway
-
-Os instaladores publicados pelo GitHub Actions podem incluir a conexão padrão
-com o Railway. Em uma instalação nova, o Normando usa essa conexão
-automaticamente, sem solicitar endereço ou chave.
-
-Configure no repositório, em **Settings > Secrets and variables > Actions**:
-
-- secret `NORMANDO_RAILWAY_API_KEY` com uma chave exclusiva do aplicativo.
-
-O endereço padrão atual já está configurado no workflow. A variável opcional
-`NORMANDO_RAILWAY_URL` permite substituí-lo sem alterar o código.
-
-O workflow cria `railway-default.json` apenas durante a compilação. A chave não
-é gravada no Git. Ela, porém, fica dentro do aplicativo instalado e pode ser
-extraída por uma pessoa com acesso ao instalador; por isso, não reutilize uma
-senha pessoal nesse campo.
-
-Se o usuário mudar a fonte nas Configurações, essa escolha fica no computador
-e passa a ter prioridade sobre o padrão do instalador.
-
 ## Primeira instalação
 
 1. Publique a primeira versão usando o procedimento abaixo.

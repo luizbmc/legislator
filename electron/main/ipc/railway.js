@@ -13,31 +13,14 @@ function caminhoConfiguracao() {
   return join(app.getPath('userData'), 'railway-remoto.json')
 }
 
-function caminhoConfiguracaoPadrao() {
-  return app.isPackaged
-    ? join(process.resourcesPath, 'railway-default.json')
-    : join(app.getAppPath(), 'build', 'railway-default.json')
-}
-
-function lerArquivoConfiguracao(arquivo) {
-  if (!existsSync(arquivo)) return null
-  try {
-    const config = JSON.parse(readFileSync(arquivo, 'utf8'))
-    if (!config.url || !config.chave) return null
-    return {
-      url: String(config.url).trim(),
-      chave: String(config.chave).trim(),
-      modo: config.modo === 'local' ? 'local' : 'railway',
-    }
-  } catch {
-    return null
-  }
-}
-
 function lerConfiguracao() {
-  return lerArquivoConfiguracao(caminhoConfiguracao())
-    || lerArquivoConfiguracao(caminhoConfiguracaoPadrao())
-    || { url: '', chave: '', modo: 'local' }
+  const arquivo = caminhoConfiguracao()
+  if (!existsSync(arquivo)) return { url: '', chave: '', modo: 'local' }
+  try {
+    return JSON.parse(readFileSync(arquivo, 'utf8'))
+  } catch {
+    return { url: '', chave: '', modo: 'local' }
+  }
 }
 
 async function salvarConfiguracao(dados = {}) {
