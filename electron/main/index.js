@@ -12,6 +12,10 @@ import { registerTrabalhoRemotoHandlers } from './ipc/trabalhoRemoto.js'
 import { registerRailwayHandlers } from './ipc/railway.js'
 import { registerUsuariosHandlers } from './ipc/usuarios.js'
 import { registerRailwayExportarHandlers } from './ipc/railwayExportar.js'
+import {
+  inicializarAtualizacoes,
+  registerAtualizacoesHandlers,
+} from './ipc/atualizacoes.js'
 
 function configureSpellChecker(session) {
   try {
@@ -120,7 +124,9 @@ app.whenReady().then(async () => {
   registerRailwayHandlers()
   registerUsuariosHandlers()
   registerRailwayExportarHandlers()
+  registerAtualizacoesHandlers()
   createWindow()
+  inicializarAtualizacoes()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

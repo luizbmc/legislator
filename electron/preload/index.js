@@ -173,4 +173,15 @@ contextBridge.exposeInMainWorld('legislator', {
     ),
     excluir: id => invokeDados('usuarios:excluir', 'DELETE', `/api/usuarios/${id}`, [id]),
   },
+  atualizacoes: {
+    estado: () => ipcRenderer.invoke('atualizacoes:estado'),
+    verificar: () => ipcRenderer.invoke('atualizacoes:verificar'),
+    baixar: () => ipcRenderer.invoke('atualizacoes:baixar'),
+    instalar: () => ipcRenderer.invoke('atualizacoes:instalar'),
+    acompanhar: callback => {
+      const listener = (_event, estado) => callback(estado)
+      ipcRenderer.on('atualizacoes:estado', listener)
+      return () => ipcRenderer.removeListener('atualizacoes:estado', listener)
+    },
+  },
 })

@@ -1,6 +1,6 @@
 appId: br.gov.legislator
 productName: Normando
-copyright: Copyright © 2025
+copyright: Copyright © 2026
 
 directories:
   buildResources: build
@@ -11,18 +11,28 @@ files:
   - node_modules/**/*
   - "!node_modules/.cache"
 
+publish:
+  provider: github
+  owner: luizbmc
+  repo: legislator
+  releaseType: release
+
 win:
   target: nsis
-  icon: build/icon.ico
+  icon: build/icon.png
+  artifactName: Normando-Setup-${version}.${ext}
 
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   installerLanguages: [pt_BR]
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Normando
 
 mac:
   target: dmg
-  icon: build/icon.icns
+  icon: build/icon.png
 
 linux:
   target: AppImage

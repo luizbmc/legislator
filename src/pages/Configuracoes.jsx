@@ -519,6 +519,127 @@ function RelatorioDevolucao({ relatorio }) {
   )
 }
 
+const ESTADO_ATUALIZACAO_LABEL = {
+  ocioso: 'Pronto para verificar',
+  verificando: 'Verificando...',
+  atualizado: 'Aplicativo atualizado',
+  disponivel: 'Atualização disponível',
+  baixando: 'Baixando...',
+  baixada: 'Pronta para instalar',
+  erro: 'Falha na atualização',
+  indisponivel: 'Disponível somente no app instalado',
+}
+
+function AtualizacoesApp() {
+  const api = window.legislator?.atualizacoes
+  const [estado, setEstado] = useState({
+    disponivelNoApp: false,
+    status: 'ocioso',
+    versaoAtual: null,
+    novaVersao: null,
+    progresso: 0,
+    mensagem: '',
+  })
+  const [processando, setProcessando] = useState('')
+
+  useEffect(() => {
+    let cancelar = () => {}
+    api?.estado()
+      .then(setEstado)
+      .catch(error => setEstado(prev => ({
+        ...prev,
+        status: 'erro',
+        mensagem: error.message,
+      })))
+    if (api?.acompanhar) cancelar = api.acompanhar(setEstado)
+    return cancelar
+  }, [])
+
+  async function executar(acao) {
+    setProcessando(acao)
+    try {
+      const proximo = await api?.[acao]?.()
+      if (proximo) setEstado(proximo)
+    } catch (error) {
+      setEstado(prev => ({ ...prev, status: 'erro', mensagem: error.message }))
+    } finally {
+      setProcessando('')
+    }
+  }
+
+  return (
+    <section className="config-card config-atualizacoes-card">
+      <div className="config-card-header">
+        <div>
+          <h2>Atualizações do Normando</h2>
+          <p>O aplicativo consulta as versões publicadas no GitHub Releases.</p>
+        </div>
+        <span className={`config-update-status status-${estado.status}`}>
+          {ESTADO_ATUALIZACAO_LABEL[estado.status] || estado.status}
+        </span>
+      </div>
+
+      <div className="config-atualizacoes-body">
+        <dl className="config-update-info">
+          <div>
+            <dt>Versão instalada</dt>
+            <dd>{estado.versaoAtual || 'Não disponível no navegador'}</dd>
+          </div>
+          <div>
+            <dt>Nova versão</dt>
+            <dd>{estado.novaVersao || 'Nenhuma'}</dd>
+          </div>
+        </dl>
+
+        {estado.status === 'baixando' && (
+          <div className="config-update-progress" aria-label={`Download ${Math.round(estado.progresso)}%`}>
+            <span style={{ width: `${estado.progresso}%` }} />
+          </div>
+        )}
+
+        {estado.mensagem && <p className="config-update-message">{estado.mensagem}</p>}
+
+        <div className="config-backup-actions">
+          <button
+            type="button"
+            className="btn-ghost"
+            disabled={!estado.disponivelNoApp || !!processando || estado.status === 'baixando'}
+            onClick={() => executar('verificar')}
+          >
+            {processando === 'verificar' || estado.status === 'verificando'
+              ? 'Verificando...'
+              : 'Verificar atualizações'}
+          </button>
+          {estado.status === 'disponivel' && (
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={!!processando}
+              onClick={() => executar('baixar')}
+            >
+              Baixar atualização
+            </button>
+          )}
+          {estado.status === 'baixada' && (
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={!!processando}
+              onClick={() => executar('instalar')}
+            >
+              Instalar e reiniciar
+            </button>
+          )}
+        </div>
+
+        <p className="config-update-note">
+          O banco compartilhado no Railway não é substituído durante a atualização do aplicativo.
+        </p>
+      </div>
+    </section>
+  )
+}
+
 function TrabalhoRemoto() {
   const api = window.legislator?.trabalhoRemoto
   const usuario = carregarUsuarioComentarioAtual()
@@ -1319,18 +1440,23 @@ export default function Configuracoes() {
           <button type="button" className={aba === 'railway' ? 'ativo' : ''} onClick={() => { setAba('railway'); setEdicao(null) }}>
             Railway
           </button>
+          <button type="button" className={aba === 'atualizacoes' ? 'ativo' : ''} onClick={() => { setAba('atualizacoes'); setEdicao(null) }}>
+            Atualizações
+          </button>
         </aside>
 
         <div className="config-content">
           <div className="config-pref-intro">
-            <h2>{aba === 'backup' ? 'Backup e restauração' : aba === 'remoto' ? 'Retirada e devolução' : aba === 'railway' ? 'Edição remota experimental' : 'Preferências de estilo'}</h2>
+            <h2>{aba === 'backup' ? 'Backup e restauração' : aba === 'remoto' ? 'Retirada e devolução' : aba === 'railway' ? 'Banco compartilhado' : aba === 'atualizacoes' ? 'Atualizações do aplicativo' : 'Preferências de estilo'}</h2>
             <p>
               {aba === 'backup'
                 ? 'Crie cópias de segurança do banco local e restaure um arquivo de backup quando necessário.'
                 : aba === 'remoto'
                   ? 'Leve normas selecionadas para outro computador e devolva as edições sem substituir alterações feitas no escritório.'
                   : aba === 'railway'
-                    ? 'Abra no editor do Normando cópias isoladas do banco hospedado no Railway, com revisão e proteção contra sobrescrita concorrente.'
+                    ? 'Configure o banco compartilhado hospedado no Railway e alterne entre a fonte online e o banco local.'
+                    : aba === 'atualizacoes'
+                      ? 'Verifique, baixe e instale versões publicadas do Normando sem reinstalação manual.'
                   : 'Estilos nativos permitem edição apenas das tags XML de importação/exportação. Estilos novos permitem definir formatação, classes, HTML e tipos de livro ativos.'}
             </p>
           </div>
@@ -1341,6 +1467,8 @@ export default function Configuracoes() {
             <TrabalhoRemoto />
           ) : aba === 'railway' ? (
             <IntegracaoRailway />
+          ) : aba === 'atualizacoes' ? (
+            <AtualizacoesApp />
           ) : aba === 'usuarios' ? (
             <UsuariosComentarios />
           ) : aba === 'paragrafos' ? (

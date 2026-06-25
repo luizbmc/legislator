@@ -56,6 +56,65 @@ function EntradaUsuario({ onEntrar }) {
   )
 }
 
+function AvisoAtualizacao() {
+  const api = window.legislator?.atualizacoes
+  const [estado, setEstado] = useState(null)
+  const [fechado, setFechado] = useState(false)
+
+  useEffect(() => {
+    let cancelar = () => {}
+    api?.estado().then(setEstado).catch(() => {})
+    if (api?.acompanhar) cancelar = api.acompanhar(proximo => {
+      setEstado(proximo)
+      if (['disponivel', 'baixada'].includes(proximo.status)) setFechado(false)
+    })
+    return cancelar
+  }, [])
+
+  if (
+    fechado ||
+    !estado?.disponivelNoApp ||
+    !['disponivel', 'baixando', 'baixada'].includes(estado.status)
+  ) return null
+
+  async function agir() {
+    try {
+      if (estado.status === 'disponivel') await api.baixar()
+      if (estado.status === 'baixada') await api.instalar()
+    } catch (error) {
+      setEstado(prev => ({ ...prev, status: 'erro', mensagem: error.message }))
+    }
+  }
+
+  return (
+    <aside className="app-update-toast" role="status">
+      <button
+        type="button"
+        className="app-update-close"
+        aria-label="Ocultar aviso"
+        onClick={() => setFechado(true)}
+      >
+        ×
+      </button>
+      <strong>
+        {estado.status === 'baixada'
+          ? 'Atualização pronta'
+          : `Normando ${estado.novaVersao || ''} disponível`}
+      </strong>
+      <p>
+        {estado.status === 'baixando'
+          ? `Baixando... ${Math.round(estado.progresso || 0)}%`
+          : estado.mensagem}
+      </p>
+      {estado.status !== 'baixando' && (
+        <button type="button" className="btn-primary btn-sm" onClick={agir}>
+          {estado.status === 'baixada' ? 'Instalar e reiniciar' : 'Baixar'}
+        </button>
+      )}
+    </aside>
+  )
+}
+
 export default function App() {
   const [usuarioAtual, setUsuarioAtual] = useState(() => carregarUsuarioComentarioAtual())
 
@@ -78,6 +137,7 @@ export default function App() {
 
   return (
     <HashRouter>
+      <AvisoAtualizacao />
       <Routes>
         <Route path="/"                   element={<Home usuarioAtual={usuarioAtual} onTrocarUsuario={trocarUsuario} />} />
         <Route path="/nova"               element={<NovaNorma usuarioAtual={usuarioAtual} />} />

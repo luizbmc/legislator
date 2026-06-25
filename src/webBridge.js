@@ -176,5 +176,27 @@ if (!window.legislator) {
       salvar: (id, dados) => dadosApi('PUT', `/usuarios/${id}`, dados),
       excluir: id => dadosApi('DELETE', `/usuarios/${id}`),
     },
+    atualizacoes: {
+      estado: async () => ({
+        disponivelNoApp: false,
+        status: 'indisponivel',
+        versaoAtual: null,
+        novaVersao: null,
+        progresso: 0,
+        mensagem: 'As atualizações automáticas funcionam somente no aplicativo instalado.',
+      }),
+      verificar: async () => ({
+        disponivelNoApp: false,
+        status: 'indisponivel',
+        mensagem: 'As atualizações automáticas funcionam somente no aplicativo instalado.',
+      }),
+      baixar: async () => {
+        throw new Error('Abra o aplicativo instalado para baixar atualizações.')
+      },
+      instalar: async () => {
+        throw new Error('Abra o aplicativo instalado para instalar atualizações.')
+      },
+      acompanhar: () => () => {},
+    },
   }
 }
