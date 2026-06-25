@@ -28,6 +28,21 @@ import { TEXTO_COMUM_WORD_STYLE_MAP } from '../constants/textoComumWord.js'
 import { carregarUsuarioComentarioAtual, iniciaisUsuario } from '../services/usuariosComentarios.js'
 
 const DOC_VAZIO = '{"type":"doc","content":[]}'
+const STORAGE_CLIENTE_BLOQUEIO = 'normando.bloqueio.clienteId'
+
+function clienteBloqueioId() {
+  try {
+    let id = window.localStorage.getItem(STORAGE_CLIENTE_BLOQUEIO)
+    if (!id) {
+      id = globalThis.crypto?.randomUUID?.()
+        || `cliente-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      window.localStorage.setItem(STORAGE_CLIENTE_BLOQUEIO, id)
+    }
+    return id
+  } catch {
+    return `cliente-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  }
+}
 
 const PADRONIZACAO_ABAS = [
   {
@@ -701,6 +716,8 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
   const location = useLocation()
 
   const fileRef = useRef(null)
+  const clienteBloqueioRef = useRef(clienteBloqueioId())
+  const bloqueioNossoRef = useRef(false)
   const colagemRef = useRef(null)
   const colagemHtmlOriginalRef = useRef('')
   const colagemTextoOriginalRef = useRef('')
@@ -726,6 +743,10 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
   const [status,           setStatus]           = useState('rascunho')
   const [modificado,       setModificado]       = useState(false)
   const [modoEdicaoManual, setModoEdicaoManual] = useState(false)
+  const [fonteRailwayAtiva, setFonteRailwayAtiva] = useState(false)
+  const [bloqueioNorma, setBloqueioNorma] = useState(null)
+  const [bloqueioNosso, setBloqueioNosso] = useState(false)
+  const [solicitandoBloqueio, setSolicitandoBloqueio] = useState(false)
   const [buscaAberta,      setBuscaAberta]      = useState(false)
   const [notasAberto,      setNotasAberto]      = useState(false)
   const [notaEdicaoRequest, setNotaEdicaoRequest] = useState(null)
@@ -794,6 +815,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
     : []
   const gruposPadronizacao = agruparOcorrenciasPadronizacao(ocorrenciasPadronizacao)
   const padronizacaoPodeSubstituir = modoEdicaoManual || emRevisao
+  const edicaoPermitidaPeloBloqueio = remoto || !fonteRailwayAtiva || bloqueioNosso
 
   // ── Carga inicial ─────────────────────────────────────────────
   useEffect(() => {
@@ -823,7 +845,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
       setNorma(n)
       setStatus(n.status ?? 'rascunho')
       setFase('editar')
-      setModoEdicaoManual(remoto || textoComum)
+      setModoEdicaoManual(remoto)
       setModoVadeMecumAtivo(false)
       setMarcasAtualizacaoVisiveis(!textoComum)
       if (n.conteudo_doc && n.conteudo_doc !== DOC_VAZIO) {
@@ -839,15 +861,97 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
 
   useEffect(() => {
     if (!editor || (!remoto && !isTipoTextoComum(norma?.tipo))) return
-    setModoEdicaoManual(true)
-    setMarcasAtualizacaoVisiveis(remoto ? true : false)
-    editor.setEditable(true)
-    window.setTimeout(() => {
-      inicializarBaselineEdicaoManual()
-      nodesAlteradosRef.current = {}
-      manualTrackingSuspensoRef.current = false
-    }, 0)
+    if (remoto) {
+      setModoEdicaoManual(true)
+      setMarcasAtualizacaoVisiveis(true)
+      editor.setEditable(true)
+      window.setTimeout(() => {
+        inicializarBaselineEdicaoManual()
+        nodesAlteradosRef.current = {}
+        manualTrackingSuspensoRef.current = false
+      }, 0)
+      return
+    }
+    garantirBloqueioEdicao().then(adquirido => {
+      if (!adquirido) {
+        setModoEdicaoManual(false)
+        editor.setEditable(false)
+        return
+      }
+      setModoEdicaoManual(true)
+      setMarcasAtualizacaoVisiveis(false)
+      editor.setEditable(true)
+      window.setTimeout(() => {
+        inicializarBaselineEdicaoManual()
+        nodesAlteradosRef.current = {}
+        manualTrackingSuspensoRef.current = false
+      }, 0)
+    })
   }, [editor, norma?.tipo, remoto])
+
+  useEffect(() => {
+    if (remoto || !norma?.id) return
+    let ativo = true
+    window.legislator.railway.configuracao()
+      .then(config => {
+        if (!ativo) return null
+        const railway = config?.modo === 'railway'
+        setFonteRailwayAtiva(railway)
+        return railway
+          ? window.legislator.railway.consultarBloqueio(norma.id)
+          : null
+      })
+      .then(resultado => {
+        if (!ativo || !resultado) return
+        const bloqueio = resultado.bloqueio || null
+        setBloqueioNorma(bloqueio)
+      })
+      .catch(() => {})
+    return () => { ativo = false }
+  }, [norma?.id, remoto])
+
+  useEffect(() => {
+    bloqueioNossoRef.current = bloqueioNosso
+  }, [bloqueioNosso])
+
+  useEffect(() => {
+    if (!bloqueioNosso || !fonteRailwayAtiva || remoto || !norma?.id) return
+    const renovar = async () => {
+      try {
+        const resultado = await window.legislator.railway.renovarBloqueio(
+          norma.id,
+          dadosIdentificacaoBloqueio(),
+        )
+        setBloqueioNorma(resultado.bloqueio)
+      } catch (error) {
+        const bloqueio = extrairBloqueioErro(error)
+        setBloqueioNorma(bloqueio)
+        setBloqueioNosso(false)
+        bloqueioNossoRef.current = false
+        setModoEdicaoManual(false)
+        editor?.setEditable(false)
+        alert(error?.message || 'O bloqueio de edição desta norma expirou.')
+      }
+    }
+    const intervalo = window.setInterval(renovar, 2 * 60 * 1000)
+    return () => window.clearInterval(intervalo)
+  }, [bloqueioNosso, fonteRailwayAtiva, remoto, norma?.id, editor, usuarioAtual?.id])
+
+  useEffect(() => {
+    if (remoto || !norma?.id) return
+    const liberar = () => {
+      if (!bloqueioNossoRef.current) return
+      window.legislator.railway
+        .liberarBloqueio(norma.id, clienteBloqueioRef.current)
+        .catch(() => {})
+      bloqueioNossoRef.current = false
+    }
+    window.addEventListener('pagehide', liberar)
+    return () => {
+      window.removeEventListener('pagehide', liberar)
+      liberar()
+    }
+  }, [norma?.id, remoto])
 
   useEffect(() => {
     if (!editor) return
@@ -919,7 +1023,70 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
     return () => editor.off('update', handler)
   }, [editor])
 
-  function iniciarEdicaoManual() {
+  function dadosIdentificacaoBloqueio() {
+    return {
+      usuarioId: usuarioAtual?.id || 'convidado',
+      usuarioNome: usuarioAtual?.nome || 'Convidado',
+      clienteId: clienteBloqueioRef.current,
+    }
+  }
+
+  function extrairBloqueioErro(error) {
+    return error?.payload?.bloqueio
+      || error?.payload?.remoto?.bloqueio
+      || null
+  }
+
+  async function liberarBloqueioEdicao({ voltarLeitura = true } = {}) {
+    if (!bloqueioNossoRef.current || remoto) return
+    try {
+      await window.legislator.railway.liberarBloqueio(
+        parseInt(id),
+        clienteBloqueioRef.current,
+      )
+    } catch {}
+    bloqueioNossoRef.current = false
+    setBloqueioNosso(false)
+    setBloqueioNorma(null)
+    if (voltarLeitura) {
+      setModoEdicaoManual(false)
+      editor?.setEditable(false)
+    }
+  }
+
+  async function garantirBloqueioEdicao() {
+    if (remoto || bloqueioNossoRef.current) return true
+    setSolicitandoBloqueio(true)
+    try {
+      const config = await window.legislator.railway.configuracao()
+      const railway = config?.modo === 'railway'
+      setFonteRailwayAtiva(railway)
+      if (!railway) return true
+      const resultado = await window.legislator.railway.adquirirBloqueio(
+        parseInt(id),
+        dadosIdentificacaoBloqueio(),
+      )
+      setBloqueioNorma(resultado.bloqueio)
+      setBloqueioNosso(true)
+      bloqueioNossoRef.current = true
+      return true
+    } catch (error) {
+      const bloqueio = extrairBloqueioErro(error)
+      setBloqueioNorma(bloqueio)
+      setBloqueioNosso(false)
+      bloqueioNossoRef.current = false
+      const nome = bloqueio?.usuario_nome
+      alert(nome
+        ? `Esta norma está sendo editada por ${nome}. Ela permanecerá em modo leitura.`
+        : error?.message || 'Não foi possível reservar esta norma para edição.')
+      return false
+    } finally {
+      setSolicitandoBloqueio(false)
+    }
+  }
+
+  async function iniciarEdicaoManual() {
+    if (!await garantirBloqueioEdicao()) return
     setModalAtualizarAberto(false)
     setModoEdicaoManual(true)
     if (!editor) return
@@ -1483,7 +1650,8 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
     setModificado(true)
   }
 
-  function alterarStatusNorma(novoStatus) {
+  async function alterarStatusNorma(novoStatus) {
+    if (!await garantirBloqueioEdicao()) return
     setStatus(atual => {
       if (atual === novoStatus) return atual
       setModificado(true)
@@ -1600,6 +1768,9 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
     const file = e.target.files?.[0]
     if (!file) return
     try {
+      if (!await garantirBloqueioEdicao()) return
+      setModoEdicaoManual(true)
+      editor?.setEditable(true)
       if (/\.xml$/i.test(file.name)) {
         manualTrackingSuspensoRef.current = false
         baselineAposImportacaoRef.current = false
@@ -1710,9 +1881,12 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
     }
   }
 
-  function confirmarColagemInternet() {
+  async function confirmarColagemInternet() {
     if (!colagemRef.current) return
     if (!colagemRef.current.textContent?.trim()) return
+    if (!await garantirBloqueioEdicao()) return
+    setModoEdicaoManual(true)
+    editor?.setEditable(true)
 
     if (isTipoTextoComum(norma?.tipo)) {
       const htmlOrigem = colagemHtmlOriginalRef.current || colagemRef.current.innerHTML
@@ -1758,6 +1932,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
         status,
         atualizado_por: usuarioAtual?.nome || '',
         revisao: norma?.revisao,
+        bloqueioClienteId: bloqueioNossoRef.current ? clienteBloqueioRef.current : null,
       }
       if (opts.data_atualizacao) payload.data_atualizacao = opts.data_atualizacao
       if (remoto) {
@@ -1778,6 +1953,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
         await window.legislator.excecoes.salvar(parseInt(id), excecoes)
       }
       setModificado(false)
+      if (!remoto) await liberarBloqueioEdicao()
     } catch (err) {
       if (remoto && Number(err?.status) === 409) {
         const atual = err?.payload?.atual || err?.payload?.remoto?.atual
@@ -1799,6 +1975,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
       alert('Nesta etapa, os metadados da cópia Railway permanecem vinculados à norma original. Edite apenas o conteúdo.')
       return
     }
+    if (!await garantirBloqueioEdicao()) return
     setEditForm({
       tipo:     norma.tipo     ?? '',
       epigrafe: norma.epigrafe ?? '',
@@ -1825,6 +2002,18 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
     }
   }
 
+  async function abrirAtualizacaoNorma() {
+    if (!await garantirBloqueioEdicao()) return
+    setModalAtualizarAberto(true)
+  }
+
+  async function fecharAtualizacaoNorma() {
+    setModalAtualizarAberto(false)
+    if (!modoEdicaoManual && !emRevisao && !modificado) {
+      await liberarBloqueioEdicao()
+    }
+  }
+
   async function salvarMeta(e) {
     e.preventDefault()
     if (!editForm.epigrafe.trim()) { setEditErro('A epígrafe é obrigatória.'); return }
@@ -1836,9 +2025,11 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
         tags: editTags,
         atualizado_por: usuarioAtual?.nome || '',
         revisao: norma?.revisao,
+        bloqueioClienteId: bloqueioNossoRef.current ? clienteBloqueioRef.current : null,
       })
       setNorma(atualizada)
       setModalEditarMeta(false)
+      await liberarBloqueioEdicao()
     } catch (err) {
       setEditErro(err.message || 'Erro ao salvar.')
     } finally {
@@ -2283,6 +2474,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
           data_atualizacao: dataAtual,
           atualizado_por: usuarioAtual?.nome || '',
           revisao: norma?.revisao,
+          bloqueioClienteId: bloqueioNossoRef.current ? clienteBloqueioRef.current : null,
         })
         setNorma(prev => ({ ...prev, ...atualizada }))
       }
@@ -2294,13 +2486,14 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
       setCurrDiffIdx(-1)
       setDocAnterior(null)
       nodesAlteradosRef.current = {}
+      if (!remoto) await liberarBloqueioEdicao()
     } finally {
       setSalvando(false)
     }
   }
 
   // ── Revisão: cancelar (restaura doc anterior) ─────────────────
-  function cancelarRevisao() {
+  async function cancelarRevisao() {
     if (!editor) return
     if (docAnterior) editor.commands.setContent(docAnterior)
     editor.commands.clearDiffDecorations()
@@ -2310,6 +2503,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
     setCurrDiffIdx(-1)
     setDocAnterior(null)
     nodesAlteradosRef.current = {}
+    if (!remoto) await liberarBloqueioEdicao()
   }
 
   // ── Dados derivados para o painel de revisão ──────────────────
@@ -2415,6 +2609,18 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
               Railway · revisão {revisaoRemota ?? '—'}
             </button>
           )}
+          {!remoto && fonteRailwayAtiva && bloqueioNorma && (
+            <span
+              className={`editor-lock-badge${bloqueioNosso ? ' nosso' : ' ocupado'}`}
+              title={bloqueioNosso
+                ? 'O bloqueio é renovado automaticamente enquanto esta tela permanece aberta.'
+                : `Bloqueio válido até ${new Date(bloqueioNorma.expira_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.`}
+            >
+              {bloqueioNosso
+                ? '🔒 Edição reservada'
+                : `🔒 Em edição por ${bloqueioNorma.usuario_nome}`}
+            </span>
+          )}
           {fase === 'editar' && !emRevisao && (
             <>
               <select
@@ -2444,10 +2650,10 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
               <div className="editor-titulo-acoes">
                 <button
                   className="btn-ghost btn-atualizar-norma-topo"
-                  onClick={() => setModalAtualizarAberto(true)}
-                  disabled={remoto}
+                  onClick={abrirAtualizacaoNorma}
+                  disabled={remoto || solicitandoBloqueio}
                   title="Carregar nova versão da norma e revisar alterações"
-                >🔄 Atualizar norma</button>
+                >{solicitandoBloqueio ? 'Reservando...' : '🔄 Atualizar norma'}</button>
               </div>
             )}
             {fase === 'editar' && !emRevisao && <>
@@ -2943,7 +3149,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
               styleIndicatorsActive={styleIndicatorsAtivo}
               hideUpdateMarks={!marcasAtualizacaoVisiveis}
               spellcheckAtivo={spellcheckAtivo}
-              editable={modoEdicaoManual || emRevisao}
+              editable={(modoEdicaoManual || emRevisao) && edicaoPermitidaPeloBloqueio}
               tipoNorma={norma?.tipo}
               tags={norma?.tags ?? []}
               onPasteRotinas={() => setModificado(true)}
@@ -2987,7 +3193,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
           modoVadeMecum={modoVadeMecumAtivo}
           onIniciarRevisao={onIniciarRevisao}
           onImportarNotas={onImportarNotasAtualizacao}
-          onFechar={() => setModalAtualizarAberto(false)}
+          onFechar={fecharAtualizacaoNorma}
           onEditarManual={iniciarEdicaoManual}
           onConsolidarAtualizacoes={consolidarAtualizacoes}
         />

@@ -164,6 +164,18 @@ contextBridge.exposeInMainWorld('legislator', {
     restaurarVersao: (id, versaoId, dados) => (
       invokeRailway('railway:restaurar-versao', id, versaoId, dados)
     ),
+    consultarBloqueio: normaId => invokeRailway(
+      'railway:request', 'GET', `/api/normas/${normaId}/bloqueio`,
+    ),
+    adquirirBloqueio: (normaId, dados) => invokeRailway(
+      'railway:request', 'POST', `/api/normas/${normaId}/bloqueio`, dados,
+    ),
+    renovarBloqueio: (normaId, dados) => invokeRailway(
+      'railway:request', 'PUT', `/api/normas/${normaId}/bloqueio`, dados,
+    ),
+    liberarBloqueio: (normaId, clienteId) => invokeRailway(
+      'railway:request', 'DELETE', `/api/normas/${normaId}/bloqueio`, { clienteId },
+    ),
   },
   usuarios: {
     listar: () => invokeDados('usuarios:listar', 'GET', '/api/usuarios'),

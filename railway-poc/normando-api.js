@@ -2,6 +2,7 @@ const crypto = require('crypto')
 
 const SECOES_PADRAO = ['Normas principais', 'Normas correlatas', 'Outras normas']
 const EXPORTACOES_VALIDAS = new Set(['ignorar', 'atualizacao', 'completa'])
+const BLOQUEIO_DURACAO_MS = 10 * 60 * 1000
 
 function colunaExiste(db, tabela, coluna) {
   return db.prepare(`PRAGMA table_info("${tabela}")`).all().some(item => item.name === coluna)
@@ -23,7 +24,46 @@ function prepararEsquema(db) {
       criado_em TEXT NOT NULL,
       atualizado_em TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS norma_bloqueios (
+      norma_id INTEGER PRIMARY KEY REFERENCES normas(id) ON DELETE CASCADE,
+      usuario_id TEXT NOT NULL,
+      usuario_nome TEXT NOT NULL,
+      cliente_id TEXT NOT NULL,
+      adquirido_em TEXT NOT NULL,
+      renovado_em TEXT NOT NULL,
+      expira_em TEXT NOT NULL
+    );
   `)
+}
+
+function bloqueioAtivo(db, normaId, agora = new Date()) {
+  const bloqueio = db.prepare(`
+    SELECT norma_id, usuario_id, usuario_nome, cliente_id,
+           adquirido_em, renovado_em, expira_em
+    FROM norma_bloqueios
+    WHERE norma_id = ?
+  `).get(normaId)
+  if (!bloqueio) return null
+  if (new Date(bloqueio.expira_em).getTime() > agora.getTime()) return bloqueio
+  db.prepare('DELETE FROM norma_bloqueios WHERE norma_id = ?').run(normaId)
+  return null
+}
+
+function dadosBloqueio(body = {}) {
+  const usuarioId = String(body.usuarioId || body.usuario_id || '').trim()
+  const usuarioNome = String(body.usuarioNome || body.usuario_nome || '').trim()
+  const clienteId = String(body.clienteId || body.cliente_id || '').trim()
+  if (!usuarioId || !usuarioNome || !clienteId) {
+    const error = new Error('Não foi possível identificar o usuário e este computador.')
+    error.status = 400
+    throw error
+  }
+  return { usuarioId, usuarioNome, clienteId }
+}
+
+function novoPrazoBloqueio(agora = new Date()) {
+  return new Date(agora.getTime() + BLOQUEIO_DURACAO_MS).toISOString()
 }
 
 function idValido(valor) {
@@ -77,6 +117,20 @@ function conflitoRevisao(res, atual) {
     error: 'Este registro foi salvo por outra sessão. Recarregue antes de tentar novamente.',
     atual,
   })
+}
+
+function validarBloqueioEscrita(db, req, res) {
+  const bloqueio = bloqueioAtivo(db, req.params.id)
+  if (!bloqueio) return true
+  const clienteId = String(
+    req.body?.bloqueioClienteId || req.body?.bloqueio_cliente_id || '',
+  ).trim()
+  if (clienteId && clienteId === bloqueio.cliente_id) return true
+  res.status(423).json({
+    error: `Norma em edição por ${bloqueio.usuario_nome}.`,
+    bloqueio,
+  })
+  return false
 }
 
 function exportacaoParaSalvar(norma) {
@@ -233,6 +287,89 @@ function registrarNormandoApi(app, db) {
     res.json(norma)
   })
 
+  app.get('/api/normas/:id/bloqueio', (req, res) => {
+    if (!normaCompleta(db, req.params.id)) {
+      return res.status(404).json({ error: 'Norma não encontrada.' })
+    }
+    res.json({ bloqueio: bloqueioAtivo(db, req.params.id) })
+  })
+
+  app.post('/api/normas/:id/bloqueio', (req, res) => {
+    if (!normaCompleta(db, req.params.id)) {
+      return res.status(404).json({ error: 'Norma não encontrada.' })
+    }
+    const dados = dadosBloqueio(req.body)
+    const forcar = req.body?.forcar === true
+    const agora = new Date()
+    const existente = bloqueioAtivo(db, req.params.id, agora)
+    const mesmoCliente = existente?.cliente_id === dados.clienteId
+    if (existente && !mesmoCliente && !forcar) {
+      return res.status(423).json({
+        error: `Norma em edição por ${existente.usuario_nome}.`,
+        bloqueio: existente,
+      })
+    }
+    const adquiridoEm = mesmoCliente ? existente.adquirido_em : agora.toISOString()
+    db.prepare(`
+      INSERT INTO norma_bloqueios (
+        norma_id, usuario_id, usuario_nome, cliente_id,
+        adquirido_em, renovado_em, expira_em
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(norma_id) DO UPDATE SET
+        usuario_id = excluded.usuario_id,
+        usuario_nome = excluded.usuario_nome,
+        cliente_id = excluded.cliente_id,
+        adquirido_em = excluded.adquirido_em,
+        renovado_em = excluded.renovado_em,
+        expira_em = excluded.expira_em
+    `).run(
+      req.params.id,
+      dados.usuarioId,
+      dados.usuarioNome,
+      dados.clienteId,
+      adquiridoEm,
+      agora.toISOString(),
+      novoPrazoBloqueio(agora),
+    )
+    res.json({ bloqueio: bloqueioAtivo(db, req.params.id, agora) })
+  })
+
+  app.put('/api/normas/:id/bloqueio', (req, res) => {
+    const dados = dadosBloqueio(req.body)
+    const agora = new Date()
+    const existente = bloqueioAtivo(db, req.params.id, agora)
+    if (!existente || existente.cliente_id !== dados.clienteId) {
+      return res.status(423).json({
+        error: existente
+          ? `Norma em edição por ${existente.usuario_nome}.`
+          : 'O bloqueio desta norma expirou.',
+        bloqueio: existente,
+      })
+    }
+    db.prepare(`
+      UPDATE norma_bloqueios
+      SET usuario_id = ?, usuario_nome = ?, renovado_em = ?, expira_em = ?
+      WHERE norma_id = ? AND cliente_id = ?
+    `).run(
+      dados.usuarioId,
+      dados.usuarioNome,
+      agora.toISOString(),
+      novoPrazoBloqueio(agora),
+      req.params.id,
+      dados.clienteId,
+    )
+    res.json({ bloqueio: bloqueioAtivo(db, req.params.id, agora) })
+  })
+
+  app.delete('/api/normas/:id/bloqueio', (req, res) => {
+    const clienteId = String(req.body?.clienteId || req.body?.cliente_id || '').trim()
+    if (!clienteId) return res.status(400).json({ error: 'Identificação do computador ausente.' })
+    db.prepare(`
+      DELETE FROM norma_bloqueios WHERE norma_id = ? AND cliente_id = ?
+    `).run(req.params.id, clienteId)
+    res.json({ ok: true })
+  })
+
   app.post('/api/normas', (req, res) => {
     const dados = req.body || {}
     if (!String(dados.epigrafe || '').trim()) {
@@ -276,6 +413,7 @@ function registrarNormandoApi(app, db) {
   app.put('/api/normas/:id', (req, res) => {
     const atual = normaCompleta(db, req.params.id)
     if (!atual) return res.status(404).json({ error: 'Norma não encontrada.' })
+    if (!validarBloqueioEscrita(db, req, res)) return
     const revisao = Number(req.body?.revisao)
     if (Number.isInteger(revisao) && revisao !== Number(atual.revisao)) {
       return conflitoRevisao(res, atual)
@@ -307,6 +445,7 @@ function registrarNormandoApi(app, db) {
   app.patch('/api/normas/:id/meta', (req, res) => {
     const atual = normaCompleta(db, req.params.id)
     if (!atual) return res.status(404).json({ error: 'Norma não encontrada.' })
+    if (!validarBloqueioEscrita(db, req, res)) return
     const revisao = Number(req.body?.revisao)
     if (Number.isInteger(revisao) && revisao !== Number(atual.revisao)) {
       return conflitoRevisao(res, atual)

@@ -216,6 +216,69 @@ async function run() {
     assert.equal(officialNorm.body.revisao, 1)
     assert.deepEqual(officialNorm.body.tags, ['vm'])
 
+    const lockA = await request(`/api/normas/${officialNorm.body.id}/bloqueio`, {
+      method: 'POST',
+      body: JSON.stringify({
+        usuarioId: 'usuario-teste',
+        usuarioNome: 'Usuário teste',
+        clienteId: 'computador-a',
+      }),
+    })
+    assert.equal(lockA.response.status, 200)
+    assert.equal(lockA.body.bloqueio.cliente_id, 'computador-a')
+
+    const lockConflict = await request(`/api/normas/${officialNorm.body.id}/bloqueio`, {
+      method: 'POST',
+      body: JSON.stringify({
+        usuarioId: 'usuario-b',
+        usuarioNome: 'Usuário B',
+        clienteId: 'computador-b',
+      }),
+    })
+    assert.equal(lockConflict.response.status, 423)
+    assert.equal(lockConflict.body.bloqueio.usuario_nome, 'Usuário teste')
+
+    const renewedLock = await request(`/api/normas/${officialNorm.body.id}/bloqueio`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        usuarioId: 'usuario-teste',
+        usuarioNome: 'Usuário teste',
+        clienteId: 'computador-a',
+      }),
+    })
+    assert.equal(renewedLock.response.status, 200)
+
+    const releasedLock = await request(`/api/normas/${officialNorm.body.id}/bloqueio`, {
+      method: 'DELETE',
+      body: JSON.stringify({ clienteId: 'computador-a' }),
+    })
+    assert.equal(releasedLock.response.status, 200)
+
+    const lockB = await request(`/api/normas/${officialNorm.body.id}/bloqueio`, {
+      method: 'POST',
+      body: JSON.stringify({
+        usuarioId: 'usuario-b',
+        usuarioNome: 'Usuário B',
+        clienteId: 'computador-b',
+      }),
+    })
+    assert.equal(lockB.response.status, 200)
+
+    const saveWithoutLock = await request(`/api/normas/${officialNorm.body.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        revisao: 1,
+        conteudo_doc: '{"type":"doc","content":[]}',
+        conteudo_txt: 'Não deve sobrescrever o bloqueio.',
+      }),
+    })
+    assert.equal(saveWithoutLock.response.status, 423)
+
+    await request(`/api/normas/${officialNorm.body.id}/bloqueio`, {
+      method: 'DELETE',
+      body: JSON.stringify({ clienteId: 'computador-b' }),
+    })
+
     const officialNormList = await request('/api/normas')
     assert.equal(officialNormList.response.status, 200)
     assert.equal(officialNormList.body.some(item => item.id === officialNorm.body.id), true)

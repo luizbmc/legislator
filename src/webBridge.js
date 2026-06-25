@@ -169,6 +169,18 @@ if (!window.legislator) {
       restaurarVersao: (id, versaoId, dados) => (
         api('POST', `/railway/edicoes/${id}/restaurar/${versaoId}`, dados)
       ),
+      consultarBloqueio: normaId => api(
+        'GET', `/railway/dados/normas/${normaId}/bloqueio`,
+      ),
+      adquirirBloqueio: (normaId, dados) => api(
+        'POST', `/railway/dados/normas/${normaId}/bloqueio`, dados,
+      ),
+      renovarBloqueio: (normaId, dados) => api(
+        'PUT', `/railway/dados/normas/${normaId}/bloqueio`, dados,
+      ),
+      liberarBloqueio: (normaId, clienteId) => api(
+        'DELETE', `/railway/dados/normas/${normaId}/bloqueio`, { clienteId },
+      ),
     },
     usuarios: {
       listar: () => dadosApi('GET', '/usuarios'),
