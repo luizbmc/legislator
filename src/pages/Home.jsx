@@ -120,6 +120,13 @@ export default function Home({ usuarioAtual, onTrocarUsuario }) {
   const [ajudaAberta, setAjudaAberta] = useState(false)
 
   useEffect(() => {
+    try {
+      if (document.activeElement?.isContentEditable) document.activeElement.blur()
+      window.getSelection()?.removeAllRanges()
+    } catch {}
+  }, [])
+
+  useEffect(() => {
     setLoading(true)
     window.legislator.normas.listar({ busca, tipo, status, buscarConteudo })
       .then(setNormas)
@@ -210,6 +217,11 @@ export default function Home({ usuarioAtual, onTrocarUsuario }) {
           placeholder={buscarConteudo ? 'Buscar por epígrafe, apelido ou conteúdo…' : 'Buscar por epígrafe ou apelido…'}
           value={busca}
           onChange={e => setBusca(e.target.value)}
+          onMouseDown={e => {
+            if (document.activeElement !== e.currentTarget) {
+              e.currentTarget.focus({ preventScroll: true })
+            }
+          }}
         />
         <label className="home-check">
           <input

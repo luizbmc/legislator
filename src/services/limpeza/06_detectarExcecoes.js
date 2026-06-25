@@ -13,6 +13,7 @@ function temMarca(node, nome) {
 
 const RE_TERMO_ITALICO_OBRIGATORIO = /\b(?:Diário|[Cc]aput|DOU)\b/
 const RE_NOTA_PARENTETICA_INICIAL = /^\((?:Vide|Revogad[oa]|Incluíd[oa]|Incluid[oa]|Acrescid[oa]|Renumerad[oa]|Redação dada|Com redação|Vigência|(?:Artigo|Inciso|Alínea|Alinea|Item|Parágrafo|Paragrafo)\s+(?:revogad[oa]|incluíd[oa]|incluid[oa]|acrescid[oa]|renumerad[oa]))/i
+const RE_MARCADOR_CORTE = /^\[\s*(?:\.{3}|…)\s*\]$/
 const ESTILOS_ENUMERACAO = new Set(['inciso', 'alinea', 'item'])
 const NIVEL_ENUMERACAO = { inciso: 1, alinea: 2, item: 3 }
 const ESTILOS_FECHAM_ENUMERACAO = new Set([
@@ -59,6 +60,81 @@ function temMarcaNota(node) {
     const nome = nomeMarca(marca)
     return nome === 'nota' || nome === 'notaRodape' || nome === 'notaSobrescrito'
   })
+}
+
+function temMarcaSobrescrito(node) {
+  return node?.type === 'text' && (node.marks ?? []).some(marca => {
+    const nome = nomeMarca(marca)
+    return nome === 'superscript' || nome === 'notaSobrescrito'
+  })
+}
+
+function alvoPontoVirgulaAposNota(linha) {
+  if (!linha.content?.length) return null
+
+  let offset = 0
+  let notaAnterior = false
+
+  for (const node of linha.content) {
+    if (node?.type !== 'text') {
+      notaAnterior = false
+      if (node?.type === 'hardBreak') offset += 1
+      continue
+    }
+
+    const texto = String(node.text || '')
+    if (temMarcaNota(node)) {
+      notaAnterior = true
+      offset += texto.length
+      continue
+    }
+
+    if (notaAnterior) {
+      const match = texto.match(/^[ \u00a0]*;/)
+      if (match) {
+        const posicao = offset + match[0].lastIndexOf(';')
+        return { inicio: posicao, fim: posicao + 1, texto: ';' }
+      }
+    }
+
+    notaAnterior = false
+    offset += texto.length
+  }
+
+  return null
+}
+
+function alvoOSobrescritoSemS(linha) {
+  if (!linha.content?.length) return null
+
+  const textoCompleto = linha.content
+    .map(node => node?.type === 'text' ? String(node.text || '') : '')
+    .join('')
+
+  let offset = 0
+  for (const node of linha.content) {
+    if (node?.type !== 'text') {
+      if (node?.type === 'hardBreak') offset += 1
+      continue
+    }
+    const texto = String(node.text || '')
+
+    if (temMarcaSobrescrito(node)) {
+      for (let i = 0; i < texto.length; i++) {
+        if (texto[i] !== 'o' && texto[i] !== 'O') continue
+        if (textoCompleto[offset + i + 1]?.toLocaleLowerCase('pt-BR') === 's') continue
+        return {
+          inicio: offset + i,
+          fim: offset + i + 1,
+          texto: texto[i],
+        }
+      }
+    }
+
+    offset += texto.length
+  }
+
+  return null
 }
 
 function temBoldArtigo(linha) {
@@ -209,6 +285,27 @@ function alvoRotuloArtigo(linha) {
 }
 
 const PADROES = [
+  {
+    tipo: 'grau_seguido_de_s',
+    descricao: 'Caractere de grau seguido de "s" — use "os" em estilo sobrescrito',
+    test: l => /°s/i.test(l.text),
+    alvo: l => alvoRegex(l.text, /°s/i),
+    estilosExcluidos: ['vazio'],
+  },
+  {
+    tipo: 'ponto_e_virgula_apos_nota',
+    descricao: 'Ponto e vírgula após nota',
+    test: l => Boolean(alvoPontoVirgulaAposNota(l)),
+    alvo: alvoPontoVirgulaAposNota,
+    estilosExcluidos: ['vazio'],
+  },
+  {
+    tipo: 'o_sobrescrito_sem_s',
+    descricao: '"o" sobrescrito não seguido de "s"',
+    test: l => Boolean(alvoOSobrescritoSemS(l)),
+    alvo: alvoOSobrescritoSemS,
+    estilosExcluidos: ['vazio'],
+  },
   {
     tipo: 'ordinal_antigo',
     descricao: 'Ordinal na grafia antiga (1o, 2a) — use 1º, 2ª',
@@ -368,13 +465,23 @@ const PADROES = [
     alvo: l => alvoRegex(l.text, RE_TERMO_ITALICO_OBRIGATORIO),
   },
   {
+    tipo: 'estilo_citacao_nao_aplicado',
+    descricao: 'Estilo Citação não aplicado',
+    test: l => l.style === 'texto-lei' && RE_MARCADOR_CORTE.test(l.text.trim()),
+    alvo: l => alvoTextoInteiro(l.text),
+    estilosExcluidos: ['vazio', 'citacao'],
+  },
+  {
     // Parágrafo com texto livre que não foi reconhecido como nenhuma estrutura
     // legislativa (artigo, parágrafo, inciso, alínea, item, citação etc.).
     // Indica conteúdo inserido manualmente ou erro de classificação.
     // Exceção: "Pena –" é uma cláusula penal válida em legislação criminal.
     tipo: 'estrutura_nao_identificada',
     descricao: 'Estrutura não identificada — verificar estilo da linha',
-    test: l => l.style === 'texto-lei' && !/^Pena\s–/.test(l.text),
+    test: l =>
+      l.style === 'texto-lei' &&
+      !/^Pena\s–/.test(l.text) &&
+      !RE_MARCADOR_CORTE.test(l.text.trim()),
     alvo: l => alvoTextoInteiro(l.text),
     estilosExcluidos: ['vazio'],
   },

@@ -2552,6 +2552,27 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
     }
   }
 
+  function limparFocoESelecaoEditor() {
+    try {
+      editor?.commands.blur()
+    } catch {}
+    try {
+      editor?.view?.dom?.blur()
+    } catch {}
+    try {
+      const ativo = document.activeElement
+      if (ativo?.closest?.('.legislator-editor-inner')) ativo.blur()
+    } catch {}
+    try {
+      window.getSelection()?.removeAllRanges()
+    } catch {}
+  }
+
+  useEffect(() => {
+    if (!editor) return undefined
+    return () => limparFocoESelecaoEditor()
+  }, [editor])
+
   function voltarDoEditor() {
     const origem = location.state?.origem
     const publicacaoId = location.state?.publicacaoId
@@ -2565,6 +2586,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
       : origem === 'publicacao' ? 'publicação' : 'catálogo'
 
     if (modificado && !confirm(`Há alterações não salvas. Deseja voltar à tela de ${nomeDestino} sem salvar?`)) return
+    limparFocoESelecaoEditor()
     nav(destino)
   }
 

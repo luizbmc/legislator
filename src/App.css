@@ -2435,8 +2435,12 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 }
 
 .comentarios-painel {
-  left: 20px;
+  position: fixed;
+  top: calc(var(--topbar-h) + 10px);
+  left: 6px;
+  z-index: 220;
   width: min(430px, calc(100% - 40px));
+  max-height: calc(100vh - var(--topbar-h) - 24px);
 }
 
 .comentarios-contador {
