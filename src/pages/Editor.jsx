@@ -1961,13 +1961,19 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
           `Esta cópia foi salva por outra sessão${atual?.revisao ? ` e já está na revisão ${atual.revisao}` : ''}. ` +
           'Seu texto continua nesta tela. Recarregue a norma antes de tentar salvar novamente.',
         )
+      } else if (Number(err?.status) === 409) {
+        const atual = err?.payload?.atual || err?.payload?.remoto?.atual
+        alert(
+          `Esta norma foi salva por outra sessão${atual?.revisao ? ` e já está na revisão ${atual.revisao}` : ''}. ` +
+          'Seu texto continua nesta tela. Recarregue a norma antes de tentar salvar novamente.',
+        )
       } else {
         alert(err?.message || 'Não foi possível salvar a norma.')
       }
     } finally {
       setSalvando(false)
     }
-  }, [editor, id, excecoes, status, usuarioAtual, remoto, revisaoRemota, norma?.epigrafe])
+  }, [editor, id, excecoes, status, usuarioAtual, remoto, revisaoRemota, norma?.epigrafe, norma?.revisao])
 
   // ── Editar metadados ──────────────────────────────────────────
   async function abrirEditarMeta() {
