@@ -851,6 +851,7 @@ export default function PublicacaoPage({ usuarioAtual }) {
   const [salvando,  setSalvando]  = useState(false)
   const [modificado,setModificado]= useState(false)
   const [estruturaModificada, setEstruturaModificada] = useState(false)
+  const [modalSaidaSemSalvar, setModalSaidaSemSalvar] = useState(false)
   const [dragNorma, setDragNorma] = useState(null)
 
   // Modal adicionar norma
@@ -1298,6 +1299,19 @@ export default function PublicacaoPage({ usuarioAtual }) {
 
   if (!pub) return <div className="loading">Carregando…</div>
 
+  function voltarParaPublicacoes() {
+    if (modificado) {
+      setModalSaidaSemSalvar(true)
+      return
+    }
+    nav('/publicacoes')
+  }
+
+  function confirmarSaidaSemSalvar() {
+    setModalSaidaSemSalvar(false)
+    nav('/publicacoes')
+  }
+
   return (
     <div className="pub-page">
 
@@ -1305,10 +1319,7 @@ export default function PublicacaoPage({ usuarioAtual }) {
       <header className="editor-topbar">
         <button
           className="btn-ghost btn-voltar"
-          onClick={() => {
-            if (modificado && !confirm('Há alterações não salvas. Deseja sair?')) return
-            nav('/publicacoes')
-          }}
+          onClick={voltarParaPublicacoes}
         >← Publicações</button>
 
         <div className="editor-titulo">
@@ -1928,6 +1939,35 @@ export default function PublicacaoPage({ usuarioAtual }) {
                   {criandoRecorte ? 'Criando...' : 'Criar recorte'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalSaidaSemSalvar && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalSaidaSemSalvar(false) }}>
+          <div className="modal-box modal-saida-sem-salvar" onMouseDown={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3>Alterações não salvas</h3>
+                <p>Deseja voltar à lista de publicações sem salvar?</p>
+              </div>
+              <button
+                type="button"
+                className="btn-ghost modal-fechar"
+                onClick={() => setModalSaidaSemSalvar(false)}
+                title="Cancelar"
+              >
+                x
+              </button>
+            </div>
+            <div className="modal-saida-acoes">
+              <button type="button" className="btn-ghost" onClick={() => setModalSaidaSemSalvar(false)}>
+                Cancelar
+              </button>
+              <button type="button" className="btn-saida-sem-salvar" onClick={confirmarSaidaSemSalvar}>
+                Sair sem salvar
+              </button>
             </div>
           </div>
         </div>

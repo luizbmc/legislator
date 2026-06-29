@@ -776,6 +776,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
   const [modalComentario,       setModalComentario]       = useState(false)
   const [modalColarTexto,       setModalColarTexto]       = useState(false)
   const [modalClassesHtml,      setModalClassesHtml]      = useState(null)
+  const [modalSaidaSemSalvar,   setModalSaidaSemSalvar]   = useState(null)
   const [colagemTemConteudo,    setColagemTemConteudo]    = useState(false)
   const [notaRodapeForm,        setNotaRodapeForm]        = useState({ chamada: '1', texto: '' })
   const [comentarioForm,        setComentarioForm]        = useState({ texto: '' })
@@ -806,6 +807,8 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
   const notaRodapeSelectionRef = useRef(null)
   const comentarioSelectionRef = useRef(null)
   const manualBaselineRef = useRef([])
+  const manualBaselineAlteradosRef = useRef([])
+  const salvandoRef = useRef(false)
   const manualTrackingRef = useRef(false)
   const manualTrackingSuspensoRef = useRef(false)
   const baselineAposImportacaoRef = useRef(false)
@@ -1018,7 +1021,10 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
   // ── Detectar modificações não salvas ──────────────────────────
   useEffect(() => {
     if (!editor) return
-    const handler = () => setModificado(true)
+    const handler = () => {
+      if (salvandoRef.current) return
+      setModificado(true)
+    }
     editor.on('update', handler)
     return () => editor.off('update', handler)
   }, [editor])
@@ -1103,8 +1109,14 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
   function inicializarBaselineEdicaoManual() {
     if (!editor) return
     manualBaselineRef.current = []
+    manualBaselineAlteradosRef.current = []
     editor.state.doc.forEach(node => {
       manualBaselineRef.current.push(nodeAssinaturaManual(node))
+      manualBaselineAlteradosRef.current.push({
+        alterado: node.attrs?.alterado || null,
+        diffType: node.attrs?.diffType || null,
+        diffSubtype: node.attrs?.diffSubtype || null,
+      })
     })
   }
 
@@ -1270,6 +1282,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
         if (!alvo?.node?.attrs?.alterado) return
         if (classificadosSet.has(idx)) return
         if (atuais[idx] !== manualBaselineRef.current[idx]) return
+        if (manualBaselineAlteradosRef.current[idx]?.alterado) return
         try {
           tr = tr.setNodeMarkup(alvo.offset, null, {
             ...alvo.node.attrs,
@@ -1922,6 +1935,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
 
   const handleSalvar = useCallback(async (opts = {}) => {
     if (!editor) return
+    salvandoRef.current = true
     setSalvando(true)
     try {
       const doc = aplicarFlagsNoJSON(editor.getJSON(), nodesAlteradosRef.current)
@@ -1972,6 +1986,9 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
       }
     } finally {
       setSalvando(false)
+      window.setTimeout(() => {
+        salvandoRef.current = false
+      }, 0)
     }
   }, [editor, id, excecoes, status, usuarioAtual, remoto, revisaoRemota, norma?.epigrafe, norma?.revisao])
 
@@ -2591,7 +2608,19 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
       ? 'configuração Railway'
       : origem === 'publicacao' ? 'publicação' : 'catálogo'
 
-    if (modificado && !confirm(`Há alterações não salvas. Deseja voltar à tela de ${nomeDestino} sem salvar?`)) return
+    if (modificado) {
+      limparFocoESelecaoEditor()
+      setModalSaidaSemSalvar({ destino, nomeDestino })
+      return
+    }
+    limparFocoESelecaoEditor()
+    nav(destino)
+  }
+
+  function confirmarSaidaSemSalvar() {
+    const destino = modalSaidaSemSalvar?.destino
+    if (!destino) return
+    setModalSaidaSemSalvar(null)
     limparFocoESelecaoEditor()
     nav(destino)
   }
@@ -3675,6 +3704,37 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {modalSaidaSemSalvar && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setModalSaidaSemSalvar(null) }}>
+          <div className="modal-box modal-saida-sem-salvar" onMouseDown={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3>Alterações não salvas</h3>
+                <p>
+                  Deseja voltar à tela de {modalSaidaSemSalvar.nomeDestino} sem salvar?
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn-ghost modal-fechar"
+                onClick={() => setModalSaidaSemSalvar(null)}
+                title="Cancelar"
+              >
+                x
+              </button>
+            </div>
+            <div className="modal-saida-acoes">
+              <button type="button" className="btn-ghost" onClick={() => setModalSaidaSemSalvar(null)}>
+                Cancelar
+              </button>
+              <button type="button" className="btn-saida-sem-salvar" onClick={confirmarSaidaSemSalvar}>
+                Sair sem salvar
+              </button>
+            </div>
           </div>
         </div>
       )}
