@@ -438,10 +438,13 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
   const [notas, setNotas] = useState(() => collectNotes(editor, modoVadeMecum))
   const [ativa, setAtiva] = useState(-1)
   const [editando, setEditando] = useState(null)
+  const [avisoNotas, setAvisoNotas] = useState('')
+  const [exclusaoPendente, setExclusaoPendente] = useState(null)
   const normalRef = useRef(null)
   const vmRef = useRef(null)
   const campoAtivoRef = useRef(null)
   const ultimaEdicaoRequestRef = useRef(null)
+  const avisoTimerRef = useRef(null)
 
   useEffect(() => {
     if (!editor || !aberto) return
@@ -454,6 +457,10 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
   useEffect(() => {
     if (!aberto) setAtiva(-1)
   }, [aberto])
+
+  useEffect(() => () => {
+    if (avisoTimerRef.current) window.clearTimeout(avisoTimerRef.current)
+  }, [])
 
   useEffect(() => {
     if (!editando) return
@@ -486,15 +493,21 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
 
     const alvoIdx = coletadas.findIndex(nota => nota.id === alvo.id)
     setAtiva(alvoIdx)
-    if (!editable) {
-      alert('Entre no modo de edição para alterar notas.')
-      return
-    }
+    if (!editable) return mostrarAvisoNotas('Entre no modo de edição para alterar notas.')
 
     setEditando(alvo)
   }, [editor, editarNotaRequest, modoVadeMecum, editable])
 
-  if (!aberto && !editando) return null
+  if (!aberto && !editando && !avisoNotas) return null
+
+  function mostrarAvisoNotas(texto) {
+    setAvisoNotas(texto)
+    if (avisoTimerRef.current) window.clearTimeout(avisoTimerRef.current)
+    avisoTimerRef.current = window.setTimeout(() => {
+      setAvisoNotas('')
+      setExclusaoPendente(null)
+    }, 2800)
+  }
 
   function irParaNota(nota, idx) {
     if (!editor || !nota) return
@@ -504,22 +517,22 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
 
   function abrirEdicaoNota(nota, idx, event) {
     event?.stopPropagation()
-    if (!editable) {
-      alert('Entre no modo de edição para alterar notas.')
-      return
-    }
+    if (!editable) return mostrarAvisoNotas('Entre no modo de edição para alterar notas.')
+    setExclusaoPendente(null)
     setAtiva(idx)
     setEditando(nota)
   }
 
   function excluirNotaSelecionada(nota, event) {
     event?.stopPropagation()
-    if (!editable) {
-      alert('Entre no modo de edição para excluir notas.')
+    if (!editable) return mostrarAvisoNotas('Entre no modo de edição para excluir notas.')
+    if (exclusaoPendente !== nota?.id) {
+      setExclusaoPendente(nota?.id || null)
+      mostrarAvisoNotas('Clique novamente em Excluir para confirmar.')
       return
     }
-    if (!confirm('Excluir esta nota do parágrafo?')) return
     if (excluirNota(editor, nota)) {
+      setExclusaoPendente(null)
       setEditando(null)
       setNotas(collectNotes(editor, modoVadeMecum))
     }
@@ -547,7 +560,7 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
     const normalSegments = segmentsFromEditable(normalRef.current)
     const vmSegments = segmentsFromEditable(vmRef.current)
     if (!segmentsText(normalSegments)) {
-      alert('A nota normal não pode ficar vazia.')
+      mostrarAvisoNotas('A nota normal não pode ficar vazia.')
       return
     }
     const salva = editando?.tipo === 'notaTitulo'
@@ -561,6 +574,11 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
 
   return (
     <>
+      {avisoNotas && (
+        <div className="nota-aviso-flutuante" role="status" aria-live="polite">
+          {avisoNotas}
+        </div>
+      )}
       {aberto && (
         <div className="notas-painel notas-navegador-painel" role="dialog" aria-label="Navegador de notas">
       <div className="notas-topo">

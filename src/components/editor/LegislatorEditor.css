@@ -376,10 +376,6 @@
   cursor: pointer;
 }
 
-.leg-nota:hover {
-  color: #0f488d;
-}
-
 .leg-nota-vm-render {
   display: none;
 }
@@ -406,19 +402,19 @@
 .editor-page.modo-vm-ativo .leg-nota[data-vm-segments] .leg-nota-vm-render {
   display: inline;
   font-size: 0.9rem;
-  color: #1d6fd1;
+  color: currentColor;
 }
 
 .leg-nota-sobrescrito {
   font-size: 0.72em;
-  color: #1d6fd1;
+  color: currentColor;
   line-height: 0;
   vertical-align: super;
 }
 
 .leg-nota-vm-sobrescrito {
   font-size: 0.72em;
-  color: #1d6fd1;
+  color: currentColor;
   line-height: 0;
   vertical-align: super;
 }

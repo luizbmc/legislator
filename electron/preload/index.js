@@ -32,6 +32,11 @@ async function invokeDados(localChannel, remoteMethod, remotePath, localArgs = [
 }
 
 contextBridge.exposeInMainWorld('legislator', {
+  onRestoreRendererFocus: callback => {
+    const listener = () => callback()
+    ipcRenderer.on('normando:restore-renderer-focus', listener)
+    return () => ipcRenderer.removeListener('normando:restore-renderer-focus', listener)
+  },
   normas: {
     listar: (filtros = {}) => invokeDados(
       'normas:listar', 'GET', `/api/normas${queryString(filtros)}`, [filtros],

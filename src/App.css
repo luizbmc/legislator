@@ -2226,6 +2226,22 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 .nota-excluir-btn:hover {
   background: #ffe4e6;
 }
+.nota-aviso-flutuante {
+  position: fixed;
+  left: 50%;
+  top: calc(var(--topbar-h) + 14px);
+  z-index: 1500;
+  transform: translateX(-50%);
+  max-width: min(460px, calc(100vw - 32px));
+  padding: 9px 14px;
+  border: 1px solid #f6d58c;
+  border-radius: 8px;
+  background: #fff8df;
+  color: #6f4d00;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+}
 .nota-edicao-overlay {
   position: fixed;
   inset: 0;

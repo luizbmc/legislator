@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, shell } from 'electron'
+import { app, BrowserWindow, Menu, shell, dialog } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { initDatabase } from './db/database.js'
@@ -77,6 +77,46 @@ function registerContextMenu(win) {
   })
 }
 
+function restoreWindowFocus(win) {
+  const target = win && !win.isDestroyed()
+    ? win
+    : BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows().find(w => !w.isDestroyed())
+  if (!target) return
+
+  setTimeout(() => {
+    if (target.isDestroyed()) return
+    if (target.isMinimized()) target.restore()
+    target.focus()
+    target.webContents.focus()
+    target.webContents.send('normando:restore-renderer-focus')
+  }, 30)
+}
+
+function dialogOwnerFromArgs(args) {
+  const first = args?.[0]
+  if (first && typeof first.isDestroyed === 'function' && typeof first.webContents === 'object') return first
+  return BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows().find(w => !w.isDestroyed())
+}
+
+function installNativeDialogFocusGuard() {
+  const methods = ['showOpenDialog', 'showSaveDialog', 'showMessageBox']
+  methods.forEach(method => {
+    const original = dialog[method]?.bind(dialog)
+    if (!original || original.__normandoFocusGuard) return
+
+    const guarded = async (...args) => {
+      const owner = dialogOwnerFromArgs(args)
+      try {
+        return await original(...args)
+      } finally {
+        restoreWindowFocus(owner)
+      }
+    }
+    guarded.__normandoFocusGuard = true
+    dialog[method] = guarded
+  })
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1400,
@@ -113,6 +153,7 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  installNativeDialogFocusGuard()
   await initDatabase()
   registerNormasHandlers()
   registerExportarHandlers()
