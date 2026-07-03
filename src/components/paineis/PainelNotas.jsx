@@ -131,19 +131,50 @@ function collectNotesFromBlock(node, pos) {
 
   if (node.type.name === 'notaTitulo') {
     const segments = []
+    const vmSegments = []
+    let temVm = false
     node.descendants(child => {
-      if (child.isText) segments.push({ text: child.text, italic: isItalic(child), superscript: isNotaSobrescrito(child) })
+      if (!child.isText) return true
+
+      const segment = { text: child.text, italic: isItalic(child), superscript: isNotaSobrescrito(child) }
+      segments.push(segment)
+
+      const markNota = notaMark(child)
+      if (!markNota) return true
+
+      const vmSegmentsAttr = parseSegmentsAttr(markNota?.attrs?.vmSegments)
+      if (vmSegmentsAttr.length) {
+        vmSegments.push(...vmSegmentsAttr)
+        temVm = true
+      } else if (markNota?.attrs?.vmText != null) {
+        vmSegments.push({ text: markNota.attrs.vmText, italic: false, superscript: false })
+        temVm = true
+      } else if (markNota?.attrs?.vmHidden) {
+        temVm = true
+      } else {
+        vmSegments.push(segment)
+      }
       return true
     })
     const normalizedSegments = normalizeSegments(segments)
     const texto = segmentsText(normalizedSegments)
+    const normalizedVmSegments = normalizeSegments(vmSegments)
     if (texto) {
       notas.push({
         id: `${pos}-notaTitulo`,
         tipo: 'notaTitulo',
         texto,
         segments: normalizedSegments,
+        normalSegments: normalizedSegments,
+        normalTexto: texto,
+        vmPreview: temVm
+          ? normalizedVmSegments.length
+            ? { status: 'alterada', texto: segmentsText(normalizedVmSegments), segments: normalizedVmSegments }
+            : { status: 'excluida', texto: 'excluída', segments: [] }
+          : null,
         contexto: '',
+        blockFrom: pos,
+        blockTo: pos + node.nodeSize,
         from: pos + 1,
         to: Math.max(pos + 1, pos + node.nodeSize - 1),
       })
@@ -341,6 +372,37 @@ function criarNodesNota(schema, nota, normalSegments, vmSegments) {
   })
 }
 
+function criarInlineNodesNotaTitulo(schema, normalSegments, vmSegments) {
+  const notaType = schema.marks.nota
+  const italicType = schema.marks.italic
+  const notaSobrescritoType = schema.marks.notaSobrescrito
+  const normal = normalizeSegments(normalSegments)
+  const vm = normalizeSegments(vmSegments)
+  const vmTexto = segmentsText(vm)
+  const normalTexto = segmentsText(normal)
+  const vmIgualNormal = vmTexto === normalTexto && segmentsEqual(vm, normal)
+  const vmExcluida = !vmTexto
+  const attrsVm = vmIgualNormal
+    ? null
+    : vmExcluida
+      ? { vmHidden: true }
+      : { vmText: vmTexto, vmSegments: JSON.stringify(vm), vmHidden: null }
+
+  return normal.map((seg, idx) => {
+    const attrs = !attrsVm
+      ? {}
+      : vmExcluida
+        ? { vmHidden: true }
+        : idx === 0
+          ? attrsVm
+          : { vmHidden: true }
+    const marks = notaType ? [notaType.create(attrs)] : []
+    if (seg.italic && italicType) marks.push(italicType.create())
+    if (seg.superscript && notaSobrescritoType) marks.push(notaSobrescritoType.create())
+    return schema.text(seg.text, marks)
+  })
+}
+
 function substituirNota(editor, nota, normalSegments, vmSegments) {
   if (!editor || !nota || nota.tipo !== 'nota') return false
   const nodes = criarNodesNota(editor.state.schema, nota, normalSegments, vmSegments)
@@ -350,8 +412,23 @@ function substituirNota(editor, nota, normalSegments, vmSegments) {
   return true
 }
 
+function substituirNotaTitulo(editor, nota, normalSegments, vmSegments) {
+  if (!editor || !nota || nota.tipo !== 'notaTitulo') return false
+  const nodes = criarInlineNodesNotaTitulo(editor.state.schema, normalSegments, vmSegments)
+  if (!nodes.length) return false
+  const tr = editor.state.tr.replaceWith(nota.from, nota.to, Fragment.fromArray(nodes))
+  editor.view.dispatch(tr.scrollIntoView())
+  return true
+}
+
 function excluirNota(editor, nota) {
-  if (!editor || !nota || nota.tipo !== 'nota') return false
+  if (!editor || !nota) return false
+  if (nota.tipo === 'notaTitulo' && Number.isFinite(nota.blockFrom) && Number.isFinite(nota.blockTo)) {
+    const tr = editor.state.tr.delete(nota.blockFrom, nota.blockTo)
+    editor.view.dispatch(tr.scrollIntoView())
+    return true
+  }
+  if (nota.tipo !== 'nota') return false
   const tr = editor.state.tr.delete(nota.from, nota.to)
   editor.view.dispatch(tr.scrollIntoView())
   return true
@@ -402,18 +479,18 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
 
     let alvo = null
     if (Number.isFinite(pos)) {
-      alvo = coletadas.find(nota => nota.tipo === 'nota' && pos >= nota.from && pos <= nota.to)
-        || coletadas.find(nota => nota.tipo === 'nota' && pos >= nota.from - 1 && pos <= nota.to + 1)
+      alvo = coletadas.find(nota => pos >= nota.from && pos <= nota.to)
+        || coletadas.find(nota => pos >= nota.from - 1 && pos <= nota.to + 1)
     }
-    if (!alvo) alvo = coletadas.find(nota => nota.tipo === 'nota')
     if (!alvo) return
 
+    const alvoIdx = coletadas.findIndex(nota => nota.id === alvo.id)
+    setAtiva(alvoIdx)
     if (!editable) {
       alert('Entre no modo de edição para alterar notas.')
       return
     }
 
-    setAtiva(coletadas.findIndex(nota => nota.id === alvo.id))
     setEditando(alvo)
   }, [editor, editarNotaRequest, modoVadeMecum, editable])
 
@@ -427,7 +504,6 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
 
   function abrirEdicaoNota(nota, idx, event) {
     event?.stopPropagation()
-    if (nota.tipo !== 'nota') return
     if (!editable) {
       alert('Entre no modo de edição para alterar notas.')
       return
@@ -438,7 +514,6 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
 
   function excluirNotaSelecionada(nota, event) {
     event?.stopPropagation()
-    if (nota?.tipo !== 'nota') return
     if (!editable) {
       alert('Entre no modo de edição para excluir notas.')
       return
@@ -451,7 +526,7 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
   }
 
   function notaPodeSerEditada(nota) {
-    return nota?.tipo === 'nota'
+    return nota?.tipo === 'nota' || nota?.tipo === 'notaTitulo'
   }
 
   function aplicarNotaItalico() {
@@ -475,7 +550,10 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
       alert('A nota normal não pode ficar vazia.')
       return
     }
-    if (substituirNota(editor, editando, normalSegments, vmSegments)) {
+    const salva = editando?.tipo === 'notaTitulo'
+      ? substituirNotaTitulo(editor, editando, normalSegments, vmSegments)
+      : substituirNota(editor, editando, normalSegments, vmSegments)
+    if (salva) {
       setEditando(null)
       setNotas(collectNotes(editor, modoVadeMecum))
     }
@@ -546,7 +624,7 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
         <div className="nota-edicao-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setEditando(null) }}>
           <div className="nota-edicao-modal" role="dialog" aria-label="Editar nota">
             <div className="nota-edicao-topo">
-              <h3>Editar nota</h3>
+              <h3>{editando.tipo === 'notaTitulo' ? 'Editar Nota título' : 'Editar nota'}</h3>
               <button className="btn-ghost notas-fechar" onClick={() => setEditando(null)} title="Fechar">x</button>
             </div>
             <div className="nota-edicao-toolbar">
@@ -568,7 +646,7 @@ export default function PainelNotas({ editor, aberto, onFechar, modoVadeMecum = 
               </button>
             </div>
             <label className="nota-edicao-campo">
-              <span>Nota normal</span>
+              <span>{editando.tipo === 'notaTitulo' ? 'Nota título' : 'Nota normal'}</span>
               <div
                 ref={normalRef}
                 className="nota-edicao-editor"

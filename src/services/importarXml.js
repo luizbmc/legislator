@@ -44,6 +44,36 @@ function localName(node) {
   return node?.localName || node?.nodeName?.replace(/^.*:/, '') || ''
 }
 
+function escapeHtml(text) {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function notaRodapeHtml(el) {
+  const out = []
+  function walk(node, italic = false, superscript = false) {
+    if (!node) return
+    if (node.nodeType === Node.TEXT_NODE) {
+      let text = escapeHtml(node.nodeValue || '')
+      if (!text) return
+      if (italic) text = `<i>${text}</i>`
+      if (superscript) text = `<sup>${text}</sup>`
+      out.push(text)
+      return
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return
+    const tag = localName(node)
+    const nextItalic = italic || tag === 'i' || tag === 'em'
+    const nextSuperscript = superscript || tag === 'sup'
+    node.childNodes.forEach(child => walk(child, nextItalic, nextSuperscript))
+  }
+  el.childNodes.forEach(child => walk(child, false, false))
+  return out.join('').replace(/\s+/g, ' ').trim()
+}
+
 function attrsFromElement(el) {
   const attrs = {}
   ;['alterado', 'numero', 'rotulo'].forEach(name => {
@@ -108,7 +138,7 @@ function addMarkForTag(tag, marks, el) {
     return [...marks, {
       type: 'notaRodape',
       attrs: {
-        texto: el.textContent || '',
+        texto: notaRodapeHtml(el) || el.textContent || '',
       },
     }]
   }

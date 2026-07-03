@@ -688,6 +688,59 @@ function textoMarcadorNotaRodape() {
   return '[nota]'
 }
 
+function escapeNotaRodapeHtml(text) {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function sanitizeNotaRodapeHtml(html = '') {
+  const root = document.createElement('div')
+  root.innerHTML = String(html || '')
+  const out = []
+
+  function walk(node, italic = false, superscript = false) {
+    if (!node) return
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.nodeValue || ''
+      if (!text) return
+      let rendered = escapeNotaRodapeHtml(text)
+      if (italic) rendered = `<i>${rendered}</i>`
+      if (superscript) rendered = `<sup>${rendered}</sup>`
+      out.push(rendered)
+      return
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return
+
+    const tag = node.tagName?.toLowerCase?.() || ''
+    if (tag === 'br') {
+      out.push(' ')
+      return
+    }
+    const nextItalic = italic || tag === 'i' || tag === 'em' || node.style?.fontStyle === 'italic'
+    const nextSuperscript = superscript || tag === 'sup' || node.style?.verticalAlign === 'super'
+    node.childNodes.forEach(child => walk(child, nextItalic, nextSuperscript))
+    if (tag === 'div' || tag === 'p') out.push(' ')
+  }
+
+  root.childNodes.forEach(node => walk(node, false, false))
+  return out.join('').replace(/\s+/g, ' ').trim()
+}
+
+function notaRodapeHtmlToText(html = '') {
+  const root = document.createElement('div')
+  root.innerHTML = sanitizeNotaRodapeHtml(html)
+  return root.textContent.replace(/\s+/g, ' ').trim()
+}
+
+function notaRodapeHtmlInicial(texto = '') {
+  return /<\/?(?:i|em|sup)(?:\s[^>]*)?>/i.test(String(texto || ''))
+    ? sanitizeNotaRodapeHtml(texto)
+    : escapeNotaRodapeHtml(texto)
+}
+
 function documentoTemVersoesVadeMecum(doc) {
   let tem = false
   function walk(node) {
@@ -779,6 +832,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
   const [modalSaidaSemSalvar,   setModalSaidaSemSalvar]   = useState(null)
   const [colagemTemConteudo,    setColagemTemConteudo]    = useState(false)
   const [notaRodapeForm,        setNotaRodapeForm]        = useState({ chamada: '1', texto: '' })
+  const [notaRodapeTemTexto,    setNotaRodapeTemTexto]    = useState(false)
   const [comentarioForm,        setComentarioForm]        = useState({ texto: '' })
   const [editForm,              setEditForm]              = useState({
     tipo: '',
@@ -805,9 +859,18 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
   const [docAnterior,  setDocAnterior]  = useState(null)
   const [abaRevisao,   setAbaRevisao]   = useState('texto')  // 'texto' | 'formatacao'
   const notaRodapeSelectionRef = useRef(null)
+  const notaRodapeEditorRef = useRef(null)
   const comentarioSelectionRef = useRef(null)
   const manualBaselineRef = useRef([])
   const manualBaselineAlteradosRef = useRef([])
+
+  useEffect(() => {
+    if (!modalNotaRodape) return undefined
+    const timer = window.setTimeout(() => {
+      notaRodapeEditorRef.current?.focus()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [modalNotaRodape])
   const salvandoRef = useRef(false)
   const manualTrackingRef = useRef(false)
   const manualTrackingSuspensoRef = useRef(false)
@@ -1383,6 +1446,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
       chamada: '',
       texto: '',
     })
+    setNotaRodapeTemTexto(false)
     setModalNotaRodape(true)
   }
 
@@ -1599,8 +1663,8 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
   function inserirNotaRodape(e) {
     e.preventDefault()
     if (!editor) return
-    const texto = notaRodapeForm.texto.trim()
-    if (!texto) {
+    const texto = sanitizeNotaRodapeHtml(notaRodapeEditorRef.current?.innerHTML || notaRodapeForm.texto || '')
+    if (!notaRodapeHtmlToText(texto)) {
       alert('Informe o texto da nota de rodape.')
       return
     }
@@ -1620,8 +1684,16 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
 
     setModalNotaRodape(false)
     setNotaRodapeForm({ chamada: '1', texto: '' })
+    setNotaRodapeTemTexto(false)
     notaRodapeSelectionRef.current = null
     setModificado(true)
+  }
+
+  function aplicarFormatoNotaRodapeInsercao(comando) {
+    if (!notaRodapeEditorRef.current) return
+    notaRodapeEditorRef.current.focus()
+    document.execCommand(comando)
+    setNotaRodapeTemTexto(!!notaRodapeHtmlToText(notaRodapeEditorRef.current.innerHTML || ''))
   }
 
   function inserirComentario(e) {
@@ -3314,20 +3386,39 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
               </div>
               <div className="campo">
                 <label>Texto da nota</label>
-                <textarea
-                  autoFocus
-                  rows={5}
-                  value={notaRodapeForm.texto}
-                  onChange={e => setNotaRodapeForm(f => ({ ...f, texto: e.target.value }))}
-                  placeholder="Digite o conteudo da nota de rodape"
-                  required
+                <div className="nota-rodape-view-toolbar">
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm nota-rodape-italic-btn"
+                    onMouseDown={event => event.preventDefault()}
+                    onClick={() => aplicarFormatoNotaRodapeInsercao('italic')}
+                  >
+                    Itálico
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm nota-rodape-sup-btn"
+                    onMouseDown={event => event.preventDefault()}
+                    onClick={() => aplicarFormatoNotaRodapeInsercao('superscript')}
+                  >
+                    Sobrescrito
+                  </button>
+                </div>
+                <div
+                  ref={notaRodapeEditorRef}
+                  className="nota-rodape-view-editavel"
+                  contentEditable
+                  suppressContentEditableWarning
+                  data-placeholder="Digite o conteudo da nota de rodape"
+                  onInput={event => setNotaRodapeTemTexto(!!notaRodapeHtmlToText(event.currentTarget.innerHTML || ''))}
+                  dangerouslySetInnerHTML={{ __html: notaRodapeHtmlInicial(notaRodapeForm.texto) }}
                 />
               </div>
               <div className="modal-acoes">
                 <button type="button" className="btn-ghost" onClick={() => setModalNotaRodape(false)}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary" disabled={!notaRodapeForm.texto.trim()}>
+                <button type="submit" className="btn-primary" disabled={!notaRodapeTemTexto}>
                   Inserir
                 </button>
               </div>

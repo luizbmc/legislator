@@ -341,6 +341,59 @@ function findNotaRodapeRange(state, pos, chamada, texto) {
   return found || fallback
 }
 
+function escapeNotaRodapeHtml(text) {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function sanitizeNotaRodapeHtml(html = '') {
+  const root = document.createElement('div')
+  root.innerHTML = String(html || '')
+  const out = []
+
+  function walk(node, italic = false, superscript = false) {
+    if (!node) return
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.nodeValue || ''
+      if (!text) return
+      let rendered = escapeNotaRodapeHtml(text)
+      if (italic) rendered = `<i>${rendered}</i>`
+      if (superscript) rendered = `<sup>${rendered}</sup>`
+      out.push(rendered)
+      return
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return
+
+    const tag = node.tagName?.toLowerCase?.() || ''
+    if (tag === 'br') {
+      out.push(' ')
+      return
+    }
+    const nextItalic = italic || tag === 'i' || tag === 'em' || node.style?.fontStyle === 'italic'
+    const nextSuperscript = superscript || tag === 'sup' || node.style?.verticalAlign === 'super'
+    node.childNodes.forEach(child => walk(child, nextItalic, nextSuperscript))
+    if (tag === 'div' || tag === 'p') out.push(' ')
+  }
+
+  root.childNodes.forEach(node => walk(node, false, false))
+  return out.join('').replace(/\s+/g, ' ').trim()
+}
+
+function notaRodapeHtmlToText(html = '') {
+  const root = document.createElement('div')
+  root.innerHTML = sanitizeNotaRodapeHtml(html)
+  return root.textContent.replace(/\s+/g, ' ').trim()
+}
+
+function notaRodapeHtmlInicial(texto = '') {
+  return /<\/?(?:i|em|sup)(?:\s[^>]*)?>/i.test(String(texto || ''))
+    ? sanitizeNotaRodapeHtml(texto)
+    : escapeNotaRodapeHtml(texto)
+}
+
 export default function LegislatorEditor({
   docJson,
   onEditorReady,
@@ -363,6 +416,7 @@ export default function LegislatorEditor({
   const [styleIndicators, setStyleIndicators] = useState([])
   const [styleIndicatorsHeight, setStyleIndicatorsHeight] = useState(0)
   const [notaRodapeAberta, setNotaRodapeAberta] = useState(null)
+  const notaRodapeEditorRef = useRef(null)
 
   useEffect(() => {
     tipoNormaRef.current = tipoNorma
@@ -623,6 +677,19 @@ export default function LegislatorEditor({
       return
     }
 
+    const notaTituloEl = event.target?.closest?.('.leg-nota-titulo')
+    if (notaTituloEl && scrollRef.current?.contains(notaTituloEl)) {
+      let pos = null
+      try {
+        pos = editor.view.posAtDOM(notaTituloEl, 0)
+      } catch {}
+
+      event.preventDefault()
+      event.stopPropagation()
+      onEditNotaClick?.({ pos: Number.isFinite(pos) ? pos + 1 : pos, time: Date.now(), tipo: 'notaTitulo' })
+      return
+    }
+
     const noteEl = event.target?.closest?.('.leg-nota-rodape')
     if (!noteEl || !scrollRef.current?.contains(noteEl)) return
 
@@ -642,8 +709,8 @@ export default function LegislatorEditor({
     event.preventDefault()
     if (!editable || !editor || !notaRodapeAberta?.range) return
 
-    const texto = String(notaRodapeAberta.texto || '').trim()
-    if (!texto) return
+    const texto = sanitizeNotaRodapeHtml(notaRodapeEditorRef.current?.innerHTML || notaRodapeAberta.texto || '')
+    if (!notaRodapeHtmlToText(texto)) return
 
     const markType = editor.state.schema.marks.notaRodape
     if (!markType) return
@@ -657,6 +724,15 @@ export default function LegislatorEditor({
     tr.addMark(mappedFrom, mappedTo, markType.create({ texto }))
     editor.view.dispatch(tr.scrollIntoView())
     setNotaRodapeAberta(null)
+  }
+
+  function aplicarFormatoNotaRodape(comando) {
+    if (!editable || !notaRodapeEditorRef.current) return
+    notaRodapeEditorRef.current.focus()
+    document.execCommand(comando)
+    setNotaRodapeAberta(nota => nota
+      ? { ...nota, texto: sanitizeNotaRodapeHtml(notaRodapeEditorRef.current?.innerHTML || '') }
+      : nota)
   }
 
   if (!editor) return null
@@ -717,23 +793,45 @@ export default function LegislatorEditor({
               </button>
             </div>
             {editable ? (
-              <textarea
-                className="nota-rodape-view-textarea"
-                value={notaRodapeAberta.texto}
-                onChange={event => setNotaRodapeAberta(nota => ({ ...nota, texto: event.target.value }))}
-                autoFocus
-              />
+              <>
+                <div className="nota-rodape-view-toolbar">
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm nota-rodape-italic-btn"
+                    onMouseDown={event => event.preventDefault()}
+                    onClick={() => aplicarFormatoNotaRodape('italic')}
+                  >
+                    Itálico
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm nota-rodape-sup-btn"
+                    onMouseDown={event => event.preventDefault()}
+                    onClick={() => aplicarFormatoNotaRodape('superscript')}
+                  >
+                    Sobrescrito
+                  </button>
+                </div>
+                <div
+                  ref={notaRodapeEditorRef}
+                  className="nota-rodape-view-editavel"
+                  contentEditable
+                  suppressContentEditableWarning
+                  dangerouslySetInnerHTML={{ __html: notaRodapeHtmlInicial(notaRodapeAberta.texto) }}
+                />
+              </>
             ) : (
-              <div className="nota-rodape-view-texto">
-                {notaRodapeAberta.texto}
-              </div>
+              <div
+                className="nota-rodape-view-texto"
+                dangerouslySetInnerHTML={{ __html: notaRodapeHtmlInicial(notaRodapeAberta.texto) }}
+              />
             )}
             {editable && (
               <div className="nota-rodape-view-acoes">
                 <button type="button" className="btn-ghost" onClick={() => setNotaRodapeAberta(null)}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary" disabled={!String(notaRodapeAberta.texto || '').trim() || !notaRodapeAberta.range}>
+                <button type="submit" className="btn-primary" disabled={!notaRodapeAberta.range}>
                   Salvar nota
                 </button>
               </div>

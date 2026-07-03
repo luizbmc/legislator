@@ -578,10 +578,32 @@
   white-space: pre-wrap;
 }
 
-.nota-rodape-view-textarea {
+.nota-rodape-view-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 14px 0;
+}
+
+.nota-rodape-italic-btn {
+  font-style: italic;
+}
+
+.nota-rodape-sup-btn {
+  position: relative;
+}
+
+.nota-rodape-sup-btn::after {
+  content: "x";
+  display: inline-block;
+  margin-left: 2px;
+  font-size: 9px;
+  vertical-align: super;
+}
+
+.nota-rodape-view-textarea,
+.nota-rodape-view-editavel {
   min-height: 180px;
   max-height: 50vh;
-  resize: vertical;
   margin: 14px;
   padding: 12px;
   border: 1px solid #d8d5ce;
@@ -594,7 +616,23 @@
   line-height: 1.5;
 }
 
-.nota-rodape-view-textarea:focus {
+.nota-rodape-view-textarea {
+  resize: vertical;
+}
+
+.nota-rodape-view-editavel {
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.nota-rodape-view-editavel:empty::before {
+  content: attr(data-placeholder);
+  color: #969286;
+  pointer-events: none;
+}
+
+.nota-rodape-view-textarea:focus,
+.nota-rodape-view-editavel:focus {
   border-color: #a7c837;
   box-shadow: 0 0 0 3px rgba(167, 200, 55, 0.18);
 }

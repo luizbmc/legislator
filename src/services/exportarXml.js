@@ -28,6 +28,32 @@ function esc(str) {
     .replace(/"/g, '&quot;')
 }
 
+function notaRodapeTextoParaXml(str) {
+  const input = String(str ?? '')
+  if (typeof document === 'undefined') return esc(input)
+
+  const root = document.createElement('div')
+  root.innerHTML = input
+
+  function walk(node, italic = false, superscript = false) {
+    if (!node) return ''
+    if (node.nodeType === Node.TEXT_NODE) {
+      let text = esc(node.nodeValue || '')
+      if (!text) return ''
+      if (italic) text = `<i>${text}</i>`
+      if (superscript) text = `<sup>${text}</sup>`
+      return text
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return ''
+    const tag = node.tagName?.toLowerCase?.() || ''
+    const nextItalic = italic || tag === 'i' || tag === 'em'
+    const nextSuperscript = superscript || tag === 'sup'
+    return Array.from(node.childNodes || []).map(child => walk(child, nextItalic, nextSuperscript)).join('')
+  }
+
+  return Array.from(root.childNodes || []).map(node => walk(node, false, false)).join('')
+}
+
 // ── Marks inline → tags XML ──────────────────────────────────────
 // Ordem das tags respeita a especificidade: bold > italic > marcas customizadas
 const MARK_TAG = {
@@ -59,7 +85,7 @@ function marksParaTags(marks = [], opcoes = {}) {
   for (const m of marks) {
     if (m.type === 'notaRodape') {
       const chamada = esc(proximaChamadaNotaRodape(opcoes))
-      const texto = esc(m.attrs?.texto ?? '')
+      const texto = notaRodapeTextoParaXml(m.attrs?.texto ?? '')
       openParts.push(`<NotaRodape chamada="${chamada}">`)
       closeParts.unshift(texto ? `${texto}</NotaRodape>` : '</NotaRodape>')
       continue
@@ -96,7 +122,7 @@ function inlineParaXml(nos = [], opcoes = {}) {
     const notaRodape = no.marks?.find(m => m.type === 'notaRodape')
     if (notaRodape) {
       const chamada = esc(proximaChamadaNotaRodape(opcoes))
-      const texto = esc(notaRodape.attrs?.texto ?? no.text ?? '')
+      const texto = notaRodapeTextoParaXml(notaRodape.attrs?.texto ?? no.text ?? '')
       return `<NotaRodape chamada="${chamada}">${texto}</NotaRodape>`
     }
 

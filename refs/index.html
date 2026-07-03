@@ -50,21 +50,14 @@
       </article>
     </section>
 
-    <aside class="rightbar">
-      <h2>Leitura dos resultados</h2>
-      <dl>
-        <dt class="dot ok">Encontrada</dt>
-        <dd>A citação foi vinculada a uma referência com autor e ano compatíveis.</dd>
-        <dt class="dot warning">Ano divergente</dt>
-        <dd>Há referência provável pelo autor ou pelo título, mas o ano não coincide.</dd>
-        <dt class="dot missing">Ausente</dt>
-        <dd>Nenhum item compatível foi encontrado na lista final de referências.</dd>
-        <dt class="dot unused">Referência não citada</dt>
-        <dd>O item está na lista final, mas não foi encontrado em nenhuma chamada no texto.</dd>
-      </dl>
-      <p class="hint">
-        Esta versão não altera o texto. Ela marca citações no corpo e referências sem chamada na lista final.
-      </p>
+    <aside class="rightbar references-panel">
+      <div class="panel-head compact">
+        <h2>Lista de referências</h2>
+        <span id="referencesCount">0</span>
+      </div>
+      <div id="referencesList" class="references-list empty">
+        A lista de referências aparecerá aqui após a conferência.
+      </div>
     </aside>
   </main>
 
