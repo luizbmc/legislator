@@ -80,7 +80,11 @@ export function normalizarPontuacao(texto) {
   s = s.replace(/\.\)/g, ')')
 
   // (Vetado). / (Vetado); → (Vetado)
-  s = s.replace(/\(Vetado\)[.;]/gi, '(Vetado)')
+  s = s.replace(/\((Vetado|Revogado)\)[.;]/gi, '($1)')
+
+  // Nao deve haver ponto e virgula ou ponto depois de "; e" e "; ou".
+  // Ex.: "texto; e;" -> "texto; e"
+  s = s.replace(/;\s+(e|ou)[.;]$/gmi, '; $1')
 
   // VETADO → Vetado  (caixa)
   s = s.replace(/\bVETADO\b/g, 'Vetado')

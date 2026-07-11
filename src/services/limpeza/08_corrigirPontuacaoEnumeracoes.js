@@ -1,6 +1,10 @@
 const ESTILOS_ENUMERACAO = new Set(['inciso', 'alinea', 'item'])
 const NIVEL_ENUMERACAO = { inciso: 1, alinea: 2, item: 3 }
 const RE_ESPACO_FINAL = /[ \u00a0]*$/
+const RE_FINAL_CONJUNCAO_ENUMERACAO = /;\s*(?:e|ou)$/i
+const RE_FINAL_CONJUNCAO_ENUMERACAO_COM_PONTUACAO = /;\s*(?:e|ou)[.;]$/i
+const RE_DISPOSITIVO_SO_REVOGADO_VETADO = /^\((?:Vetado|Revogado)\)$/i
+const RE_DISPOSITIVO_SO_REVOGADO_VETADO_COM_PONTUACAO = /^\((?:Vetado|Revogado)\)[.;]$/i
 
 function temMarcaNota(node) {
   return node?.type === 'text' && (node.marks ?? []).some(
@@ -16,6 +20,15 @@ function corrigirTextoFinal(texto, pontuacao) {
   if (!principal) return { texto, alterado: false }
 
   const ultimo = principal.slice(-1)
+
+  if (RE_FINAL_CONJUNCAO_ENUMERACAO_COM_PONTUACAO.test(principal)) {
+    const novoTexto = principal.slice(0, -1) + espacos
+    return { texto: novoTexto, alterado: novoTexto !== texto }
+  }
+
+  if (RE_FINAL_CONJUNCAO_ENUMERACAO.test(principal)) {
+    return { texto, alterado: false }
+  }
 
   // Dois-pontos normalmente introduzem uma enumeracao subordinada.
   // Interrogacao e exclamacao tambem devem ser preservadas.
@@ -55,6 +68,105 @@ function textoDoContent(content) {
   return (content ?? []).map(node => node?.type === 'text' ? node.text ?? '' : '').join('')
 }
 
+function removerRotuloEnumeracaoTexto(estilo, texto) {
+  if (estilo === 'inciso') return texto.replace(/^[IVXLCDM]+(?:-[A-Z])?\s*(?:[–—-]|â€“|â€”|\?)\.?\s*/i, '').trim()
+  if (estilo === 'alinea') return texto.replace(/^[a-zà-ÿ]\)\s*/i, '').trim()
+  if (estilo === 'item') return texto.replace(/^\d+[.)]?\s*/, '').trim()
+  return texto.trim()
+}
+
+function dispositivoSoRevogadoVetadoComPontuacao(linha) {
+  if (!ESTILOS_ENUMERACAO.has(linha?.style)) return false
+  const texto = String(linha?.text || textoDoContent(linha?.content) || '').trim()
+  const semRotulo = removerRotuloEnumeracaoTexto(linha.style, texto)
+  if (RE_DISPOSITIVO_SO_REVOGADO_VETADO_COM_PONTUACAO.test(semRotulo)) return true
+
+  const match = texto.match(/\((?:Vetado|Revogado)\)[.;]\s*$/i)
+  if (!match || match.index == null) return false
+  const antes = texto.slice(0, match.index).trim()
+  if (linha.style === 'inciso') return /^[IVXLCDM]+(?:-[A-Z])?\s*(?:[^\p{L}\p{N}(]+)?$/iu.test(antes)
+  if (linha.style === 'alinea') return /^[a-zà-ÿ]\)\s*$/i.test(antes)
+  if (linha.style === 'item') return /^\d+[.)]?\s*$/.test(antes)
+  return false
+}
+
+function dispositivoSoRevogadoVetado(linha) {
+  if (!ESTILOS_ENUMERACAO.has(linha?.style)) return false
+  const texto = String(linha?.text || textoDoContent(linha?.content) || '').trim()
+  const semRotulo = removerRotuloEnumeracaoTexto(linha.style, texto)
+  if (RE_DISPOSITIVO_SO_REVOGADO_VETADO.test(semRotulo)) return true
+
+  const match = texto.match(/\((?:Vetado|Revogado)\)\s*$/i)
+  if (!match || match.index == null) return false
+  const antes = texto.slice(0, match.index).trim()
+  if (linha.style === 'inciso') return /^[IVXLCDM]+(?:-[A-Z])?\s*(?:[^\p{L}\p{N}(]+)?$/iu.test(antes)
+  if (linha.style === 'alinea') return /^[a-zà-ÿ]\)\s*$/i.test(antes)
+  if (linha.style === 'item') return /^\d+[.)]?\s*$/.test(antes)
+  return false
+}
+
+function limparPontuacaoDispositivoSoRevogadoVetado(linha) {
+  if (!dispositivoSoRevogadoVetadoComPontuacao(linha)) return linha
+
+  if (linha.content?.length) {
+    let alterado = false
+    const content = [...linha.content]
+    for (let i = content.length - 1; i >= 0; i--) {
+      const node = content[i]
+      if (node?.type !== 'text' || !node.text?.trim()) continue
+      const texto = node.text.replace(/[.;]([ \u00a0]*)$/, '$1')
+      if (texto !== node.text) {
+        content[i] = { ...node, text: texto }
+        alterado = true
+      }
+      break
+    }
+    return alterado
+      ? { ...linha, content, text: textoDoContent(content) }
+      : linha
+  }
+
+  const texto = String(linha.text || '').replace(/[.;]([ \u00a0]*)$/, '$1')
+  return texto !== linha.text ? { ...linha, text: texto } : linha
+}
+
+function conjuncaoFinalComPontuacao(linha) {
+  if (!ESTILOS_ENUMERACAO.has(linha?.style)) return false
+  const texto = String(linha?.text || textoDoContent(linha?.content) || '')
+  return /;\s+(?:e|ou)[.;][ \u00a0]*$/i.test(texto)
+}
+
+function limparPontuacaoConjuncaoFinal(linha) {
+  if (!conjuncaoFinalComPontuacao(linha)) return linha
+
+  if (linha.content?.length) {
+    let alterado = false
+    const content = [...linha.content]
+    for (let i = content.length - 1; i >= 0; i--) {
+      const node = content[i]
+      if (node?.type !== 'text' || !node.text?.trim()) continue
+      const texto = node.text.replace(/[.;]([ \u00a0]*)$/, '$1')
+      if (texto !== node.text) {
+        content[i] = { ...node, text: texto }
+        alterado = true
+      }
+      break
+    }
+    return alterado
+      ? { ...linha, content, text: textoDoContent(content) }
+      : linha
+  }
+
+  const texto = String(linha.text || '').replace(/[.;]([ \u00a0]*)$/, '$1')
+  return texto !== linha.text ? { ...linha, text: texto } : linha
+}
+
+function limparPontuacoesProibidas(linha) {
+  return limparPontuacaoDispositivoSoRevogadoVetado(
+    limparPontuacaoConjuncaoFinal(linha)
+  )
+}
+
 function textoSemNotas(content) {
   return (content ?? [])
     .map(node => {
@@ -92,6 +204,8 @@ function limparPontuacaoMarcadorVazio(linha) {
 }
 
 function corrigirLinha(linha, pontuacao) {
+  linha = limparPontuacoesProibidas(linha)
+  if (dispositivoSoRevogadoVetado(linha)) return linha
   if (linhaEnumeracaoSemTextoPrincipal(linha)) return limparPontuacaoMarcadorVazio(linha)
 
   if (linha.content?.length) {
@@ -222,7 +336,16 @@ export function corrigirPontuacaoEnumeracoes(linhas) {
   const output = [...(linhas ?? [])]
   const log = []
   const contadores = { inciso: 0, alinea: 0, item: 0 }
+  let pontuacoesProibidas = 0
   let i = 0
+
+  for (let j = 0; j < output.length; j++) {
+    const limpa = limparPontuacoesProibidas(output[j])
+    if (limpa !== output[j]) {
+      output[j] = limpa
+      pontuacoesProibidas++
+    }
+  }
 
   while (i < output.length) {
     const estilo = output[i]?.style
@@ -268,6 +391,10 @@ export function corrigirPontuacaoEnumeracoes(linhas) {
     if (total) {
       log.push(`${total} ${estilo}${total !== 1 ? 's' : ''} com pontuacao final corrigida`)
     }
+  }
+
+  if (pontuacoesProibidas) {
+    log.push(`${pontuacoesProibidas} pontuacao(oes) proibida(s) removida(s) em enumeracoes`)
   }
 
   const tratado = corrigirPontuacaoTratado(output)

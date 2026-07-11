@@ -284,6 +284,32 @@ function alvoRotuloArtigo(linha) {
   return alvoRegex(linha.text, /^Arts?\.?\s+\d+(?:\.\d{3})*(?:[ºª°])?(?:-[A-Z])?\.?(?:\s+a\s+\d+(?:\.\d{3})*(?:[ºª°])?)?/i) || alvoTextoInteiro(linha.text)
 }
 
+function alvoPontuacaoAposConjuncaoEnumeracao(linha) {
+  if (!ESTILOS_ENUMERACAO.has(linha?.style)) return null
+  return alvoRegex(linha.text, /;\s*(?:e|ou)([.;])(?=[ \u00a0]*$)/i)
+}
+
+function alvoPontuacaoDispositivoSoRevogadoVetado(linha) {
+  if (!ESTILOS_ENUMERACAO.has(linha?.style)) return null
+  const textoDepoisRotulo = textoCompletoDepoisDoRotuloEnumeracao(linha)
+  const texto = String(linha.text || '')
+  if (!/^\((?:Vetado|Revogado)\)[.;]$/i.test(textoDepoisRotulo)) {
+    const match = texto.match(/\((?:Vetado|Revogado)\)[.;]\s*$/i)
+    if (!match || match.index == null) return null
+    const antes = texto.slice(0, match.index).trim()
+    const apenasRotulo =
+      (linha.style === 'inciso' && /^[IVXLCDM]+(?:-[A-Z])?\s*(?:[^\p{L}\p{N}(]+)?$/iu.test(antes)) ||
+      (linha.style === 'alinea' && /^[a-zÃ -Ã¿]\)\s*$/i.test(antes)) ||
+      (linha.style === 'item' && /^\d+[.)]?\s*$/.test(antes))
+    if (!apenasRotulo) return null
+  }
+
+  const pos = Math.max(texto.lastIndexOf(';'), texto.lastIndexOf('.'))
+  return pos >= 0
+    ? { inicio: pos, fim: pos + 1, texto: texto.charAt(pos) }
+    : null
+}
+
 const PADROES = [
   {
     tipo: 'grau_seguido_de_s',
@@ -297,6 +323,20 @@ const PADROES = [
     descricao: 'Ponto e vírgula após nota',
     test: l => Boolean(alvoPontoVirgulaAposNota(l)),
     alvo: alvoPontoVirgulaAposNota,
+    estilosExcluidos: ['vazio'],
+  },
+  {
+    tipo: 'pontuacao_apos_conjuncao_enumeracao',
+    descricao: 'Não use ponto nem ponto e vírgula após "; e" ou "; ou"',
+    test: l => Boolean(alvoPontuacaoAposConjuncaoEnumeracao(l)),
+    alvo: alvoPontuacaoAposConjuncaoEnumeracao,
+    estilosExcluidos: ['vazio'],
+  },
+  {
+    tipo: 'pontuacao_em_vetado_revogado',
+    descricao: 'Dispositivo somente com "(Vetado)" ou "(Revogado)" não deve terminar com ponto ou ponto e vírgula',
+    test: l => Boolean(alvoPontuacaoDispositivoSoRevogadoVetado(l)),
+    alvo: alvoPontuacaoDispositivoSoRevogadoVetado,
     estilosExcluidos: ['vazio'],
   },
   {
