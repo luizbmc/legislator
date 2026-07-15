@@ -51,6 +51,35 @@ function xmlVazio(norma) {
   ].join('\n')
 }
 
+function nomePastaSecao(secao, index, total) {
+  const largura = Math.max(2, String(total || 0).length)
+  const numero = String(index + 1).padStart(largura, '0')
+  return `${numero}_${nomeArquivoSeguro(secao?.titulo, 'secao')}`
+}
+
+function removerDeclaracaoXml(xml) {
+  return String(xml || '').replace(/^\s*<\?xml[^>]*>\s*/i, '').trim()
+}
+
+function xmlPublicacaoCompleta(pub, normasXml = []) {
+  const atributos = [
+    'xmlns="http://legislator.app/schema/1.0"',
+    pub?.titulo ? `titulo="${escXml(pub.titulo)}"` : null,
+    pub?.edicao ? `edicao="${escXml(pub.edicao)}"` : null,
+  ].filter(Boolean).join(' ')
+  const corpo = normasXml
+    .map(xml => removerDeclaracaoXml(xml))
+    .filter(Boolean)
+    .map(xml => xml.split('\n').map(linha => `  ${linha}`).join('\n'))
+    .join('\n')
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    `<Publicacao ${atributos}>`,
+    corpo,
+    '</Publicacao>',
+  ].join('\n')
+}
+
 async function escolherPastaExportacao(titulo) {
   const result = await dialog.showOpenDialog({
     title: titulo,
@@ -375,8 +404,10 @@ export function registerPublicacoesHandlers() {
     let contador = 1
     let gerados = 0
 
-    for (const secao of pub.secoes ?? []) {
-      const pastaSecao = join(pastaBase, nomeArquivoSeguro(secao.titulo, 'secao'))
+    const secoes = pub.secoes ?? []
+    for (let secaoIndex = 0; secaoIndex < secoes.length; secaoIndex++) {
+      const secao = secoes[secaoIndex]
+      const pastaSecao = join(pastaBase, nomePastaSecao(secao, secaoIndex, secoes.length))
       mkdirSync(pastaSecao, { recursive: true })
 
       for (const item of secao.normas ?? []) {
@@ -425,9 +456,12 @@ export function registerPublicacoesHandlers() {
     const forcarVadeMecum = publicacaoUsaVadeMecum(pub)
     let contador = 1
     let gerados = 0
+    const xmlsCompletos = []
 
-    for (const secao of pub.secoes ?? []) {
-      const pastaSecao = join(pastaBase, nomeArquivoSeguro(secao.titulo, 'secao'))
+    const secoes = pub.secoes ?? []
+    for (let secaoIndex = 0; secaoIndex < secoes.length; secaoIndex++) {
+      const secao = secoes[secaoIndex]
+      const pastaSecao = join(pastaBase, nomePastaSecao(secao, secaoIndex, secoes.length))
       mkdirSync(pastaSecao, { recursive: true })
 
       for (const item of secao.normas ?? []) {
@@ -447,6 +481,12 @@ export function registerPublicacoesHandlers() {
           try { doc = JSON.parse(norma.conteudo_doc) }
           catch { doc = { type: 'doc', content: [] } }
           if (forcarVadeMecum) doc = aplicarEstiloVadeMecumDoc(doc, true).doc
+          const xmlCompleto = tiptapParaXml(
+            doc,
+            { tipo: norma.tipo, epigrafe: norma.epigrafe },
+            { modoVadeMecum: forcarVadeMecum },
+          )
+          xmlsCompletos.push(xmlCompleto)
           xml = tiptapParaXml(
             doc,
             { tipo: norma.tipo, epigrafe: norma.epigrafe },
@@ -460,6 +500,11 @@ export function registerPublicacoesHandlers() {
         writeFileSync(join(pastaSecao, nome), xml, 'utf-8')
         gerados++
       }
+    }
+
+    if (xmlsCompletos.length) {
+      const nomePublicacao = `000_${nomeArquivoSeguro(pub.titulo, 'publicacao')}_completo.xml`
+      writeFileSync(join(pastaBase, nomePublicacao), xmlPublicacaoCompleta(pub, xmlsCompletos), 'utf-8')
     }
 
     return { ok: true, pasta: pastaBase, gerados }

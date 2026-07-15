@@ -102,6 +102,8 @@ const RE_BOLD_NORMAL = /^(?:\p{Lu}+(-[\p{Lu}\d]+)?\s–|Pena\s–|§\s\d+\.?[º�
 // \p{Ll} = qualquer letra minúscula Unicode (inclui letras acentuadas)
 const RE_ITALIC_ALINEA = /^\p{Ll}\)/u
 
+const RE_ITALIC_TERMO_OBRIGATORIO = /\b(?:DOU|[Cc]aput|habeas\s+(?:corpus|data))\b/gi
+
 // "Parágrafo único." no início de linha com estilo paragrafLei
 const RE_ITALIC_PAR_UNICO = /^Parágrafo único\./
 
@@ -209,6 +211,10 @@ const RE_NOS_SOBRESCRITO = /\bn[\u00ba\u00b0]s\b/g
 
 function hasMark(marks, type) {
   return (marks ?? []).some(mark => mark.type === type)
+}
+
+function hasAnyMark(marks, types) {
+  return (marks ?? []).some(mark => types.includes(mark.type))
 }
 
 function addMark(marks, type) {
@@ -343,6 +349,51 @@ function addItalicToKeywordsInNota(content) {
   return changed ? result : content
 }
 
+function addItalicToTermsOutsideNota(content) {
+  if (!content?.length) return { content, count: 0 }
+
+  let pos = 0
+  const ranges = []
+
+  for (const node of content) {
+    if (node.type !== 'text') continue
+
+    const text = node.text ?? ''
+    const start = pos
+    pos += text.length
+
+    if (
+      !text ||
+      hasAnyMark(node.marks, ['nota', 'notaRodape', 'notaSobrescrito']) ||
+      hasMark(node.marks, 'italic')
+    ) {
+      continue
+    }
+
+    const regex = new RegExp(RE_ITALIC_TERMO_OBRIGATORIO.source, RE_ITALIC_TERMO_OBRIGATORIO.flags)
+    let match
+    while ((match = regex.exec(text)) !== null) {
+      if (!match[0]) {
+        regex.lastIndex++
+        continue
+      }
+      ranges.push({
+        from: start + match.index,
+        to: start + match.index + match[0].length,
+      })
+    }
+  }
+
+  if (!ranges.length) return { content, count: 0 }
+
+  const novoContent = ranges.reduce(
+    (acc, range) => addMarkToContent(acc, range.from, range.to, 'italic'),
+    content,
+  )
+
+  return { content: novoContent, count: ranges.length }
+}
+
 // ── Exportação ────────────────────────────────────────────────────
 
 /**
@@ -362,6 +413,7 @@ export function aplicarMarcas(linhas, { estiloVadeMecum = false, somenteEstiloVa
   let countBold       = 0
   let countAlinea     = 0
   let countParUnico   = 0
+  let countTermoItalic = 0
   let countNotaItalic = 0
   let countAdinNota   = 0
   let countEcNota     = 0
@@ -462,6 +514,18 @@ export function aplicarMarcas(linhas, { estiloVadeMecum = false, somenteEstiloVa
       }
     }
 
+    // Regra 4b: italic normal em termos obrigatórios fora de notas.
+    {
+      const base = result.content?.length > 0
+        ? result.content
+        : [{ type: 'text', text: result.text }]
+      const termos = addItalicToTermsOutsideNota(base)
+      if (termos.count) {
+        result = { ...result, content: termos.content }
+        countTermoItalic += termos.count
+      }
+    }
+
     // ── Regra 5: nota itálico — "DOU" e "Caput" dentro de notas ─
     // Passo 5a: remove aspas de "Caput" dentro de nós nota.
     // Passo 5b: aplica itálico a DOU e Caput nos nós nota resultantes.
@@ -523,6 +587,12 @@ export function aplicarMarcas(linhas, { estiloVadeMecum = false, somenteEstiloVa
     log.push(
       `${countParUnico} "Parágrafo único." ` +
       `marcado${countParUnico !== 1 ? 's' : ''} com itálico`
+    )
+  }
+  if (countTermoItalic) {
+    log.push(
+      `${countTermoItalic} termo${countTermoItalic !== 1 ? 's' : ''} obrigatório${countTermoItalic !== 1 ? 's' : ''} ` +
+      `fora de nota marcado${countTermoItalic !== 1 ? 's' : ''} com itálico`
     )
   }
   if (countNotaItalic) {

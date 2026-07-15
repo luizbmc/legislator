@@ -11,7 +11,104 @@ function temMarca(node, nome) {
   return (node?.marks ?? []).some(marca => nomeMarca(marca) === nome)
 }
 
-const RE_TERMO_ITALICO_OBRIGATORIO = /\b(?:Diário|[Cc]aput|DOU)\b/
+const TERMOS_ITALICO_OBRIGATORIO = [
+  'Diário',
+  'DOU',
+  'Caput',
+  'caput',
+  'a contrario sensu',
+  'a fortiori',
+  'a posteriori',
+  'a priori',
+  'ab initio',
+  'ab ovo',
+  'ad argumentandum tantum',
+  'ad hoc',
+  'ad judicia',
+  'ad referendum',
+  'ad quem',
+  'a quo',
+  'animus domini',
+  'animus nocendi',
+  'animus defendendi',
+  'animus',
+  'bis in idem',
+  'bona fide',
+  'causa mortis',
+  'conditio sine qua non',
+  'contra legem',
+  'data venia',
+  'de cujus',
+  'de facto',
+  'de jure',
+  'erga omnes',
+  'ex nunc',
+  'ex officio',
+  'ex tunc',
+  'factum principis',
+  'fumus boni iuris',
+  'habeas corpus',
+  'habeas data',
+  'idem',
+  'in absentia',
+  'in dubio pro reo',
+  'in dubio pro operario',
+  'in fine',
+  'in limine',
+  'in loco',
+  'in re ipsa',
+  'in verbis',
+  'inter partes',
+  'inter vivos',
+  'ipso facto',
+  'ipso iure',
+  'iter criminis',
+  'jus postulandi',
+  'lato sensu',
+  'lex posterior derogat priori',
+  'lex specialis derogat generali',
+  'litis pendentia',
+  'mens legis',
+  'mutatis mutandis',
+  'ne bis in idem',
+  'nomen juris',
+  'non liquet',
+  'onus probandi',
+  'pacta sunt servanda',
+  'per capita',
+  'periculum in mora',
+  'prima facie',
+  'pro labore',
+  'pro rata',
+  'pro tempore',
+  'quorum',
+  'ratio decidendi',
+  'res judicata',
+  'sine die',
+  'sine qua non',
+  'status quo',
+  'stricto sensu',
+  'sub judice',
+  'sui generis',
+  'ultra petita',
+  'extra petita',
+  'citra petita',
+  'venire contra factum proprium',
+  'vis maior',
+]
+
+function escapeRegex(texto) {
+  return String(texto).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+const RE_TERMO_ITALICO_OBRIGATORIO = new RegExp(
+  `\\b(?:${TERMOS_ITALICO_OBRIGATORIO
+    .slice()
+    .sort((a, b) => b.length - a.length)
+    .map(escapeRegex)
+    .join('|')})\\b`,
+  'i',
+)
 const RE_NOTA_PARENTETICA_INICIAL = /^\((?:Vide|Revogad[oa]|Incluíd[oa]|Incluid[oa]|Acrescid[oa]|Renumerad[oa]|Redação dada|Com redação|Vigência|(?:Artigo|Inciso|Alínea|Alinea|Item|Parágrafo|Paragrafo)\s+(?:revogad[oa]|incluíd[oa]|incluid[oa]|acrescid[oa]|renumerad[oa]))/i
 const RE_MARCADOR_CORTE = /^\[\s*(?:\.{3}|…)\s*\]$/
 const ESTILOS_ENUMERACAO = new Set(['inciso', 'alinea', 'item'])
@@ -42,17 +139,55 @@ function alvoTextoInteiro(texto) {
   }
 }
 
-function temTermoSemItalico(linha) {
-  if (!linha.content?.length) {
-    return RE_TERMO_ITALICO_OBRIGATORIO.test(linha.text || '')
+function montarSegmentosTexto(linha) {
+  if (!linha.content?.length) return []
+
+  let pos = 0
+  return linha.content
+    .filter(node => node?.type === 'text')
+    .map(node => {
+      const inicio = pos
+      const texto = node.text || ''
+      pos += texto.length
+      return {
+        inicio,
+        fim: pos,
+        node,
+      }
+    })
+}
+
+function encontrarTermoSemItalico(linha) {
+  const texto = String(linha.text || '')
+  if (!texto) return null
+
+  const regex = new RegExp(RE_TERMO_ITALICO_OBRIGATORIO.source, 'ig')
+  const segmentos = montarSegmentosTexto(linha)
+  let match
+
+  while ((match = regex.exec(texto)) !== null) {
+    const inicio = match.index
+    const fim = inicio + match[0].length
+
+    if (!segmentos.length) {
+      return { inicio, fim, texto: match[0] }
+    }
+
+    const partes = segmentos.filter(seg => seg.inicio < fim && seg.fim > inicio)
+    const temParteSemItalico = partes.some(seg =>
+      !temMarca(seg.node, 'italic') && !temMarca(seg.node, 'italicoLight')
+    )
+
+    if (temParteSemItalico) {
+      return { inicio, fim, texto: match[0] }
+    }
   }
 
-  return linha.content.some(node =>
-    node?.type === 'text' &&
-    RE_TERMO_ITALICO_OBRIGATORIO.test(node.text || '') &&
-    !temMarca(node, 'italic') &&
-    !temMarca(node, 'italicoLight')
-  )
+  return null
+}
+
+function temTermoSemItalico(linha) {
+  return !!encontrarTermoSemItalico(linha)
 }
 
 function temMarcaNota(node) {
@@ -500,9 +635,9 @@ const PADROES = [
   },
   {
     tipo: 'termo_sem_italico',
-    descricao: 'Diário, Caput, caput ou DOU sem itálico',
+    descricao: 'Termo obrigatório ou expressão latina sem itálico',
     test: temTermoSemItalico,
-    alvo: l => alvoRegex(l.text, RE_TERMO_ITALICO_OBRIGATORIO),
+    alvo: encontrarTermoSemItalico,
   },
   {
     tipo: 'estilo_citacao_nao_aplicado',
