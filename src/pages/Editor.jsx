@@ -44,6 +44,46 @@ function clienteBloqueioId() {
   }
 }
 
+function lerAlteradorasPendentes(valor) {
+  if (!valor) return []
+  try {
+    const parsed = JSON.parse(valor)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return String(valor || '')
+      .split(/\n+/)
+      .map(texto => ({ texto: texto.trim(), href: '', data: '' }))
+      .filter(item => item.texto)
+  }
+}
+
+function serializarAlteradorasPendentes(lista) {
+  if (!lista?.length) return ''
+  return JSON.stringify(lista.map(item => ({
+    texto: item.texto || '',
+    href: item.href || '',
+    data: item.data || '',
+  })))
+}
+
+function dataNormaIso(valor) {
+  const texto = String(valor || '').trim()
+  if (!texto) return ''
+  const iso = texto.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) return iso[0]
+  const data = new Date(texto)
+  if (Number.isNaN(data.getTime())) return ''
+  return data.toISOString().slice(0, 10)
+}
+
+function alteradoraPendente(item, dataUltimaAlteracao) {
+  const dataAlteradora = dataNormaIso(item?.data)
+  const dataBase = dataNormaIso(dataUltimaAlteracao)
+  if (!dataAlteradora) return true
+  if (!dataBase) return false
+  return dataAlteradora > dataBase
+}
+
 const PADRONIZACAO_ABAS = [
   {
     id: 'palavras',
@@ -842,6 +882,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
     dados_publicacao: '',
     data_ultima_alteracao: '',
     atualizacao_pendente: false,
+    normas_alteradoras_pendentes: '',
     vigencia: 'Vigente',
     link_acesso: '',
     anexo: '',
@@ -852,6 +893,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
   const [editTagSugestoes,      setEditTagSugestoes]      = useState([])
   const [todasTags,             setTodasTags]             = useState([])
   const [editSalvando,          setEditSalvando]          = useState(false)
+  const [editChecandoAtualizacoes, setEditChecandoAtualizacoes] = useState(false)
   const [editErro,              setEditErro]              = useState('')
   const [emRevisao,    setEmRevisao]    = useState(false)
   const [diffs,        setDiffs]        = useState([])
@@ -881,6 +923,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
     : []
   const gruposPadronizacao = agruparOcorrenciasPadronizacao(ocorrenciasPadronizacao)
   const padronizacaoPodeSubstituir = modoEdicaoManual || emRevisao
+  const alteradorasPendentesMeta = lerAlteradorasPendentes(editForm.normas_alteradoras_pendentes)
   const edicaoPermitidaPeloBloqueio = remoto || !fonteRailwayAtiva || bloqueioNosso
 
   // ── Carga inicial ─────────────────────────────────────────────
@@ -2079,6 +2122,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
       dados_publicacao: norma.dados_publicacao ?? '',
       data_ultima_alteracao: norma.data_ultima_alteracao ?? '',
       atualizacao_pendente: Boolean(norma.atualizacao_pendente),
+      normas_alteradoras_pendentes: norma.normas_alteradoras_pendentes ?? '',
       vigencia: norma.vigencia ?? 'Vigente',
       link_acesso: norma.link_acesso ?? '',
       anexo: norma.anexo ?? '',
@@ -2115,20 +2159,58 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
     setEditSalvando(true)
     setEditErro('')
     try {
-      const atualizada = await window.legislator.normas.atualizarMeta(parseInt(id), {
+      const payloadMeta = {
         ...editForm,
         tags: editTags,
         atualizado_por: usuarioAtual?.nome || '',
         revisao: norma?.revisao,
         bloqueioClienteId: bloqueioNossoRef.current ? clienteBloqueioRef.current : null,
+      }
+      const atualizada = await window.legislator.normas.atualizarMeta(parseInt(id), payloadMeta)
+      setNorma({
+        ...payloadMeta,
+        ...atualizada,
+        tags: atualizada.tags ?? payloadMeta.tags,
+        normas_alteradoras_pendentes: payloadMeta.normas_alteradoras_pendentes,
+        atualizacao_pendente: payloadMeta.atualizacao_pendente,
       })
-      setNorma(atualizada)
       setModalEditarMeta(false)
       await liberarBloqueioEdicao()
     } catch (err) {
       setEditErro(err.message || 'Erro ao salvar.')
     } finally {
       setEditSalvando(false)
+    }
+  }
+
+  async function checarAtualizacoesMeta() {
+    const url = String(editForm.link_acesso || '').trim()
+    if (!url) {
+      setEditErro('Informe o Link para acesso antes de checar atualizações.')
+      return
+    }
+    if (!dataNormaIso(editForm.data_ultima_alteracao)) {
+      setEditErro('Preencha a Data da última alteração antes de checar atualizações.')
+      return
+    }
+    setEditChecandoAtualizacoes(true)
+    setEditErro('')
+    try {
+      const resposta = await window.legislator.resenha.videNormas(url)
+      const pendentes = (resposta.videNormas || [])
+        .filter(item => alteradoraPendente(item, editForm.data_ultima_alteracao))
+      setEditForm(form => ({
+        ...form,
+        normas_alteradoras_pendentes: serializarAlteradorasPendentes(pendentes),
+        atualizacao_pendente: pendentes.length > 0,
+      }))
+      setEditErro(pendentes.length
+        ? `${pendentes.length} norma(s) alteradora(s) pendente(s) encontrada(s). Salve os dados da norma para gravar.`
+        : 'Nenhuma norma alteradora pendente encontrada. Salve os dados da norma para gravar a checagem.')
+    } catch (err) {
+      setEditErro(err?.message || 'Não foi possível checar atualizações na Câmara.')
+    } finally {
+      setEditChecandoAtualizacoes(false)
     }
   }
 
@@ -3737,6 +3819,35 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
                     value={editForm.link_acesso}
                     onChange={e => setEditForm(f => ({ ...f, link_acesso: e.target.value }))}
                   />
+                </div>
+
+                <div className="campo">
+                  <div className="campo-label-row">
+                    <label>Normas alteradoras pendentes de atualização</label>
+                    <button
+                      type="button"
+                      className="btn-ghost btn-sm"
+                      onClick={checarAtualizacoesMeta}
+                      disabled={editChecandoAtualizacoes}
+                    >
+                      {editChecandoAtualizacoes ? 'Checando...' : 'Checar atualização'}
+                    </button>
+                  </div>
+                  {alteradorasPendentesMeta.length ? (
+                    <div className="alteradoras-pendentes-lista">
+                      {alteradorasPendentesMeta.map((item, idx) => (
+                        item.href ? (
+                          <a key={`${item.href}-${idx}`} href={item.href} target="_blank" rel="noreferrer">
+                            {item.texto || item.href}
+                          </a>
+                        ) : (
+                          <span key={`${item.texto}-${idx}`}>{item.texto}</span>
+                        )
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="campo-ajuda">Nenhuma pendência registrada pela checagem automática.</p>
+                  )}
                 </div>
 
                 <div className="campo">

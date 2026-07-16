@@ -93,6 +93,20 @@ contextBridge.exposeInMainWorld('legislator', {
   arquivos: {
     salvarTxt: (payload) => ipcRenderer.invoke('arquivos:salvar-txt', payload),
   },
+  resenha: {
+    buscar: async (url) => {
+      try {
+        return await ipcRenderer.invoke('resenha:buscar', url)
+      } catch (err) {
+        const msg = String(err?.message || err || '')
+          .replace(/^Error invoking remote method 'resenha:buscar':\s*/i, '')
+        throw new Error(msg || 'Nao foi possivel acessar automaticamente a resenha do Planalto.')
+      }
+    },
+    gmail: (opcoes = {}) => ipcRenderer.invoke('resenha:gmail', opcoes),
+    confirmarCamara: (payload) => ipcRenderer.invoke('resenha:confirmar-camara', payload),
+    videNormas: (url) => ipcRenderer.invoke('resenha:vide-normas', url),
+  },
   ortografia: {
     verificar: (palavras) => ipcRenderer.invoke('ortografia:verificar', palavras),
     aceitar:   (palavra)  => ipcRenderer.invoke('ortografia:aceitar',   palavra),

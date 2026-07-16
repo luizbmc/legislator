@@ -65,6 +65,7 @@
 :root {
   --bg:          #f5f5f0;
   --surface:     #ffffff;
+  --surface-muted: #f8f7f3;
   --border:      #d8d5ce;
   --border-soft: #ece9e2;
   --text:        #1a1a18;
@@ -239,6 +240,172 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 }
 .home-tag-select {
   min-width: 140px;
+}
+
+.home-publicacao-select {
+  min-width: 190px;
+  max-width: 260px;
+}
+
+.resenha-modal {
+  width: min(920px, calc(100vw - 32px));
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+}
+
+.resenha-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.resenha-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.resenha-form input,
+.resenha-form textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.resenha-form textarea {
+  resize: vertical;
+  min-height: 120px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.resenha-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.resenha-status {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.resenha-resultados {
+  margin-top: 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.resenha-item {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 10px;
+  background: #fff;
+}
+
+.resenha-item.sem-correspondencia {
+  border-left-color: #d6a141;
+}
+
+.resenha-item-head,
+.resenha-match {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.resenha-item-head span,
+.resenha-sem-match {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.resenha-item p {
+  margin: 6px 0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.resenha-alteradora {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.resenha-matches {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.resenha-confirmacao {
+  display: inline-flex;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--border-soft);
+  vertical-align: middle;
+}
+
+.resenha-confirmacao.confirmada {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.resenha-confirmacao.nao-confirmada,
+.resenha-confirmacao.erro {
+  color: #92400e;
+  background: #fffbeb;
+}
+
+.resenha-pendentes {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0 2px;
+  font-size: 12px;
+}
+
+.resenha-pendentes a,
+.alteradoras-pendentes-lista a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.resenha-pendentes a:hover,
+.alteradoras-pendentes-lista a:hover {
+  text-decoration: underline;
+}
+
+.alteradoras-pendentes-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .home-check {
@@ -677,6 +844,16 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 .campo { display: flex; flex-direction: column; gap: 5px; margin-bottom: 16px; margin-left: 4px; margin-right: 4px;}
 .campo label { font-size: 13px; font-weight: 600; }
 .campo-opcional { font-weight: 400; color: var(--text-muted); }
+.campo-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.campo-label-row label {
+  min-width: 0;
+}
 
 .campo input, .campo select, .campo textarea {
   padding: 8px 10px;

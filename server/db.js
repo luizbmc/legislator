@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS normas (
   dados_publicacao TEXT,
   data_ultima_alteracao TEXT,
   atualizacao_pendente INTEGER DEFAULT 0,
+  normas_alteradoras_pendentes TEXT,
   vigencia      TEXT DEFAULT 'Vigente',
   link_acesso   TEXT,
   anexo         TEXT,
@@ -266,6 +267,10 @@ async function init() {
   if (!colsNormas.includes('atualizacao_pendente')) {
     _sqlDb.exec('ALTER TABLE normas ADD COLUMN atualizacao_pendente INTEGER DEFAULT 0')
     console.log('Migration: coluna atualizacao_pendente adicionada')
+  }
+  if (!colsNormas.includes('normas_alteradoras_pendentes')) {
+    _sqlDb.exec('ALTER TABLE normas ADD COLUMN normas_alteradoras_pendentes TEXT')
+    console.log('Migration: coluna normas_alteradoras_pendentes adicionada')
   }
   if (!colsNormas.includes('vigencia')) {
     _sqlDb.exec("ALTER TABLE normas ADD COLUMN vigencia TEXT DEFAULT 'Vigente'")

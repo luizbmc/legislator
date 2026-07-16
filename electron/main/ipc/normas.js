@@ -5,12 +5,13 @@ export function registerNormasHandlers() {
   // ── Listar / buscar ───────────────────────────────────────────
   ipcMain.handle('normas:listar', (_, filtros = {}) => {
     const db = getDb()
-    const { busca, tipo, status, buscarConteudo } = filtros
+    const { busca, tipo, status, buscarConteudo, publicacaoId } = filtros
 
     let sql = `
       SELECT n.id, n.tipo, n.epigrafe, n.apelido, n.ementa, n.status,
              n.dados_publicacao, n.data_ultima_alteracao, n.vigencia,
-             n.atualizacao_pendente, n.link_acesso, n.anexo, n.observacoes,
+             n.atualizacao_pendente, n.normas_alteradoras_pendentes,
+             n.link_acesso, n.anexo, n.observacoes,
              n.criado_em, n.atualizado_em, n.atualizado_por,
              GROUP_CONCAT(t.nome, '|||') AS tags_str
       FROM normas n
@@ -35,6 +36,15 @@ export function registerNormasHandlers() {
     }
     if (tipo)   { sql += ' AND n.tipo = ?';   params.push(tipo) }
     if (status) { sql += ' AND n.status = ?'; params.push(status) }
+    if (publicacaoId) {
+      sql += ` AND EXISTS (
+        SELECT 1
+        FROM publicacao_secoes psf
+        JOIN publicacao_normas pnf ON pnf.secao_id = psf.id
+        WHERE psf.publicacao_id = ? AND pnf.norma_id = n.id
+      )`
+      params.push(publicacaoId)
+    }
     sql += ' GROUP BY n.id ORDER BY n.atualizado_em DESC'
 
     return db.prepare(sql).all(...params).map(n => ({
@@ -72,6 +82,7 @@ export function registerNormasHandlers() {
       dados_publicacao,
       data_ultima_alteracao,
       atualizacao_pendente,
+      normas_alteradoras_pendentes,
       vigencia = 'Vigente',
       link_acesso,
       anexo,
@@ -85,10 +96,11 @@ export function registerNormasHandlers() {
     const result = db.prepare(`
       INSERT INTO normas (
         tipo, epigrafe, apelido, ementa, dados_publicacao,
-        data_ultima_alteracao, atualizacao_pendente, vigencia, link_acesso, anexo, observacoes,
+        data_ultima_alteracao, atualizacao_pendente, normas_alteradoras_pendentes,
+        vigencia, link_acesso, anexo, observacoes,
         conteudo_doc, conteudo_txt, status, atualizado_por
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       tipo,
       epigrafe,
@@ -97,6 +109,7 @@ export function registerNormasHandlers() {
       dados_publicacao || null,
       data_ultima_alteracao || null,
       atualizacao_pendente ? 1 : 0,
+      normas_alteradoras_pendentes || null,
       vigencia || 'Vigente',
       link_acesso || null,
       anexo || null,
@@ -166,6 +179,7 @@ export function registerNormasHandlers() {
     dados_publicacao,
     data_ultima_alteracao,
     atualizacao_pendente,
+    normas_alteradoras_pendentes,
     vigencia = 'Vigente',
     link_acesso,
     anexo,
@@ -184,6 +198,7 @@ export function registerNormasHandlers() {
         dados_publicacao = ?,
         data_ultima_alteracao = ?,
         atualizacao_pendente = ?,
+        normas_alteradoras_pendentes = ?,
         vigencia      = ?,
         link_acesso   = ?,
         anexo         = ?,
@@ -199,6 +214,7 @@ export function registerNormasHandlers() {
       dados_publicacao || null,
       data_ultima_alteracao || null,
       atualizacao_pendente ? 1 : 0,
+      normas_alteradoras_pendentes || null,
       vigencia || 'Vigente',
       link_acesso || null,
       anexo || null,

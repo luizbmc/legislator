@@ -5,7 +5,7 @@ const db = require('../db')
 // GET / — listar normas
 router.get('/', (req, res) => {
   try {
-    const { busca, tipo, status, buscarConteudo } = req.query
+    const { busca, tipo, status, buscarConteudo, publicacaoId } = req.query
     let where = []
     let params = []
 
@@ -30,6 +30,15 @@ router.get('/', (req, res) => {
     if (status) {
       where.push(`n.status = ?`)
       params.push(status)
+    }
+    if (publicacaoId) {
+      where.push(`EXISTS (
+        SELECT 1
+        FROM publicacao_secoes psf
+        JOIN publicacao_normas pnf ON pnf.secao_id = psf.id
+        WHERE psf.publicacao_id = ? AND pnf.norma_id = n.id
+      )`)
+      params.push(publicacaoId)
     }
 
     const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : ''
@@ -89,6 +98,7 @@ router.post('/', (req, res) => {
       dados_publicacao,
       data_ultima_alteracao,
       atualizacao_pendente,
+      normas_alteradoras_pendentes,
       vigencia = 'Vigente',
       link_acesso,
       anexo,
@@ -104,11 +114,12 @@ router.post('/', (req, res) => {
     const result = db.prepare(`
       INSERT INTO normas (
         tipo, epigrafe, apelido, ementa, dados_publicacao,
-        data_ultima_alteracao, atualizacao_pendente, vigencia, link_acesso, anexo, observacoes,
+        data_ultima_alteracao, atualizacao_pendente, normas_alteradoras_pendentes,
+        vigencia, link_acesso, anexo, observacoes,
         conteudo_doc, conteudo_txt, status,
         atualizado_por, criado_em, atualizado_em
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       tipo,
       epigrafe,
@@ -117,6 +128,7 @@ router.post('/', (req, res) => {
       dados_publicacao || null,
       data_ultima_alteracao || null,
       atualizacao_pendente ? 1 : 0,
+      normas_alteradoras_pendentes || null,
       vigencia || 'Vigente',
       link_acesso || null,
       anexo || null,
@@ -209,6 +221,7 @@ router.patch('/:id/meta', (req, res) => {
       dados_publicacao,
       data_ultima_alteracao,
       atualizacao_pendente,
+      normas_alteradoras_pendentes,
       vigencia = 'Vigente',
       link_acesso,
       anexo,
@@ -228,6 +241,7 @@ router.patch('/:id/meta', (req, res) => {
         dados_publicacao = ?,
         data_ultima_alteracao = ?,
         atualizacao_pendente = ?,
+        normas_alteradoras_pendentes = ?,
         vigencia = ?,
         link_acesso = ?,
         anexo = ?,
@@ -243,6 +257,7 @@ router.patch('/:id/meta', (req, res) => {
       dados_publicacao || null,
       data_ultima_alteracao || null,
       atualizacao_pendente ? 1 : 0,
+      normas_alteradoras_pendentes || null,
       vigencia || 'Vigente',
       link_acesso || null,
       anexo || null,

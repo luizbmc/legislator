@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS normas (
   dados_publicacao TEXT,
   data_ultima_alteracao TEXT,
   atualizacao_pendente INTEGER NOT NULL DEFAULT 0,
+  normas_alteradoras_pendentes TEXT,
   vigencia      TEXT NOT NULL DEFAULT 'Vigente',
   link_acesso   TEXT,
   anexo         TEXT,

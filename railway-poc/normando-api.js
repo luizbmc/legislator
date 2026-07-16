@@ -12,6 +12,9 @@ function prepararEsquema(db) {
   if (!colunaExiste(db, 'normas', 'revisao')) {
     db.exec('ALTER TABLE normas ADD COLUMN revisao INTEGER NOT NULL DEFAULT 1')
   }
+  if (!colunaExiste(db, 'normas', 'normas_alteradoras_pendentes')) {
+    db.exec('ALTER TABLE normas ADD COLUMN normas_alteradoras_pendentes TEXT')
+  }
   if (!colunaExiste(db, 'publicacoes', 'revisao')) {
     db.exec('ALTER TABLE publicacoes ADD COLUMN revisao INTEGER NOT NULL DEFAULT 1')
   }
@@ -145,7 +148,8 @@ function buscarPublicacao(db, id, { incluirConteudo = false } = {}) {
     ? 'n.*'
     : `
       n.id, n.tipo, n.epigrafe, n.apelido, n.ementa, n.status,
-      n.atualizacao_pendente, n.vigencia, n.link_acesso, n.anexo,
+      n.atualizacao_pendente, n.normas_alteradoras_pendentes,
+      n.vigencia, n.link_acesso, n.anexo,
       n.observacoes, n.atualizado_por, n.criado_em, n.atualizado_em,
       n.revisao
     `
@@ -234,7 +238,7 @@ function registrarNormandoApi(app, db) {
   prepararEsquema(db)
 
   app.get('/api/normas', (req, res) => {
-    const { busca, tipo, status, buscarConteudo } = req.query
+    const { busca, tipo, status, buscarConteudo, publicacaoId } = req.query
     const where = []
     const params = []
     if (busca) {
@@ -259,12 +263,22 @@ function registrarNormandoApi(app, db) {
       where.push('n.status = ?')
       params.push(status)
     }
+    if (publicacaoId) {
+      where.push(`EXISTS (
+        SELECT 1
+        FROM publicacao_secoes psf
+        JOIN publicacao_normas pnf ON pnf.secao_id = psf.id
+        WHERE psf.publicacao_id = ? AND pnf.norma_id = n.id
+      )`)
+      params.push(publicacaoId)
+    }
     const clause = where.length ? `WHERE ${where.join(' AND ')}` : ''
     const items = db.prepare(`
       SELECT
         n.id, n.tipo, n.epigrafe, n.apelido, n.ementa, n.status,
         n.dados_publicacao, n.data_ultima_alteracao, n.vigencia,
-        n.atualizacao_pendente, n.link_acesso, n.anexo, n.observacoes,
+        n.atualizacao_pendente, n.normas_alteradoras_pendentes,
+        n.link_acesso, n.anexo, n.observacoes,
         n.caminho_rede, n.atualizado_por, n.criado_em, n.atualizado_em,
         n.revisao,
         GROUP_CONCAT(t.nome, '|||') AS tags_str
@@ -379,11 +393,12 @@ function registrarNormandoApi(app, db) {
     const result = db.prepare(`
       INSERT INTO normas (
         tipo, epigrafe, apelido, ementa, dados_publicacao,
-        data_ultima_alteracao, atualizacao_pendente, vigencia, link_acesso,
+        data_ultima_alteracao, atualizacao_pendente, normas_alteradoras_pendentes,
+        vigencia, link_acesso,
         anexo, observacoes, caminho_rede, conteudo_raw, conteudo_doc,
         conteudo_txt, status, data_atualizacao, atualizado_por,
         criado_em, atualizado_em, revisao
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `).run(
       dados.tipo || '',
       String(dados.epigrafe).trim(),
@@ -392,6 +407,7 @@ function registrarNormandoApi(app, db) {
       dados.dados_publicacao || null,
       dados.data_ultima_alteracao || null,
       dados.atualizacao_pendente ? 1 : 0,
+      dados.normas_alteradoras_pendentes || null,
       dados.vigencia || 'Vigente',
       dados.link_acesso || null,
       dados.anexo || null,
@@ -457,7 +473,8 @@ function registrarNormandoApi(app, db) {
         UPDATE normas SET
           tipo = ?, epigrafe = ?, apelido = ?, ementa = ?,
           dados_publicacao = ?, data_ultima_alteracao = ?,
-          atualizacao_pendente = ?, vigencia = ?, link_acesso = ?,
+          atualizacao_pendente = ?, normas_alteradoras_pendentes = ?,
+          vigencia = ?, link_acesso = ?,
           anexo = ?, observacoes = ?, caminho_rede = ?,
           atualizado_por = ?, atualizado_em = ?, revisao = revisao + 1
         WHERE id = ? AND revisao = ?
@@ -469,6 +486,7 @@ function registrarNormandoApi(app, db) {
         dados.dados_publicacao || null,
         dados.data_ultima_alteracao || null,
         dados.atualizacao_pendente ? 1 : 0,
+        dados.normas_alteradoras_pendentes || null,
         dados.vigencia || 'Vigente',
         dados.link_acesso || null,
         dados.anexo || null,

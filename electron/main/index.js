@@ -12,6 +12,7 @@ import { registerTrabalhoRemotoHandlers } from './ipc/trabalhoRemoto.js'
 import { registerRailwayHandlers } from './ipc/railway.js'
 import { registerUsuariosHandlers } from './ipc/usuarios.js'
 import { registerRailwayExportarHandlers } from './ipc/railwayExportar.js'
+import { registerResenhaHandlers } from './ipc/resenha.js'
 import {
   inicializarAtualizacoes,
   registerAtualizacoesHandlers,
@@ -165,6 +166,7 @@ app.whenReady().then(async () => {
   registerRailwayHandlers()
   registerUsuariosHandlers()
   registerRailwayExportarHandlers()
+  registerResenhaHandlers()
   registerAtualizacoesHandlers()
   createWindow()
   inicializarAtualizacoes()

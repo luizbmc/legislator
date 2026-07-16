@@ -131,6 +131,12 @@ if (!window.legislator) {
         return { ok: true }
       },
     },
+    resenha: {
+      buscar: url => api('GET', `/resenha/buscar${toQuery({ url })}`),
+      gmail: (opcoes = {}) => api('GET', `/resenha/gmail${toQuery(opcoes)}`),
+      confirmarCamara: payload => api('POST', '/resenha/confirmar-camara', payload),
+      videNormas: url => api('GET', `/resenha/vide-normas${toQuery({ url })}`),
+    },
     publicacoes: {
       listar:       (filtros = {}) => dadosApi('GET', `/publicacoes${toQuery(filtros)}`),
       buscar:       (id)         => dadosApi('GET', `/publicacoes/${id}`),
