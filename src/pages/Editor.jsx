@@ -26,6 +26,12 @@ import { aplicarEstiloVadeMecumDoc, documentoTemEstiloVadeMecum } from '../servi
 import { isTipoTextoComum, TIPOS_NORMA }      from '../constants/normas.js'
 import { TEXTO_COMUM_WORD_STYLE_MAP } from '../constants/textoComumWord.js'
 import { carregarUsuarioComentarioAtual, iniciaisUsuario } from '../services/usuariosComentarios.js'
+import {
+  dataMaisRecente,
+  dataNormaIso,
+  filtrarAlteradorasPendentes,
+  ultimaReferenciaLegislativaDasNotas,
+} from '../services/atualizacoesLegislativas.js'
 
 const DOC_VAZIO = '{"type":"doc","content":[]}'
 const STORAGE_CLIENTE_BLOQUEIO = 'normando.bloqueio.clienteId'
@@ -64,24 +70,6 @@ function serializarAlteradorasPendentes(lista) {
     href: item.href || '',
     data: item.data || '',
   })))
-}
-
-function dataNormaIso(valor) {
-  const texto = String(valor || '').trim()
-  if (!texto) return ''
-  const iso = texto.match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (iso) return iso[0]
-  const data = new Date(texto)
-  if (Number.isNaN(data.getTime())) return ''
-  return data.toISOString().slice(0, 10)
-}
-
-function alteradoraPendente(item, dataUltimaAlteracao) {
-  const dataAlteradora = dataNormaIso(item?.data)
-  const dataBase = dataNormaIso(dataUltimaAlteracao)
-  if (!dataAlteradora) return true
-  if (!dataBase) return false
-  return dataAlteradora > dataBase
 }
 
 const PADRONIZACAO_ABAS = [
@@ -2171,6 +2159,7 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
         ...payloadMeta,
         ...atualizada,
         tags: atualizada.tags ?? payloadMeta.tags,
+        data_ultima_alteracao: payloadMeta.data_ultima_alteracao,
         normas_alteradoras_pendentes: payloadMeta.normas_alteradoras_pendentes,
         atualizacao_pendente: payloadMeta.atualizacao_pendente,
       })
@@ -2189,24 +2178,31 @@ export default function Editor({ usuarioAtual, onTrocarUsuario, remoto = false }
       setEditErro('Informe o Link para acesso antes de checar atualizações.')
       return
     }
-    if (!dataNormaIso(editForm.data_ultima_alteracao)) {
-      setEditErro('Preencha a Data da última alteração antes de checar atualizações.')
-      return
-    }
     setEditChecandoAtualizacoes(true)
     setEditErro('')
     try {
+      const docAtual = editor?.getJSON?.() || docJson
+      const ultimaNota = ultimaReferenciaLegislativaDasNotas(docAtual).maisRecente
+      const dataCampo = dataNormaIso(editForm.data_ultima_alteracao)
+      const dataBase = dataMaisRecente(ultimaNota?.data, dataCampo)
+      if (!dataBase) {
+        setEditErro('Preencha a Data da última alteração antes de checar atualizações.')
+        return
+      }
       const resposta = await window.legislator.resenha.videNormas(url)
-      const pendentes = (resposta.videNormas || [])
-        .filter(item => alteradoraPendente(item, editForm.data_ultima_alteracao))
+      const pendentes = filtrarAlteradorasPendentes(resposta.videNormas || [], dataBase)
       setEditForm(form => ({
         ...form,
+        data_ultima_alteracao: dataBase || form.data_ultima_alteracao,
         normas_alteradoras_pendentes: serializarAlteradorasPendentes(pendentes),
         atualizacao_pendente: pendentes.length > 0,
       }))
+      const dataMsg = ultimaNota?.data && (!dataCampo || ultimaNota.data > dataCampo)
+        ? 'Data da última alteração preenchida a partir das notas.'
+        : 'Comparação feita a partir da Data da última alteração já preenchida.'
       setEditErro(pendentes.length
-        ? `${pendentes.length} norma(s) alteradora(s) pendente(s) encontrada(s). Salve os dados da norma para gravar.`
-        : 'Nenhuma norma alteradora pendente encontrada. Salve os dados da norma para gravar a checagem.')
+        ? `${pendentes.length} norma(s) alteradora(s) pendente(s) encontrada(s). ${dataMsg} Salve os dados da norma para gravar.`
+        : `Nenhuma norma alteradora pendente encontrada. ${dataMsg} Salve os dados da norma para gravar a checagem.`)
     } catch (err) {
       setEditErro(err?.message || 'Não foi possível checar atualizações na Câmara.')
     } finally {

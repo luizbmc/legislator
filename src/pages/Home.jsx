@@ -3,8 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import { TIPOS_NORMA } from '../constants/normas.js'
 import logoNormando from '../logo.png'
 import UsuarioAtualBadge from '../components/UsuarioAtualBadge.jsx'
+import {
+  dataMaisRecente,
+  filtrarAlteradorasPendentes,
+  ultimaReferenciaLegislativaDasNotas,
+} from '../services/atualizacoesLegislativas.js'
 
 const RESENHA_PLANALTO_URL = 'https://www4.planalto.gov.br/legislacao/portal-legis/resenha-diaria/julho-resenha-diaria'
+const STORAGE_ULTIMA_CHECAGEM_ATUALIZACOES = 'normando.ultimaChecagemAtualizacoes'
 
 const STATUS_LABELS = {
   rascunho:   { label: 'Rascunho',   cor: '#f59e0b' },
@@ -100,6 +106,19 @@ function dataCurta(valor) {
     day: '2-digit',
     month: '2-digit',
     year: '2-digit',
+  })
+}
+
+function dataHoraCurta(valor) {
+  if (!valor) return ''
+  const data = new Date(valor)
+  if (Number.isNaN(data.getTime())) return ''
+  return data.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
   })
 }
 
@@ -350,19 +369,6 @@ function metaNormaPayload(norma, usuarioAtual, extras = {}) {
   }
 }
 
-function lerAlteradorasPendentes(valor) {
-  if (!valor) return []
-  try {
-    const parsed = JSON.parse(valor)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return String(valor || '')
-      .split(/\n+/)
-      .map(texto => ({ texto: texto.trim(), href: '', data: '' }))
-      .filter(item => item.texto)
-  }
-}
-
 function serializarAlteradorasPendentes(lista) {
   if (!lista?.length) return ''
   return JSON.stringify(lista.map(item => ({
@@ -370,24 +376,6 @@ function serializarAlteradorasPendentes(lista) {
     href: item.href || '',
     data: item.data || '',
   })))
-}
-
-function dataNormaIso(valor) {
-  const texto = String(valor || '').trim()
-  if (!texto) return ''
-  const iso = texto.match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (iso) return iso[0]
-  const data = new Date(texto)
-  if (Number.isNaN(data.getTime())) return ''
-  return data.toISOString().slice(0, 10)
-}
-
-function alteradoraPendente(item, dataUltimaAlteracao) {
-  const dataAlteradora = dataNormaIso(item?.data)
-  const dataBase = dataNormaIso(dataUltimaAlteracao)
-  if (!dataAlteradora) return true
-  if (!dataBase) return false
-  return dataAlteradora > dataBase
 }
 
 export default function Home({ usuarioAtual, onTrocarUsuario }) {
@@ -411,6 +399,32 @@ export default function Home({ usuarioAtual, onTrocarUsuario }) {
   const [resenhaResultados, setResenhaResultados] = useState([])
   const [resenhaStatus, setResenhaStatus] = useState('')
   const [resenhaLoading, setResenhaLoading] = useState(false)
+  const [metaModalAberto, setMetaModalAberto] = useState(false)
+  const [metaNormaOriginal, setMetaNormaOriginal] = useState(null)
+  const [metaForm, setMetaForm] = useState({
+    tipo: '',
+    epigrafe: '',
+    apelido: '',
+    ementa: '',
+    dados_publicacao: '',
+    data_ultima_alteracao: '',
+    atualizacao_pendente: false,
+    normas_alteradoras_pendentes: '',
+    vigencia: 'Vigente',
+    link_acesso: '',
+    anexo: '',
+    observacoes: '',
+    tagsTexto: '',
+  })
+  const [metaErro, setMetaErro] = useState('')
+  const [metaSalvando, setMetaSalvando] = useState(false)
+  const [ultimaChecagemAtualizacoes, setUltimaChecagemAtualizacoes] = useState(() => {
+    try {
+      return localStorage.getItem(STORAGE_ULTIMA_CHECAGEM_ATUALIZACOES) || ''
+    } catch {
+      return ''
+    }
+  })
 
   useEffect(() => {
     try {
@@ -454,6 +468,78 @@ export default function Home({ usuarioAtual, onTrocarUsuario }) {
       nav('/nova', { state: { duplicarNorma: origem } })
     } catch (err) {
       alert(String(err?.message || err))
+    }
+  }
+
+  function tagsDeTexto(valor) {
+    return String(valor || '')
+      .split(',')
+      .map(tag => tag.trim())
+      .filter(Boolean)
+  }
+
+  async function abrirDadosNorma(e, norma) {
+    e.stopPropagation()
+    setMetaErro('')
+    try {
+      const completa = await window.legislator.normas.buscar(norma.id)
+      setMetaNormaOriginal(completa)
+      setMetaForm({
+        tipo: completa.tipo || '',
+        epigrafe: completa.epigrafe || '',
+        apelido: completa.apelido || '',
+        ementa: completa.ementa || '',
+        dados_publicacao: completa.dados_publicacao || '',
+        data_ultima_alteracao: completa.data_ultima_alteracao || '',
+        atualizacao_pendente: Boolean(completa.atualizacao_pendente),
+        normas_alteradoras_pendentes: completa.normas_alteradoras_pendentes || '',
+        vigencia: completa.vigencia || 'Vigente',
+        link_acesso: completa.link_acesso || '',
+        anexo: completa.anexo || '',
+        observacoes: completa.observacoes || '',
+        tagsTexto: (completa.tags || []).join(', '),
+      })
+      setMetaModalAberto(true)
+    } catch (err) {
+      alert(err?.message || 'Não foi possível carregar os dados da norma.')
+    }
+  }
+
+  async function salvarDadosNormaHome(e) {
+    e.preventDefault()
+    if (!metaNormaOriginal) return
+    if (!metaForm.epigrafe.trim()) {
+      setMetaErro('A epígrafe é obrigatória.')
+      return
+    }
+    setMetaSalvando(true)
+    setMetaErro('')
+    try {
+      const tags = tagsDeTexto(metaForm.tagsTexto)
+      const payload = metaNormaPayload(
+        {
+          ...metaNormaOriginal,
+          ...metaForm,
+          tags,
+        },
+        usuarioAtual,
+        { tags },
+      )
+      const atualizada = await window.legislator.normas.atualizarMeta(metaNormaOriginal.id, payload)
+      const normaAtualizada = {
+        ...metaNormaOriginal,
+        ...payload,
+        ...atualizada,
+        tags: atualizada.tags ?? payload.tags,
+      }
+      setNormas(prev => prev.map(n => n.id === metaNormaOriginal.id ? { ...n, ...normaAtualizada } : n))
+      setTodasTags(prev => Array.from(new Set([...(prev || []), ...tags])).sort((a, b) => a.localeCompare(b, 'pt-BR')))
+      setMetaNormaOriginal(normaAtualizada)
+      setMetaModalAberto(false)
+    } catch (err) {
+      setMetaErro(err?.message || 'Não foi possível salvar os dados da norma.')
+    } finally {
+      setMetaSalvando(false)
     }
   }
 
@@ -571,29 +657,42 @@ export default function Home({ usuarioAtual, onTrocarUsuario }) {
 
       const resultados = []
       let atualizadas = 0
-      let semData = 0
+      let semBaseTexto = 0
       for (let i = 0; i < normasComLink.length; i += 1) {
         const norma = normasComLink[i]
         setResenhaStatus(`Checando ${i + 1}/${normasComLink.length}: ${norma.epigrafe}`)
         let completa = norma
         try {
           completa = await window.legislator.normas.buscar(norma.id)
-          if (!dataNormaIso(completa.data_ultima_alteracao)) {
-            semData += 1
+          let docNorma = null
+          try {
+            docNorma = typeof completa.conteudo_doc === 'string'
+              ? JSON.parse(completa.conteudo_doc)
+              : completa.conteudo_doc
+          } catch {
+            docNorma = null
+          }
+          const ultimaNota = ultimaReferenciaLegislativaDasNotas(docNorma).maisRecente
+          const dataCampo = dataMaisRecente(completa.data_ultima_alteracao)
+          const dataBase = dataMaisRecente(ultimaNota?.data, dataCampo)
+          if (!dataBase) {
+            semBaseTexto += 1
             continue
           }
           const resposta = await window.legislator.resenha.videNormas(completa.link_acesso)
-          const pendentes = (resposta.videNormas || [])
-            .filter(item => alteradoraPendente(item, completa.data_ultima_alteracao))
-          const pendentesAnteriores = lerAlteradorasPendentes(completa.normas_alteradoras_pendentes)
+          const pendentes = filtrarAlteradorasPendentes(resposta.videNormas || [], dataBase)
           const novoTexto = serializarAlteradorasPendentes(pendentes)
-          const pendenteGeral = pendentes.length
-            ? true
-            : (pendentesAnteriores.length ? false : Boolean(completa.atualizacao_pendente))
+          const pendenteGeral = pendentes.length > 0
           const textoAnterior = completa.normas_alteradoras_pendentes || ''
+          const dataAnterior = completa.data_ultima_alteracao || ''
 
-          if (novoTexto !== textoAnterior || Boolean(completa.atualizacao_pendente) !== pendenteGeral) {
+          if (
+            novoTexto !== textoAnterior ||
+            (dataBase && dataAnterior !== dataBase) ||
+            Boolean(completa.atualizacao_pendente) !== pendenteGeral
+          ) {
             const payloadMeta = metaNormaPayload(completa, usuarioAtual, {
+              data_ultima_alteracao: dataBase || completa.data_ultima_alteracao || '',
               atualizacao_pendente: pendenteGeral,
               normas_alteradoras_pendentes: novoTexto,
             })
@@ -606,6 +705,7 @@ export default function Home({ usuarioAtual, onTrocarUsuario }) {
               ...payloadMeta,
               ...atualizada,
               tags: atualizada.tags ?? payloadMeta.tags,
+              data_ultima_alteracao: payloadMeta.data_ultima_alteracao,
               normas_alteradoras_pendentes: payloadMeta.normas_alteradoras_pendentes,
               atualizacao_pendente: payloadMeta.atualizacao_pendente,
             }
@@ -640,7 +740,12 @@ export default function Home({ usuarioAtual, onTrocarUsuario }) {
       const pendentes = resultados.reduce((total, item) => (
         total + (item.normas?.[0]?.pendentes?.length || 0)
       ), 0)
-      setResenhaStatus(`${normasComLink.length} norma(s) com link analisada(s). ${semData} sem Data da última alteração foram ignorada(s). ${pendentes} pendência(s) encontrada(s). ${atualizadas} registro(s) atualizado(s).`)
+      const agora = new Date().toISOString()
+      setUltimaChecagemAtualizacoes(agora)
+      try {
+        localStorage.setItem(STORAGE_ULTIMA_CHECAGEM_ATUALIZACOES, agora)
+      } catch {}
+      setResenhaStatus(`${normasComLink.length} norma(s) com link analisada(s). ${semBaseTexto} sem Data da última alteração cadastrada foram ignorada(s). ${pendentes} pendência(s) encontrada(s). ${atualizadas} registro(s) atualizado(s).`)
     } catch (err) {
       setResenhaStatus(err?.message || 'Nao foi possivel checar atualizacoes.')
     } finally {
@@ -811,7 +916,18 @@ export default function Home({ usuarioAtual, onTrocarUsuario }) {
               <div key={n.id} className="norma-card" onClick={() => nav(`/editor/${n.id}`)}>
                 <div className="norma-card-top">
                   <span className="norma-tipo">{n.tipo}</span>
-                  <span className="norma-status" style={{ color: st.cor }}>{st.label}</span>
+                  <div className="norma-card-top-actions">
+                    <span className="norma-status" style={{ color: st.cor }}>{st.label}</span>
+                    <button
+                      type="button"
+                      className="norma-card-info"
+                      onClick={e => abrirDadosNorma(e, n)}
+                      title="Editar dados da norma"
+                      aria-label="Editar dados da norma"
+                    >
+                      i
+                    </button>
+                  </div>
                 </div>
                 <div className="norma-epigrafe"><AvisoAtualizacaoPendente norma={n} />{n.epigrafe}</div>
                 {n.apelido && <div className="norma-apelido">{n.apelido}</div>}
@@ -896,6 +1012,134 @@ export default function Home({ usuarioAtual, onTrocarUsuario }) {
         </div>
       )}
 
+      {metaModalAberto && (
+        <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setMetaModalAberto(false) }}>
+          <div className="modal-box modal-editar-meta modal-home-meta" onMouseDown={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Editar dados da norma</h3>
+              <button className="btn-ghost modal-fechar" onClick={() => setMetaModalAberto(false)}>×</button>
+            </div>
+            <form onSubmit={salvarDadosNormaHome}>
+              <div className="campo">
+                <label>Tipo</label>
+                <select
+                  value={metaForm.tipo}
+                  onChange={e => setMetaForm(f => ({ ...f, tipo: e.target.value }))}
+                >
+                  {TIPOS_NORMA.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div className="campo">
+                <label>Epígrafe *</label>
+                <input
+                  autoFocus
+                  value={metaForm.epigrafe}
+                  onChange={e => setMetaForm(f => ({ ...f, epigrafe: e.target.value }))}
+                  required
+                />
+              </div>
+              <div className="campo">
+                <label>Apelido <span className="campo-opcional">(opcional)</span></label>
+                <input
+                  value={metaForm.apelido}
+                  onChange={e => setMetaForm(f => ({ ...f, apelido: e.target.value }))}
+                />
+              </div>
+              <div className="campo">
+                <label>Ementa <span className="campo-opcional">(opcional)</span></label>
+                <textarea
+                  rows={3}
+                  value={metaForm.ementa}
+                  onChange={e => setMetaForm(f => ({ ...f, ementa: e.target.value }))}
+                />
+              </div>
+
+              <div className="form-secao">
+                <h3>Dados complementares</h3>
+                <div className="campo">
+                  <label>Dados de publicação, republicação e retificação <span className="campo-opcional">(opcional)</span></label>
+                  <textarea
+                    rows={3}
+                    value={metaForm.dados_publicacao}
+                    onChange={e => setMetaForm(f => ({ ...f, dados_publicacao: e.target.value }))}
+                  />
+                </div>
+                <div className="form-grid-2">
+                  <div className="campo">
+                    <label>Data da última alteração <span className="campo-opcional">(opcional)</span></label>
+                    <input
+                      type="date"
+                      value={metaForm.data_ultima_alteracao}
+                      onChange={e => setMetaForm(f => ({ ...f, data_ultima_alteracao: e.target.value }))}
+                    />
+                  </div>
+                  <div className="campo campo-check">
+                    <label className={`home-check pendente-check${metaForm.atualizacao_pendente ? ' ativo' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(metaForm.atualizacao_pendente)}
+                        onChange={e => setMetaForm(f => ({ ...f, atualizacao_pendente: e.target.checked }))}
+                      />
+                      {metaForm.atualizacao_pendente && <span className="pendente-check-alerta" aria-hidden="true">⚠️</span>}
+                      <span>Atualização pendente</span>
+                    </label>
+                  </div>
+                  <div className="campo">
+                    <label>Vigência</label>
+                    <input
+                      value={metaForm.vigencia}
+                      onChange={e => setMetaForm(f => ({ ...f, vigencia: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="campo">
+                  <label>Link para acesso <span className="campo-opcional">(opcional)</span></label>
+                  <input
+                    type="url"
+                    value={metaForm.link_acesso}
+                    onChange={e => setMetaForm(f => ({ ...f, link_acesso: e.target.value }))}
+                  />
+                </div>
+                <div className="campo">
+                  <label>Anexo <span className="campo-opcional">(opcional)</span></label>
+                  <input
+                    value={metaForm.anexo}
+                    onChange={e => setMetaForm(f => ({ ...f, anexo: e.target.value }))}
+                  />
+                </div>
+                <div className="campo">
+                  <label>Outras observações <span className="campo-opcional">(opcional)</span></label>
+                  <textarea
+                    rows={3}
+                    value={metaForm.observacoes}
+                    onChange={e => setMetaForm(f => ({ ...f, observacoes: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="campo">
+                <label>Tags <span className="campo-opcional">(separe por vírgulas)</span></label>
+                <input
+                  value={metaForm.tagsTexto}
+                  onChange={e => setMetaForm(f => ({ ...f, tagsTexto: e.target.value }))}
+                  placeholder="vm, educação, publicação"
+                />
+              </div>
+
+              {metaErro && <p className="form-erro">{metaErro}</p>}
+              <div className="form-acoes">
+                <button type="button" className="btn-ghost" onClick={() => setMetaModalAberto(false)}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-primary" disabled={metaSalvando || !metaForm.epigrafe.trim()}>
+                  {metaSalvando ? 'Salvando…' : 'Salvar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {ajudaAberta && (
         <div className="modal-overlay" onMouseDown={e => { if (e.target === e.currentTarget) setAjudaAberta(false) }}>
           <div className="modal-box ajuda-modal" onMouseDown={e => e.stopPropagation()}>
@@ -932,19 +1176,18 @@ export default function Home({ usuarioAtual, onTrocarUsuario }) {
 
             <div className="resenha-form">
               <div className="resenha-actions">
+                <div className="resenha-actions-info">
+                  <strong>Checagem automática pelo Legin</strong>
+                  <span>
+                    Última checagem: {ultimaChecagemAtualizacoes
+                      ? dataHoraCurta(ultimaChecagemAtualizacoes)
+                      : 'nenhuma checagem realizada'}
+                  </span>
+                </div>
                 <button className="btn-primary" onClick={checarAtualizacoesCamara} disabled={resenhaLoading}>
-                  Checar atualizações
-                </button>
-                <button className="btn-ghost" onClick={() => processarTextoResenha(resenhaTexto)} disabled={resenhaLoading}>
-                  Analisar texto carregado
+                  Checar atualizações agora
                 </button>
               </div>
-              <textarea
-                rows={8}
-                value={resenhaTexto}
-                onChange={e => setResenhaTexto(e.target.value)}
-                placeholder="As mensagens encontradas no Gmail aparecem aqui para conferencia. Tambem e possivel colar um texto de teste."
-              />
               {resenhaStatus && <p className="resenha-status">{resenhaStatus}</p>}
             </div>
 

@@ -209,7 +209,16 @@ const MESES_PT = {
 }
 
 function dataIsoDeTextoCamara(texto) {
-  const match = String(texto || '').match(/\bde\s+(\d{1,2})\s+de\s+([A-Za-zÀ-ÿ]+)\s+de\s+(\d{4})\b/i)
+  const textoDataCamara = String(texto || '')
+  const matchSeguro = textoDataCamara.match(/\bde\s+(\d{1,2})(?:\u00ba|\u00b0|o)?\.?\s+de\s+([A-Za-z\u00c0-\u00ff]+)\s+de\s+(\d{4})\b/i)
+  if (matchSeguro) {
+    const diaSeguro = Number(matchSeguro[1])
+    const mesSeguro = MESES_PT[normalizarBusca(matchSeguro[2])]
+    const anoSeguro = Number(matchSeguro[3])
+    if (!diaSeguro || !mesSeguro || !anoSeguro) return ''
+    return `${anoSeguro}-${String(mesSeguro).padStart(2, '0')}-${String(diaSeguro).padStart(2, '0')}`
+  }
+  const match = String(texto || '').match(/\bde\s+(\d{1,2})(?:º|°|o)?\.?\s+de\s+([A-Za-zÀ-ÿ]+)\s+de\s+(\d{4})\b/i)
   if (!match) return ''
   const dia = Number(match[1])
   const mesNome = normalizarBusca(match[2])

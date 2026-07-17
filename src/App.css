@@ -289,8 +289,35 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 
 .resenha-actions {
   display: flex;
-  gap: 8px;
+  justify-content: space-between;
   align-items: center;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-muted);
+}
+
+.resenha-actions-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.resenha-actions-info strong {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.resenha-actions-info span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.resenha-actions .btn-primary {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .resenha-status {
@@ -568,12 +595,40 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 .norma-card-top {
   display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 6px;
+  gap: 10px;
 }
 .norma-tipo {
   font-size: 11px; font-weight: 600; text-transform: uppercase;
   letter-spacing: .06em; color: var(--text-muted);
 }
 .norma-status { font-size: 11px; font-weight: 600; }
+.norma-card-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.norma-card-info {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.norma-card-info:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
 
 .norma-epigrafe {
   font-weight: 600; font-size: 14px; line-height: 1.4;
@@ -3987,6 +4042,10 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 
 .modal-editar-meta {
   width: min(760px, 96vw);
+}
+
+.modal-home-meta {
+  width: min(820px, 96vw);
 }
 
 .modal-saida-sem-salvar {

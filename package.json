@@ -1,6 +1,6 @@
 {
   "name": "legislator",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "description": "Preparação de textos legislativos para Adobe InDesign",
   "author": "Luiz BMC",
   "main": "out/main/index.js",
