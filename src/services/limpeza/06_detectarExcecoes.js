@@ -461,6 +461,12 @@ const PADROES = [
     estilosExcluidos: ['vazio'],
   },
   {
+    tipo: 'paragrafo_termina_ponto_e_virgula',
+    descricao: 'Parágrafo termina com ponto e vírgula',
+    test: l => l.style === 'paragrafo' && /;\s*$/.test(l.text),
+    alvo: l => alvoRegex(l.text, /;(?=\s*$)/),
+  },
+  {
     tipo: 'pontuacao_apos_conjuncao_enumeracao',
     descricao: 'Não use ponto nem ponto e vírgula após "; e" ou "; ou"',
     test: l => Boolean(alvoPontuacaoAposConjuncaoEnumeracao(l)),
