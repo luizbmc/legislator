@@ -10,6 +10,10 @@
  * Fonte "catalogo":
  *   Passo 1 — Busca e seleção de norma do catálogo
  *   Passo 2 — Comparação com a versão atual
+ *
+ * Fonte "indesign":
+ *   Passo 1 — Seleção do XML exportado pelo InDesign
+ *   Passo 2 — Checagem direta de integridade, sem rotinas
  */
 import { useState, useRef, useEffect } from 'react'
 import mammoth from 'mammoth'
@@ -23,6 +27,7 @@ import { xmlParaTiptap }               from '../../services/importarXml.js'
 import { htmlInDesignParaTiptap }      from '../../services/importarHtmlInDesign.js'
 import { isTipoTextoComum }            from '../../constants/normas.js'
 import { TEXTO_COMUM_WORD_STYLE_MAP }  from '../../constants/textoComumWord.js'
+import { compararXmlInDesign }         from '../../services/compararXmlInDesign.js'
 
 // ── Configuração dos fluxos ───────────────────────────────────────
 const FLUXO_DOCX = {
@@ -32,6 +37,10 @@ const FLUXO_DOCX = {
 const FLUXO_CAT = {
   passos: ['catalogo', 'comparando'],
   labels: ['Catálogo', 'Comparação'],
+}
+const FLUXO_IND = {
+  passos: ['indesign', 'integridade'],
+  labels: ['XML do InDesign', 'Integridade'],
 }
 
 function textoDeNodeTiptap(node) {
@@ -67,7 +76,7 @@ function AvisoAtualizacaoPendente({ norma }) {
 }
 
 export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags = [], modoVadeMecum = false, onIniciarRevisao, onImportarNotas, onFechar, onEditarManual, onConsolidarAtualizacoes }) {
-  const [fonte,       setFonte]       = useState('docx')      // 'docx' | 'catalogo'
+  const [fonte,       setFonte]       = useState('docx')      // 'docx' | 'catalogo' | 'indesign'
   const [passo,       setPasso]       = useState('upload')
   const [nomeArq,     setNomeArq]     = useState('')
   const [novoDoc,     setNovoDoc]     = useState(null)
@@ -78,6 +87,7 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
   const [relatorioEstrutura, setRelatorioEstrutura] = useState(null)
   const [importarNotas, setImportarNotas] = useState('') // '' | 'completas' | 'vm'
   const [relatorioImportacaoNotas, setRelatorioImportacaoNotas] = useState(null)
+  const [relatorioInDesign, setRelatorioInDesign] = useState(null)
 
   // ── Opções de comparação ──────────────────────────────────────────
   const [opcoesComp, setOpcoesComp] = useState({
@@ -125,7 +135,7 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
   }, [opcoesComp.compararEstrutura, importarNotas, editorDoc, novoDoc, modoEstrutura])
 
   // Fluxo ativo
-  const fluxo = fonte === 'docx' ? FLUXO_DOCX : FLUXO_CAT
+  const fluxo = fonte === 'docx' ? FLUXO_DOCX : fonte === 'catalogo' ? FLUXO_CAT : FLUXO_IND
 
   // ── Busca no catálogo ─────────────────────────────────────────────
   useEffect(() => {
@@ -139,7 +149,7 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
   // ── Troca de fonte ────────────────────────────────────────────────
   function mudarFonte(nova) {
     setFonte(nova)
-    setPasso(nova === 'docx' ? 'upload' : 'catalogo')
+    setPasso(nova === 'docx' ? 'upload' : nova === 'catalogo' ? 'catalogo' : 'indesign')
     setNovoDoc(null)
     setLogPipeline([])
     setErroMsg('')
@@ -148,6 +158,25 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
     setNomeArq('')
     setSomenteVmCat(false)
     setRelatorioImportacaoNotas(null)
+    setRelatorioInDesign(null)
+  }
+
+  async function compararArquivoInDesign(file) {
+    if (!file || processando) return
+    setProcessando(true)
+    setErroMsg('')
+    setNomeArq(file.name)
+    setRelatorioInDesign(null)
+    try {
+      if (!/\.xml$/i.test(file.name)) throw new Error('Selecione um arquivo XML exportado pelo InDesign.')
+      const relatorio = compararXmlInDesign(editorDoc, await file.text())
+      setRelatorioInDesign(relatorio)
+      setPasso('integridade')
+    } catch (err) {
+      setErroMsg(err?.message || String(err))
+    } finally {
+      setProcessando(false)
+    }
   }
 
   // ── Passo 1 (docx): carregar arquivo ─────────────────────────────
@@ -454,6 +483,12 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
     )
   }
 
+  function TextoComDiferencas({ partes, lado }) {
+    return partes.map((parte, idx) => parte.diferente
+      ? <mark className={`modal-integridade-char modal-integridade-char-${lado}`} key={idx}>{parte.texto || '∅'}</mark>
+      : <span key={idx}>{parte.texto}</span>)
+  }
+
   const normasCatFiltradas = somenteVmCat
     ? normasCat.filter(normaTemTagVm)
     : normasCat
@@ -495,7 +530,7 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
         </div>
 
         {/* ── Seletor de fonte (visível apenas no passo 1) ────────── */}
-        {(passo === 'upload' || passo === 'catalogo') && (
+        {(passo === 'upload' || passo === 'catalogo' || passo === 'indesign') && (
           <div className="modal-atualizar-fonte">
             <button
               className={`modal-fonte-btn${fonte === 'docx' ? ' ativa' : ''}`}
@@ -508,6 +543,12 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
               onClick={() => mudarFonte('catalogo')}
             >
               📚 Do catálogo
+            </button>
+            <button
+              className={`modal-fonte-btn${fonte === 'indesign' ? ' ativa' : ''}`}
+              onClick={() => mudarFonte('indesign')}
+            >
+              📰 XML do InDesign
             </button>
           </div>
         )}
@@ -531,6 +572,70 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
               />
               <span>Notas VM</span>
             </label>
+          </div>
+        )}
+
+        {passo === 'indesign' && (
+          <div className="modal-atualizar-corpo">
+            <p className="modal-atualizar-desc">
+              Selecione o XML exportado do InDesign. O conteúdo será comparado diretamente com a norma aberta, sem executar rotinas ou alterar qualquer arquivo.
+            </p>
+            <div
+              className="upload-drop-area"
+              onClick={() => fileRef.current?.click()}
+              onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('drag-over') }}
+              onDragLeave={e => e.currentTarget.classList.remove('drag-over')}
+              onDrop={e => { e.preventDefault(); e.currentTarget.classList.remove('drag-over'); compararArquivoInDesign(e.dataTransfer.files[0]) }}
+            >
+              <input ref={fileRef} type="file" accept=".xml" style={{ display: 'none' }}
+                onChange={e => { compararArquivoInDesign(e.target.files?.[0]); e.target.value = '' }} />
+              <span className="upload-icone">📰</span>
+              <span className="upload-label">Clique ou arraste o XML exportado do InDesign</span>
+            </div>
+          </div>
+        )}
+
+        {passo === 'integridade' && relatorioInDesign && (
+          <div className="modal-atualizar-corpo">
+            <div className="modal-arq-selecionado">
+              <span>📰 {nomeArq}</span>
+              <button className="btn-ghost btn-sm" onClick={() => { setRelatorioInDesign(null); setPasso('indesign'); setErroMsg('') }}>Trocar</button>
+            </div>
+            <div className={relatorioInDesign.integro ? 'pipeline-sucesso' : 'modal-integridade-alerta'}>
+              {relatorioInDesign.integro
+                ? '✓ Integridade confirmada: os conteúdos são idênticos.'
+                : `⚠ Foram encontradas ${relatorioInDesign.diferencas.length} diferença(s) de conteúdo.`}
+            </div>
+            <p className="modal-atualizar-desc">
+              Normando: {relatorioInDesign.totalNormando} blocos · InDesign: {relatorioInDesign.totalInDesign} blocos. Tags, metadados XML, diferenças entre tipos de espaço e espaços ao final dos trechos não entram nesta checagem.
+            </p>
+            {!relatorioInDesign.integro && (
+              <div className="modal-integridade-diffs">
+                {relatorioInDesign.diferencas.slice(0, 200).map((diff, idx) => (
+                  <div className="modal-integridade-diff" key={idx}>
+                    <strong>{diff.tipo === 'modificado' ? 'Conteúdo diferente' : diff.tipo === 'removido' ? 'Ausente no InDesign' : 'Somente no InDesign'}</strong>
+                    {diff.normando && <p><span>Normando ({diff.normando.indice + 1}):</span>{' '}
+                      {diff.detalheCaracteres
+                        ? <TextoComDiferencas partes={diff.detalheCaracteres.normando} lado="normando" />
+                        : diff.normando.texto || '(vazio)'}
+                    </p>}
+                    {diff.indesign && <p><span>InDesign ({diff.indesign.indice + 1}):</span>{' '}
+                      {diff.detalheCaracteres
+                        ? <TextoComDiferencas partes={diff.detalheCaracteres.indesign} lado="indesign" />
+                        : diff.indesign.texto || '(vazio)'}
+                    </p>}
+                    {diff.detalheCaracteres && (
+                      <small>{(diff.detalheCaracteres.similaridade * 100).toFixed(1).replace('.', ',')}% do conteúdo idêntico</small>
+                    )}
+                  </div>
+                ))}
+                {relatorioInDesign.diferencas.length > 200 && (
+                  <p className="modal-integridade-limite">
+                    Exibindo as primeiras 200 de {relatorioInDesign.diferencas.length} diferenças.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
 

@@ -21,6 +21,7 @@
   var ignoredParagraphStyles = {};
   var characterStyleTagMap = {};
   var ignoredCharacterStyles = {};
+  var inserirEstilosVm = false;
   var PARAGRAPH_TAGS = [
     "Epigrafe", "EpigrafeApelido", "NotaTitulo", "Ementa", "ParagrafoAbertura", "ParagrafoFacoSaber", "AberturaCapitulo",
     "Divisao", "Secao", "Artigo", "ArtigoTitulo", "CorpoTratado", "NomeJuridico", "Paragrafo",
@@ -813,7 +814,7 @@
   function showStyleMappingDialog(paragraphs) {
     var records = collectStyleRecords(paragraphs);
     var dialog = new Window("dialog", "Mapeamento XML da norma");
-    var intro, tabs, pTab, cTab, buttons, okBtn, cancelBtn, result = false;
+    var intro, tabs, pTab, cTab, inserirEstilosVmCheck, buttons, okBtn, cancelBtn, result = false;
 
     assignRecordIndexes(records.paragraph);
     assignRecordIndexes(records.character);
@@ -837,6 +838,9 @@
 
     tabs.selection = pTab;
 
+    inserirEstilosVmCheck = dialog.add("checkbox", undefined, "Inserir estilos VM");
+    inserirEstilosVmCheck.value = false;
+
     buttons = dialog.add("group");
     buttons.alignment = "right";
     okBtn = buttons.add("button", undefined, "Exportar", { name: "ok" });
@@ -849,6 +853,7 @@
       ignoredCharacterStyles = {};
       applyRecordMappings(records.paragraph, paragraphStyleTagMap, ignoredParagraphStyles);
       applyRecordMappings(records.character, characterStyleTagMap, ignoredCharacterStyles);
+      inserirEstilosVm = inserirEstilosVmCheck.value === true;
       result = true;
       dialog.close(1);
     };
@@ -869,7 +874,7 @@
     var attrs = alterado ? ' alterado="' + xmlEscape(alterado) + '"' : "";
     var xml = inlineXml(paragraph, nextParagraph);
     xml += footnotesXml(paragraph);
-    xml = applyInferredCharacterMarks(xml, tag);
+    if (inserirEstilosVm) xml = applyInferredCharacterMarks(xml, tag);
     return "  <" + tag + attrs + ">" + xml + "</" + tag + ">";
   }
 

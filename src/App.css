@@ -4981,7 +4981,8 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   transition: background .12s, color .12s;
 }
 .modal-fonte-btn:first-child { border-radius: 6px 0 0 6px; }
-.modal-fonte-btn:last-child  { border-radius: 0 6px 6px 0; border-left: none; }
+.modal-fonte-btn:not(:first-child) { border-left: none; }
+.modal-fonte-btn:last-child  { border-radius: 0 6px 6px 0; }
 .modal-fonte-btn.ativa {
   background: var(--accent);
   color: #fff;
@@ -5189,6 +5190,47 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   font-size: 12px;
   color: #991b1b;
 }
+
+.modal-integridade-alerta {
+  padding: 10px 12px;
+  border: 1px solid #e0a72f;
+  border-radius: 6px;
+  background: #fff8e7;
+  color: #76520a;
+  font-weight: 600;
+}
+
+.modal-integridade-diffs {
+  display: grid;
+  gap: 8px;
+  max-height: 330px;
+  overflow: auto;
+}
+
+.modal-integridade-diff {
+  padding: 10px 12px;
+  border: 1px solid var(--border, #d8dce3);
+  border-radius: 6px;
+  background: var(--bg-subtle, #f7f8fa);
+}
+
+.modal-integridade-diff strong,
+.modal-integridade-diff p {
+  display: block;
+  margin: 0 0 6px;
+}
+
+.modal-integridade-diff p:last-child { margin-bottom: 0; }
+.modal-integridade-diff p span { font-weight: 600; }
+.modal-integridade-diff small { color: var(--text-muted); }
+.modal-integridade-char {
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: 700;
+}
+.modal-integridade-char-normando { background: #fecaca; color: #991b1b; }
+.modal-integridade-char-indesign { background: #bbf7d0; color: #166534; }
+.modal-integridade-limite { margin: 4px 0; color: var(--text-muted); font-size: 12px; }
 
 /* ── Opções de comparação ─────────────────────────────────────── */
 .modal-comp-opcoes {
