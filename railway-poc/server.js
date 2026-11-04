@@ -219,6 +219,7 @@ app.get('/api/homologacao/normas', (req, res) => {
   const busca = String(req.query.busca || '').trim()
   const tipo = String(req.query.tipo || '').trim()
   const status = String(req.query.status || '').trim()
+  const publicacaoId = String(req.query.publicacaoId || '').trim()
   const buscarConteudo = req.query.buscarConteudo === 'true'
   const where = []
   const params = []
@@ -240,6 +241,15 @@ app.get('/api/homologacao/normas', (req, res) => {
   if (status) {
     where.push('n.status = ?')
     params.push(status)
+  }
+  if (publicacaoId) {
+    where.push(`EXISTS (
+      SELECT 1
+      FROM publicacao_secoes psf
+      JOIN publicacao_normas pnf ON pnf.secao_id = psf.id
+      WHERE psf.publicacao_id = ? AND pnf.norma_id = n.id
+    )`)
+    params.push(publicacaoId)
   }
 
   const clause = where.length ? `WHERE ${where.join(' AND ')}` : ''

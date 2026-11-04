@@ -4,6 +4,17 @@ const SECOES_PADRAO = ['Normas principais', 'Normas correlatas', 'Outras normas'
 const EXPORTACOES_VALIDAS = new Set(['ignorar', 'atualizacao', 'completa'])
 const BLOQUEIO_DURACAO_MS = 10 * 60 * 1000
 
+/** Objeto → texto JSON para gravar (texto já serializado passa direto). */
+function textoJson(v) {
+  if (v == null || v === '') return null
+  return typeof v === 'string' ? v : JSON.stringify(v)
+}
+
+function lerJson(v) {
+  if (v == null || v === '') return null
+  try { return JSON.parse(v) } catch { return null }
+}
+
 function colunaExiste(db, tabela, coluna) {
   return db.prepare(`PRAGMA table_info("${tabela}")`).all().some(item => item.name === coluna)
 }
@@ -18,6 +29,31 @@ function prepararEsquema(db) {
   if (!colunaExiste(db, 'publicacoes', 'revisao')) {
     db.exec('ALTER TABLE publicacoes ADD COLUMN revisao INTEGER NOT NULL DEFAULT 1')
   }
+  // dados das páginas pré-textuais da publicação (JSON), usados na exportação IDML
+  if (!colunaExiste(db, 'publicacoes', 'pretextuais')) {
+    db.exec('ALTER TABLE publicacoes ADD COLUMN pretextuais TEXT')
+  }
+  db.exec(`
+    -- ajustes locais de paginação (tela de paginação): um registro por ajuste, para revisores e
+    -- diagramador mexerem ao mesmo tempo sem sobrescrever um ao outro (dados: JSON do ajuste)
+    CREATE TABLE IF NOT EXISTS publicacao_ajustes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      publicacao_id INTEGER NOT NULL REFERENCES publicacoes(id) ON DELETE CASCADE,
+      dados TEXT NOT NULL,
+      autor TEXT,
+      criado_em TEXT NOT NULL,
+      atualizado_em TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_publicacao_ajustes_pub ON publicacao_ajustes(publicacao_id);
+  `)
+  db.exec(`
+    -- configurações compartilhadas (ex.: "institucional": Mesa e créditos da Câmara)
+    CREATE TABLE IF NOT EXISTS configuracoes (
+      chave TEXT PRIMARY KEY,
+      valor TEXT,
+      atualizado_em TEXT NOT NULL
+    );
+  `)
   db.exec(`
     CREATE TABLE IF NOT EXISTS usuarios (
       id TEXT PRIMARY KEY,
@@ -648,7 +684,7 @@ function registrarNormandoApi(app, db) {
         UPDATE publicacoes SET
           titulo = ?, edicao = ?, organizador = ?, lancado_em = ?,
           descricao = ?, caminho_rede = ?, cor_capa = ?, status = ?,
-          ultima_edicao = ?, atualizado_em = ?, revisao = revisao + 1
+          ultima_edicao = ?, pretextuais = ?, atualizado_em = ?, revisao = revisao + 1
         WHERE id = ? AND revisao = ?
       `).run(
         dados.titulo ?? atual.titulo,
@@ -660,6 +696,8 @@ function registrarNormandoApi(app, db) {
         dados.cor_capa || null,
         dados.status || 'previsto',
         dados.ultima_edicao ? 1 : 0,
+        // versões antigas do app não mandam o campo: mantém o que está salvo
+        dados.pretextuais === undefined ? atual.pretextuais : textoJson(dados.pretextuais),
         agora,
         atual.id,
         atual.revisao,
@@ -668,6 +706,34 @@ function registrarNormandoApi(app, db) {
       if (Array.isArray(dados.secoes)) salvarSecoes(db, atual.id, dados.secoes)
     })()
     res.json(buscarPublicacao(db, atual.id))
+  })
+
+  // ── ajustes locais de paginação ──
+  const ajusteDaLinha = r => ({ ...(lerJson(r.dados) || {}), id: r.id, autor: r.autor, criado_em: r.criado_em, atualizado_em: r.atualizado_em })
+  app.get('/api/publicacoes/:id/ajustes', (req, res) => {
+    const linhas = db.prepare('SELECT * FROM publicacao_ajustes WHERE publicacao_id = ? ORDER BY id').all(req.params.id)
+    res.json(linhas.map(ajusteDaLinha))
+  })
+  app.post('/api/publicacoes/:id/ajustes', (req, res) => {
+    const { ajuste, autor } = req.body || {}
+    if (!ajuste?.tipo) return res.status(400).json({ error: 'Ajuste sem tipo.' })
+    const agora = new Date().toISOString()
+    const { id, autor: _a, criado_em, atualizado_em, ...dados } = ajuste
+    const novo = Number(db.prepare('INSERT INTO publicacao_ajustes (publicacao_id, dados, autor, criado_em, atualizado_em) VALUES (?, ?, ?, ?, ?)')
+      .run(req.params.id, JSON.stringify(dados), autor || null, agora, agora).lastInsertRowid)
+    res.status(201).json(ajusteDaLinha(db.prepare('SELECT * FROM publicacao_ajustes WHERE id = ?').get(novo)))
+  })
+  app.put('/api/publicacoes/:id/ajustes/:ajusteId', (req, res) => {
+    const { ajuste, autor } = req.body || {}
+    const { id, autor: _a, criado_em, atualizado_em, ...dados } = ajuste || {}
+    const r = db.prepare('UPDATE publicacao_ajustes SET dados = ?, autor = COALESCE(?, autor), atualizado_em = ? WHERE id = ? AND publicacao_id = ?')
+      .run(JSON.stringify(dados), autor || null, new Date().toISOString(), req.params.ajusteId, req.params.id)
+    if (!r.changes) return res.status(404).json({ error: 'Ajuste não encontrado.' })
+    res.json(ajusteDaLinha(db.prepare('SELECT * FROM publicacao_ajustes WHERE id = ?').get(req.params.ajusteId)))
+  })
+  app.delete('/api/publicacoes/:id/ajustes/:ajusteId', (req, res) => {
+    db.prepare('DELETE FROM publicacao_ajustes WHERE id = ? AND publicacao_id = ?').run(req.params.ajusteId, req.params.id)
+    res.json({ ok: true })
   })
 
   app.delete('/api/publicacoes/:id', (req, res) => {
@@ -682,8 +748,8 @@ function registrarNormandoApi(app, db) {
     const id = Number(db.prepare(`
       INSERT INTO publicacoes (
         titulo, edicao, organizador, lancado_em, descricao, caminho_rede,
-        cor_capa, status, ultima_edicao, criado_em, atualizado_em, revisao
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        cor_capa, status, ultima_edicao, pretextuais, criado_em, atualizado_em, revisao
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `).run(
       `Cópia de ${original.titulo}`,
       original.edicao,
@@ -694,11 +760,26 @@ function registrarNormandoApi(app, db) {
       original.cor_capa,
       original.status,
       original.ultima_edicao ? 1 : 0,
+      original.pretextuais ?? null,
       agora,
       agora,
     ).lastInsertRowid)
     salvarSecoes(db, id, original.secoes)
     res.status(201).json(buscarPublicacao(db, id))
+  })
+
+  app.get('/api/configuracoes/:chave', (req, res) => {
+    const linha = db.prepare('SELECT chave, valor, atualizado_em FROM configuracoes WHERE chave = ?').get(req.params.chave)
+    res.json(linha ? { ...linha, valor: lerJson(linha.valor) } : { chave: req.params.chave, valor: null })
+  })
+
+  app.put('/api/configuracoes/:chave', (req, res) => {
+    const agora = new Date().toISOString()
+    db.prepare(`
+      INSERT INTO configuracoes (chave, valor, atualizado_em) VALUES (?, ?, ?)
+      ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor, atualizado_em = excluded.atualizado_em
+    `).run(req.params.chave, textoJson(req.body?.valor), agora)
+    res.json({ chave: req.params.chave, valor: req.body?.valor ?? null, atualizado_em: agora })
   })
 
   app.get('/api/usuarios', (req, res) => {
