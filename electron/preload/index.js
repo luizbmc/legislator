@@ -147,6 +147,59 @@ contextBridge.exposeInMainWorld('legislator', {
         ? ipcRenderer.invoke('railway:exportar:publicacao:indesign', id)
         : ipcRenderer.invoke('exportar:publicacao:indesign', id)
     ),
+    exportarIdml: async (id, opcoes = {}) => (
+      await usarRailway()
+        ? ipcRenderer.invoke('railway:exportar:publicacao:idml', id, opcoes)
+        : ipcRenderer.invoke('exportar:publicacao:idml', id, opcoes)
+    ),
+    exportarIdmlAtualizacao: async (id, opcoes = {}) => (
+      await usarRailway()
+        ? ipcRenderer.invoke('railway:exportar:publicacao:idml-atualizar', id, opcoes)
+        : ipcRenderer.invoke('exportar:publicacao:idml-atualizar', id, opcoes)
+    ),
+    // tela de paginação: abre a sessão (composição completa, ~1 min) e devolve o modelo das páginas
+    paginacao: {
+      abrir: async id => (await usarRailway()
+        ? { chave: `railway:${id}`, modelo: await ipcRenderer.invoke('railway:paginacao:abrir', id) }
+        : { chave: `local:${id}`, modelo: await ipcRenderer.invoke('paginacao:abrir', id) }),
+      aplicar: (chave, itens) => ipcRenderer.invoke('paginacao:aplicar', chave, itens),
+      alternativas: (chave, i) => ipcRenderer.invoke('paginacao:alternativas', chave, i),
+      fechar: chave => ipcRenderer.invoke('paginacao:fechar', chave),
+      // PDF com a paginação da tela (a da sessão aberta)
+      pdf: (chave, opcoes = {}) => ipcRenderer.invoke('paginacao:pdf', chave, opcoes),
+      idml: chave => ipcRenderer.invoke('paginacao:idml', chave),
+    },
+    // ajustes locais de paginação (tela de paginação)
+    ajustes: {
+      listar: id => invokeDados('publicacoes:ajustes:listar', 'GET', `/api/publicacoes/${id}/ajustes`, [id]),
+      criar: (id, ajuste, autor) => invokeDados('publicacoes:ajustes:criar', 'POST', `/api/publicacoes/${id}/ajustes`, [id, { ajuste, autor }], { ajuste, autor }),
+      atualizar: (id, ajusteId, ajuste, autor) => invokeDados('publicacoes:ajustes:atualizar', 'PUT', `/api/publicacoes/${id}/ajustes/${ajusteId}`, [id, ajusteId, { ajuste, autor }], { ajuste, autor }),
+      excluir: (id, ajusteId) => invokeDados('publicacoes:ajustes:excluir', 'DELETE', `/api/publicacoes/${id}/ajustes/${ajusteId}`, [id, ajusteId]),
+    },
+    pastaDoLivro: id => ipcRenderer.invoke('publicacoes:livro:pasta', id),
+    escolherLivro: (id, opcoes) => ipcRenderer.invoke('publicacoes:livro:escolher', id, opcoes),
+    pretextuaisDoLivro: id => ipcRenderer.invoke('publicacoes:livro:pretextuais', id),
+    mesaDosLivros: () => ipcRenderer.invoke('livros:mesa'),
+    pretextuaisDoModelo: (publicacao, institucional) => ipcRenderer.invoke('publicacoes:pretextuais:modelo', publicacao, institucional),
+    exportarPdf: async (id, opcoes = {}) => (
+      await usarRailway()
+        ? ipcRenderer.invoke('railway:exportar:publicacao:pdf', id, opcoes)
+        : ipcRenderer.invoke('exportar:publicacao:pdf', id, opcoes)
+    ),
+    // andamento da geração do PDF ({ texto, fracao, fim }); devolve a função que para de ouvir
+    aoProgressoPdf: cb => {
+      const f = (_, p) => cb(p)
+      ipcRenderer.on('pdf:progresso', f)
+      return () => ipcRenderer.removeListener('pdf:progresso', f)
+    },
+  },
+  configuracoes: {
+    buscar: chave => invokeDados(
+      'configuracoes:buscar', 'GET', `/api/configuracoes/${encodeURIComponent(chave)}`, [chave],
+    ),
+    salvar: (chave, valor) => invokeDados(
+      'configuracoes:salvar', 'PUT', `/api/configuracoes/${encodeURIComponent(chave)}`, [chave, valor], { valor },
+    ),
   },
   backup: {
     exportarBanco: async () => (

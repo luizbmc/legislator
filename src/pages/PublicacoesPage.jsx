@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import logoNormando from '../logo.png'
 import UsuarioAtualBadge from '../components/UsuarioAtualBadge.jsx'
+import { FORMATOS_PUBLICACAO, FORMATO_PADRAO, rotuloDoFormato } from '../constants/formatoPublicacao.js'
 
 const STATUS_MAP = {
   'previsto':     { cls: 'previsto',   label: 'Previsto' },
@@ -20,6 +21,7 @@ const FORM_PUBLICACAO_VAZIO = {
   lancado_em: '',
   descricao: '',
   caminho_rede: '',
+  formato: FORMATO_PADRAO,
   status: 'previsto',
   cor_capa: '',
   ultima_edicao: false,
@@ -98,6 +100,7 @@ export default function PublicacoesPage({ usuarioAtual, onTrocarUsuario }) {
         lancado_em: origem.lancado_em || '',
         descricao: origem.descricao || '',
         caminho_rede: origem.caminho_rede || '',
+        formato: origem.formato || FORMATO_PADRAO,
         status: origem.status || 'previsto',
         cor_capa: origem.cor_capa || '',
         ultima_edicao: Boolean(origem.ultima_edicao),
@@ -193,10 +196,13 @@ export default function PublicacoesPage({ usuarioAtual, onTrocarUsuario }) {
           {lista.map(p => (
             <div
               key={p.id}
-              className="norma-card pub-card"
+              className={`norma-card pub-card${p.formato ? ` pub-card-${p.formato}` : ''}`}
               style={coverStyle(p.cor_capa)}
               onClick={() => nav(`/publicacoes/${p.id}`)}
             >
+              {rotuloDoFormato(p.formato) && (
+                <span className="pub-formato-tag" title={`Formato: ${rotuloDoFormato(p.formato)}`}>{rotuloDoFormato(p.formato)}</span>
+              )}
               <div className="norma-card-top">
                 <span className={`pub-status pub-status-${statusInfo(p.status).cls}`}>
                   {statusInfo(p.status).label}
@@ -234,6 +240,7 @@ export default function PublicacoesPage({ usuarioAtual, onTrocarUsuario }) {
                 <div className="catalog-list-main">
                   <div className="catalog-list-kicker">
                     <span className={`pub-status pub-status-${st.cls}`}>{st.label}</span>
+                    {rotuloDoFormato(p.formato) && <span>{rotuloDoFormato(p.formato)}</span>}
                     <span>{p.total_normas} norma{p.total_normas !== 1 ? 's' : ''}</span>
                   </div>
                   <div className="catalog-list-title">{p.titulo}</div>
@@ -280,6 +287,12 @@ export default function PublicacoesPage({ usuarioAtual, onTrocarUsuario }) {
                   />
                   <span>Última edição</span>
                 </label>
+              </div>
+              <div className="campo">
+                <label>Formato</label>
+                <select value={form.formato || FORMATO_PADRAO} onChange={set('formato')}>
+                  {FORMATOS_PUBLICACAO.map(f => <option key={f.valor} value={f.valor}>{f.rotulo}</option>)}
+                </select>
               </div>
               <div className="campo">
                 <label>Organizador <span className="campo-opcional">(opcional)</span></label>

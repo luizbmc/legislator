@@ -1,0 +1,20 @@
+{
+  "origem": "legised.idml",
+  "criadoEm": "2026-10-15T17:17:14.787Z",
+  "mestraMiolo": "ub7",
+  "camada": "ub6",
+  "ultimoSpread": "Spreads/Spread_u78c03.xml",
+  "spreadFinal": "Spreads/Spread_u87294.xml",
+  "paginasPreTextuais": 10,
+  "paginasFinais": 1,
+  "pretextuais": {
+    "mesa": "u36d",
+    "conselho": "u7953d",
+    "rosto": "u881c3",
+    "creditos": "u3b6",
+    "ficha": "u3e2",
+    "direitos": "u7f65a",
+    "colofao": "u828e1",
+    "sumario": "u3cc"
+  }
+}

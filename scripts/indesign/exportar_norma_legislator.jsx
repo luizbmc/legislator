@@ -25,7 +25,8 @@
   var PARAGRAPH_TAGS = [
     "Epigrafe", "EpigrafeApelido", "NotaTitulo", "Ementa", "ParagrafoAbertura", "ParagrafoFacoSaber", "AberturaCapitulo",
     "Divisao", "Secao", "Artigo", "ArtigoTitulo", "CorpoTratado", "NomeJuridico", "Paragrafo",
-    "Inciso", "Alinea", "Item", "Citacao", "Tabela", "Data", "Assinatura"
+    "Inciso", "Alinea", "Item", "Citacao", "Tabela", "Data", "Assinatura",
+    "TextoTitulo", "TextoSubtitulo", "TextoCorrido", "TextoRecuado", "TextoBullets", "TextoAssinatura"
   ];
   var CHARACTER_TAGS = ["Rotulo", "b", "i", "Regular", "Nota", "NotaRodape", "sup", "sub", "u", "s"];
 
@@ -382,6 +383,14 @@
     var text = paragraphPlainText(paragraph, nextParagraph);
     var inTitSubtit = paragraphStyleHasAnyGroup(paragraph, ["tit-subtit", "tit-substit"]);
     var inCorpoLegis = paragraphStyleHasGroup(paragraph, "corpo-legis");
+
+    // Estilos de texto comum usados nas publicacoes diagramadas no InDesign.
+    if (name === "ass-autor" || name === "ass-autor-final" || name === "ass-cargo") return "TextoAssinatura";
+    if (startsWithText(name, "corpo-artigo")) return "TextoCorrido";
+    if (name === "epigrafe-artigo") return "TextoTitulo";
+    if (name === "recuado-artigo") return "TextoRecuado";
+    if (name === "bullet-artigo-lista" || name === "bullet-artigo") return "TextoBullets";
+    if (name === "topico-artigo" || name === "topico-artigo-sem-rec") return "TextoSubtitulo";
 
     if (inTitSubtit && startsWithText(name, "epigrafe-apelido")) return "EpigrafeApelido";
     if (inTitSubtit && startsWithText(name, "ep\u00edgrafe-apelido")) return "EpigrafeApelido";

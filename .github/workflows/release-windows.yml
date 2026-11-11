@@ -34,6 +34,19 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
+      # o typst.exe (38 MB) não fica no git; ver build/typst/LEIA-ME.txt
+      - name: Baixar o Typst (compositor dos PDFs)
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP "typst.zip"
+          $dir = Join-Path $env:RUNNER_TEMP "typst"
+          Invoke-WebRequest -Uri "https://github.com/typst/typst/releases/download/v0.14.0/typst-x86_64-pc-windows-msvc.zip" -OutFile $zip
+          Expand-Archive $zip -DestinationPath $dir -Force
+          $exe = Get-ChildItem $dir -Recurse -Filter typst.exe | Select-Object -First 1
+          if (-not $exe) { throw "typst.exe não encontrado no zip." }
+          Copy-Item $exe.FullName "build/typst/typst.exe" -Force
+          & "build/typst/typst.exe" --version
+
       - name: Preparar conexão padrão com o Railway
         shell: pwsh
         env:

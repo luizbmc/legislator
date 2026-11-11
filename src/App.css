@@ -5465,6 +5465,43 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   transform: translateY(-2px);
 }
 
+/* formato bolso: capa 20% menor, centralizada na célula da grade */
+.pub-card.pub-card-bolso {
+  width: 80%;
+  min-height: 248px;
+  justify-self: center;
+  align-self: center;
+  padding: 14px 12px 12px 26px;
+}
+
+.pub-card.pub-card-bolso .norma-epigrafe {
+  margin-top: 18px;
+  font-size: 13px;
+}
+
+/* etiqueta do formato na faixa da lombada (lida de baixo para cima, como numa lombada) */
+.pub-formato-tag {
+  position: absolute;
+  z-index: 2;
+  left: 3px;
+  bottom: 12px;
+  width: 16px;
+  padding: 6px 0;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, .82);
+  color: color-mix(in srgb, var(--pub-cover-color) 30%, #1f2937);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  line-height: 16px;
+  text-align: center;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .pub-card .norma-card-top,
 .pub-card .pub-contagem-row,
 .pub-card .norma-epigrafe,
@@ -5612,6 +5649,15 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
 .pub-meta-descricao {
   grid-column: 1 / -1;
 }
+
+/* ── Páginas pré-textuais (IDML) ───────────────────────────────── */
+.pub-pretextuais-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pub-pretextuais-toggle { display: flex; align-items: baseline; gap: 12px; background: none; border: 0; padding: 0; cursor: pointer; color: inherit; font: inherit; }
+.pub-pretextuais-resumo { font-size: 12.5px; color: var(--text-muted); }
+.pub-pretextuais-dica { font-size: 12.5px; color: var(--text-muted); margin: 12px 0 4px; }
+.pub-pretextuais-grupo h3 { font-size: 13px; font-weight: 700; margin: 16px 4px 8px; }
+.pub-pretextuais-grupo .campo input::placeholder, .pub-pretextuais-grupo .campo textarea::placeholder { color: var(--text-muted); opacity: .75; }
+.pub-pretextuais-erro { color: #b42318; font-size: 13px; margin: 4px; }
 
 /* ── Cor da capa ───────────────────────────────────────────────── */
 .pub-cover-section {
@@ -7113,3 +7159,32 @@ button.railway-item:hover,
     grid-template-columns: 1fr;
   }
 }
+
+/* folha técnica (FolhaTecnica.jsx) e Mesa diretora (MesaDiretora.jsx) */
+.pub-folha-tecnica-acoes { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.folha-tecnica-linha { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto auto auto; gap: 6px; margin: 0 4px 6px; }
+.folha-tecnica-linha input { min-width: 0; }
+.mesa-diretora { display: flex; flex-direction: column; gap: 6px; max-width: 720px; }
+.mesa-diretora-linha { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 6px; }
+.mesa-diretora-grupo { grid-column: 1 / -1; font-size: 12.5px; font-style: italic; color: var(--text-muted); margin-top: 8px; }
+.pub-pasta-livro { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; flex-wrap: wrap; }
+.pub-pasta-livro-rotulo { font-weight: 600; }
+.pub-pasta-livro-caminho { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60ch; }
+
+/* barra de progresso da geração do PDF (ProgressoPdf.jsx) */
+.progresso-pdf-fundo { z-index: 2000; }
+.progresso-pdf { width: min(520px, 92vw); padding: 20px 24px; display: flex; flex-direction: column; gap: 12px; }
+.progresso-pdf h3 { margin: 0; font-size: 16px; }
+.progresso-pdf-barra { height: 10px; border-radius: 5px; background: var(--border, #ddd); overflow: hidden; }
+.progresso-pdf-cheio { height: 100%; background: var(--accent, #2f6fdf); transition: width .4s ease; }
+.progresso-pdf-linha { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.progresso-pdf-linha span:last-child { color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.progresso-pdf-dica { margin: 0; font-size: 12px; color: var(--text-muted); }
+
+/* exceções de hifenização (HifenizacaoExcecoes.jsx) */
+.hifen-excecoes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.hifen-excecoes textarea { width: 100%; font-family: Consolas, monospace; font-size: 13px; }
+.hifen-excecoes-previa { font-size: 12.5px; max-height: 340px; overflow: auto; }
+.hifen-excecoes-previa ul { margin: 0; padding-left: 16px; }
+.hifen-excecoes .pub-pretextuais-erro, .hifen-excecoes .pub-pretextuais-dica, .hifen-excecoes .form-acoes { grid-column: 1 / -1; }
+@media (max-width: 760px) { .hifen-excecoes { grid-template-columns: 1fr; } }

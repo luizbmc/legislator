@@ -1013,7 +1013,7 @@ function renderReferencesPanel(referencias) {
           ${escHtml(citacao.text)}
         </button>
       `).join('')
-      : '<span class="reference-cite-empty">Nenhuma citação vinculada.</span>'
+      : '<span class="reference-cite-empty">⚠️ Nenhuma citação vinculada.</span>'
     return `
       <article class="reference-item" data-ref-card="${ref.index}">
         <button type="button" class="reference-main" data-ref-index="${ref.index}">

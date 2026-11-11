@@ -1,0 +1,3 @@
+Typst 0.14.0 (https://github.com/typst/typst/releases/tag/v0.14.0), typst-x86_64-pc-windows-msvc.zip.
+Usado pelo Normando para compor o PDF de revisão (electron/main/services/pdf/).
+O typst.exe não vai para o git: baixe o zip da versão acima e copie typst.exe para esta pasta.

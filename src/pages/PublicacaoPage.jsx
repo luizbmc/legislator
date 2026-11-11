@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
+import { lerPretextuais } from '../components/PretextuaisPublicacao.jsx'
+import FolhaTecnica from '../components/FolhaTecnica.jsx'
+import ProgressoPdf from '../components/ProgressoPdf.jsx'
 import { useParams, useNavigate } from 'react-router-dom'
 import { isTipoTextoComum, isTipoTratado, TIPOS_NORMA } from '../constants/normas.js'
+import { FORMATOS_PUBLICACAO } from '../constants/formatoPublicacao.js'
 
 const COVER_COLORS = [
   'hsl(0 42% 78%)',
@@ -100,6 +104,42 @@ function primeiraNormaComAtualizacaoPendente(secoes = []) {
     }
   }
   return null
+}
+
+/** Mensagem de fim da atualização de edição: o que foi mantido, gerado de novo ou acrescentado. */
+function resumoAtualizacaoIdml({ filePath, base, relatorio: r = {} }) {
+  const acao = { 'mantida': 'mantida', 'gerada de novo': 'gerada de novo', 'acrescida': 'acrescida' }
+  const linhas = [
+    `Nova edição salva em:\n${filePath}`,
+    `(a partir de ${base})`,
+    '',
+    ...(r.partes || []).map(p => `• ${p.titulo.slice(0, 70)} — ${acao[p.acao] || p.acao}` +
+      (p.paginasAntes != null ? ` (${p.paginasAntes} → ${p.paginas} p.)` : '')),
+  ]
+  if (r.pretextuais?.length) linhas.push('', `Pré-textuais: ${r.pretextuais.join('; ')}`)
+  if (r.avisos?.length) linhas.push('', ...r.avisos.map(a => `⚠ ${a}`))
+  linhas.push('', 'No InDesign: confira as partes geradas de novo, apague páginas que sobrarem no fim de cada uma e atualize o sumário (Layout › Atualizar sumário).')
+  return linhas.join('\n')
+}
+
+/** Mensagem de fim da exportação IDML: o que entrou, o que ficou de fora e o que fazer no InDesign. */
+function resumoExportacaoIdml({ filePath, relatorio: r = {} }) {
+  const linhas = [
+    `IDML salvo em:\n${filePath}`,
+    '',
+    `${r.normas} norma(s), ${r.paragrafos} parágrafos, ${r.aberturas} abertura(s) de seção` +
+      `${r.tabelas ? `, ${r.tabelas} tabela(s)` : ''}${r.notasRodape ? `, ${r.notasRodape} nota(s) de rodapé` : ''}.`,
+    `${r.paginas} páginas (o miolo foi estimado; o InDesign acrescenta ou remove páginas ao compor).`,
+  ]
+  if (r.puladas?.length) {
+    linhas.push('', `Ficaram de fora ${r.puladas.length} norma(s):`)
+    for (const p of r.puladas.slice(0, 12)) linhas.push(`• ${p.epigrafe} — ${p.motivo}`)
+    if (r.puladas.length > 12) linhas.push(`• … e mais ${r.puladas.length - 12}`)
+  }
+  const ausentes = Object.keys(r.estilosAusentes || {})
+  if (ausentes.length) linhas.push('', `Estilos que não existem no modelo (usado texto-lei): ${ausentes.join(', ')}`)
+  linhas.push('', 'No InDesign: abra o .idml e atualize o sumário (Layout › Atualizar sumário).')
+  return linhas.join('\n')
 }
 
 function textoInlineRecorte(content = []) {
@@ -846,9 +886,26 @@ export default function PublicacaoPage({ usuarioAtual }) {
   const nav    = useNavigate()
 
   const [pub,       setPub]       = useState(null)
-  const [form,      setForm]      = useState({ titulo: '', edicao: '', organizador: '', lancado_em: '', descricao: '', caminho_rede: '', status: 'previsto', cor_capa: DEFAULT_COVER_COLOR, ultima_edicao: false })
+  const [modalFolha, setModalFolha] = useState(false)
+  const [pastaLivro, setPastaLivro] = useState(null)
+  useEffect(() => {
+    window.legislator.publicacoes.pastaDoLivro?.(parseInt(id)).then(p => setPastaLivro(p || null)).catch(() => setPastaLivro(null))
+  }, [id])
+  async function escolherPastaLivro() {
+    try {
+      const r = await window.legislator.publicacoes.escolherLivro(parseInt(id))
+      if (r?.ok) setPastaLivro(r.pasta)
+    } catch (e) { alert(e?.message || String(e)) }
+  }
+  async function removerPastaLivro() {
+    if (!confirm('Tirar a pasta do livro desta publicação? O PDF, a paginação e o IDML voltam a sair só com o que está no Normando, e as pré-textuais com o modelo do Normando.')) return
+    await window.legislator.publicacoes.escolherLivro(parseInt(id), { remover: true })
+    setPastaLivro(null)
+  }
+  const [form,      setForm]      = useState({ titulo: '', edicao: '', organizador: '', lancado_em: '', descricao: '', caminho_rede: '', formato: '', status: 'previsto', cor_capa: DEFAULT_COVER_COLOR, ultima_edicao: false, pretextuais: {} })
   const [secoes,    setSecoes]    = useState([])
   const [salvando,  setSalvando]  = useState(false)
+  const [gerandoPdf, setGerandoPdf] = useState(false)
   const [modificado,setModificado]= useState(false)
   const [estruturaModificada, setEstruturaModificada] = useState(false)
   const [modalSaidaSemSalvar, setModalSaidaSemSalvar] = useState(false)
@@ -897,9 +954,11 @@ export default function PublicacaoPage({ usuarioAtual }) {
       lancado_em:  data.lancado_em  ?? '',
       descricao:   data.descricao   ?? '',
       caminho_rede: data.caminho_rede ?? '',
+      formato:     data.formato     ?? '',
       status:      data.status      ?? 'previsto',
       cor_capa:    data.cor_capa    ?? DEFAULT_COVER_COLOR,
       ultima_edicao: Boolean(data.ultima_edicao),
+      pretextuais: lerPretextuais(data.pretextuais),
     })
     setSecoes(data.secoes ?? [])
     setModificado(false)
@@ -1265,6 +1324,40 @@ export default function PublicacaoPage({ usuarioAtual }) {
           alert('Todas as normas estão configuradas como Ignorar. Nada foi exportado.')
         }
       }
+      if (tipo === 'idml') {
+        const result = await window.legislator.publicacoes.exportarIdml(parseInt(id))
+        if (result?.ok) alert(resumoExportacaoIdml(result))
+      }
+      if (tipo === 'idml-atualizar') {
+        const result = await window.legislator.publicacoes.exportarIdmlAtualizacao(parseInt(id))
+        if (result?.ok) alert(resumoAtualizacaoIdml(result))
+      }
+      if (tipo === 'livro') {
+        const atual = await window.legislator.publicacoes.pastaDoLivro(parseInt(id))
+        if (atual && confirm(`Esta publicação usa a pasta do livro:\n${atual}\n\nOK: tirar a pasta (volta a sair só o que está no Normando).\nCancelar: escolher outra.`)) {
+          await window.legislator.publicacoes.escolherLivro(parseInt(id), { remover: true })
+          return
+        }
+        const result = await window.legislator.publicacoes.escolherLivro(parseInt(id))
+        if (result?.ok) alert(`Pasta do livro definida:\n${result.pasta}\n\nO PDF de revisão, a tela de paginação e o IDML ajustado agora saem com o livro completo.`)
+      }
+      if (tipo === 'pdf' || tipo === 'pdf-grafica') {
+        const grafica = tipo === 'pdf-grafica'
+        setGerandoPdf(grafica ? 'grafica' : true)
+        try {
+          const result = await window.legislator.publicacoes.exportarPdf(parseInt(id), grafica ? { grafica: true } : {})
+          const puladas = result?.relatorio?.puladas || []
+          // PDF para a gráfica: aviso de pasta do livro sem o livro-sangria.pdf
+          const avisos = grafica ? (result?.relatorio?.avisos || []).filter(a => /sangria/i.test(a)) : []
+          if (result?.ok && (puladas.length || avisos.length)) {
+            alert(`${grafica ? 'PDF para a gráfica' : 'PDF de revisão'} salvo em:\n${result.filePath}` +
+              (puladas.length ? `\n\nFicaram de fora ${puladas.length} norma(s):\n` + puladas.slice(0, 12).map(p => `• ${p.epigrafe} — ${p.motivo}`).join('\n') : '') +
+              (avisos.length ? '\n\n' + avisos.join('\n') : ''))
+          }
+        } finally {
+          setGerandoPdf(false)
+        }
+      }
     } catch (err) {
       alert(err?.message || 'Não foi possível exportar a publicação.')
     }
@@ -1332,11 +1425,16 @@ export default function PublicacaoPage({ usuarioAtual }) {
         </div>
 
         <div className="editor-acoes">
+          <button className="btn-ghost" onClick={() => nav(`/publicacoes/${id}/paginacao`)} title="Ver os espelhos e fazer ajustes locais de paginação">📐 Paginação</button>
           <div className="dropdown">
             <button className="btn-ghost">⬇ Exportar ▾</button>
             <div className="dropdown-menu">
               <button onClick={() => exportar('word')}>Word</button>
               <button onClick={() => exportar('indesign')}>InDesign</button>
+              <button onClick={() => exportar('idml')}>IDML (livro)</button>
+              <button onClick={() => exportar('idml-atualizar')} title="Parte do IDML da edição anterior: mantém as partes marcadas como Ignorar, gera de novo as Completas e acrescenta as de Atualização">IDML — atualizar edição anterior…</button>
+              <button onClick={() => exportar('pdf')} disabled={!!gerandoPdf}>{gerandoPdf ? 'Gerando PDF…' : 'PDF de revisão'}</button>
+              <button onClick={() => exportar('pdf-grafica')} disabled={!!gerandoPdf} title="PDF de impressão: sangria de 5 mm, marcas de corte e informação da página, sem os comentários da conferência">PDF para a gráfica</button>
             </div>
           </div>
           <button
@@ -1374,12 +1472,38 @@ export default function PublicacaoPage({ usuarioAtual }) {
               </label>
             </div>
             <div className="campo">
+              <label>Formato</label>
+              <select value={form.formato || ''} onChange={setField('formato')}>
+                {/* publicações antigas, sem formato: nada escolhido até o usuário definir */}
+                <option value="" disabled hidden>Selecione…</option>
+                {FORMATOS_PUBLICACAO.map(f => <option key={f.valor} value={f.valor}>{f.rotulo}</option>)}
+              </select>
+            </div>
+            <div className="campo">
               <label>Organizador</label>
               <input value={form.organizador} onChange={setField('organizador')} placeholder="Nome do organizador" />
             </div>
             <div className="campo">
               <label>Lançado em</label>
               <input type="date" value={form.lancado_em} onChange={setField('lancado_em')} />
+            </div>
+            <div className="campo">
+              <label>Atualizado até</label>
+              <input
+                type="date"
+                value={form.pretextuais?.atualizadoAte || ''}
+                onChange={e => { const v = e.target.value; setForm(f => ({ ...f, pretextuais: { ...(f.pretextuais || {}), atualizadoAte: v } })); marcarModificado() }}
+                title="Aparece na folha de rosto e na ficha dos livros que mostram a data de atualização (ex.: Regimento)"
+              />
+            </div>
+            <div className="campo pub-meta-descricao">
+              <label>Título no rosto (opcional, uma linha por linha)</label>
+              <textarea
+                rows={2}
+                value={form.pretextuais?.tituloRosto || ''}
+                onChange={e => { const v = e.target.value; setForm(f => ({ ...f, pretextuais: { ...(f.pretextuais || {}), tituloRosto: v } })); marcarModificado() }}
+                placeholder="Vazio: o título dividido em até 3 linhas (só no modelo do Normando; o livro com pasta mantém o título dele)"
+              />
             </div>
             <div className="campo pub-meta-descricao">
               <label>Descrição</label>
@@ -1404,7 +1528,35 @@ export default function PublicacaoPage({ usuarioAtual }) {
               </select>
             </div>
           </div>
+          <div className="pub-folha-tecnica-acoes">
+            <button type="button" className="btn-ghost" onClick={() => setModalFolha(true)}
+              title="Créditos, informações editoriais, ficha catalográfica, direitos e endereço">
+              Folha técnica…
+            </button>
+            {form.pretextuais?.folhaTecnica && <span className="pub-pretextuais-resumo">preenchida</span>}
+          </div>
+          <div className="pub-pasta-livro">
+            <span className="pub-pasta-livro-rotulo">Pasta do livro:</span>
+            <span className="pub-pasta-livro-caminho" title={pastaLivro || ''}>
+              {pastaLivro || 'nenhuma — as pré-textuais saem do modelo do Normando'}
+            </span>
+            <button type="button" className="btn-ghost" onClick={escolherPastaLivro}
+              title="Pasta preparada no InDesign (preparar_livro_normando.jsx): o PDF, a paginação e o IDML saem com as pré-textuais, as partes mantidas e o índice do livro">
+              {pastaLivro ? 'Trocar…' : 'Escolher…'}
+            </button>
+            {pastaLivro && <button type="button" className="btn-ghost" onClick={removerPastaLivro}>Remover</button>}
+          </div>
         </section>
+        <ProgressoPdf ativo={!!gerandoPdf} titulo={gerandoPdf === 'grafica' ? 'Gerando o PDF para a gráfica' : 'Gerando o PDF de revisão'} />
+        {modalFolha && (
+          <FolhaTecnica
+            publicacaoId={parseInt(id)}
+            publicacao={form}
+            valor={form.pretextuais?.folhaTecnica}
+            onFechar={() => setModalFolha(false)}
+            onSalvar={ft => { setForm(f => ({ ...f, pretextuais: { ...(f.pretextuais || {}), folhaTecnica: ft } })); marcarModificado() }}
+          />
+        )}
 
         {/* ── Seções ────────────────────────────────────────────── */}
         <section className="pub-cover-section">
@@ -1422,6 +1574,7 @@ export default function PublicacaoPage({ usuarioAtual }) {
             ))}
           </div>
         </section>
+
 
         <section className="pub-secoes-section">
           <div className="pub-secoes-header">

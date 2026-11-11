@@ -7,6 +7,7 @@ import Rotinas          from './pages/Rotinas.jsx'
 import Configuracoes    from './pages/Configuracoes.jsx'
 import PublicacoesPage  from './pages/PublicacoesPage.jsx'
 import PublicacaoPage   from './pages/PublicacaoPage.jsx'
+import PaginacaoPage   from './pages/PaginacaoPage.jsx'
 import {
   carregarUsuarioComentarioAtual,
   carregarUsuariosComentarios,
@@ -147,6 +148,7 @@ export default function App() {
         <Route path="/rotinas"            element={<Rotinas />} />
         <Route path="/publicacoes"        element={<PublicacoesPage usuarioAtual={usuarioAtual} onTrocarUsuario={trocarUsuario} />} />
         <Route path="/publicacoes/:id"    element={<PublicacaoPage usuarioAtual={usuarioAtual} />} />
+        <Route path="/publicacoes/:id/paginacao" element={<PaginacaoPage usuarioAtual={usuarioAtual} />} />
       </Routes>
     </HashRouter>
   )

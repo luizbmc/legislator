@@ -1,3 +1,5 @@
+import MesaDiretora from '../components/MesaDiretora.jsx'
+import HifenizacaoExcecoes from '../components/HifenizacaoExcecoes.jsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TIPOS_NORMA } from '../constants/normas.js'
@@ -1428,6 +1430,12 @@ export default function Configuracoes() {
           <button type="button" className={aba === 'caracteres' ? 'ativo' : ''} onClick={() => { setAba('caracteres'); setEdicao(null) }}>
             Estilos de caractere
           </button>
+          <button type="button" className={aba === 'mesa' ? 'ativo' : ''} onClick={() => { setAba('mesa'); setEdicao(null) }}>
+            Mesa diretora
+          </button>
+          <button type="button" className={aba === 'hifenizacao' ? 'ativo' : ''} onClick={() => { setAba('hifenizacao'); setEdicao(null) }}>
+            Hifenização
+          </button>
           <button type="button" className={aba === 'usuarios' ? 'ativo' : ''} onClick={() => { setAba('usuarios'); setEdicao(null) }}>
             Usuarios
           </button>
@@ -1447,9 +1455,13 @@ export default function Configuracoes() {
 
         <div className="config-content">
           <div className="config-pref-intro">
-            <h2>{aba === 'backup' ? 'Backup e restauração' : aba === 'remoto' ? 'Retirada e devolução' : aba === 'railway' ? 'Banco compartilhado' : aba === 'atualizacoes' ? 'Atualizações do aplicativo' : 'Preferências de estilo'}</h2>
+            <h2>{aba === 'hifenizacao' ? 'Hifenização' : aba === 'mesa' ? 'Páginas pré-textuais' : aba === 'backup' ? 'Backup e restauração' : aba === 'remoto' ? 'Retirada e devolução' : aba === 'railway' ? 'Banco compartilhado' : aba === 'atualizacoes' ? 'Atualizações do aplicativo' : 'Preferências de estilo'}</h2>
             <p>
-              {aba === 'backup'
+              {aba === 'hifenizacao'
+                ? 'Palavras com os pontos de divisão definidos pelo usuário, para todas as publicações.'
+                : aba === 'mesa'
+                ? 'Mesa da Câmara comum a todas as publicações exportadas com a pasta do livro.'
+                : aba === 'backup'
                 ? 'Crie cópias de segurança do banco local e restaure um arquivo de backup quando necessário.'
                 : aba === 'remoto'
                   ? 'Leve normas selecionadas para outro computador e devolva as edições sem substituir alterações feitas no escritório.'
@@ -1461,7 +1473,11 @@ export default function Configuracoes() {
             </p>
           </div>
 
-          {aba === 'backup' ? (
+          {aba === 'hifenizacao' ? (
+            <HifenizacaoExcecoes />
+          ) : aba === 'mesa' ? (
+            <MesaDiretora />
+          ) : aba === 'backup' ? (
             <BackupBanco />
           ) : aba === 'remoto' ? (
             <TrabalhoRemoto />

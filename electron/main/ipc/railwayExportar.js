@@ -258,6 +258,58 @@ export function registerRailwayExportarHandlers() {
     return { ok: true, pasta: pastaBase, gerados }
   })
 
+  // Mesa e créditos da Câmara (cadastro institucional); servidor antigo sem a rota: segue sem
+  const buscarInstitucional = () => getRailwayClient().requisitar('GET', '/api/configuracoes/institucional')
+    .then(r => r?.valor || {}).catch(() => ({}))
+
+  ipcMain.handle('railway:exportar:publicacao:idml', async (_, id, opcoes = {}) => {
+    await carregarExcecoes()
+    const publicacao = await buscarPublicacao(id)
+    assertPublicacaoExportavel(publicacao)
+    const { exportarIdmlComDialogo } = await import('../services/idml/salvarIdml.js')
+    return exportarIdmlComDialogo(publicacao, { institucional: await buscarInstitucional(), ...opcoes })
+  })
+
+  ipcMain.handle('railway:exportar:publicacao:idml-atualizar', async (_, id, opcoes = {}) => {
+    const publicacao = await buscarPublicacao(id)
+    assertPublicacaoExportavel(publicacao)
+    const { exportarAtualizacaoComDialogo } = await import('../services/idml/salvarIdml.js')
+    return exportarAtualizacaoComDialogo(publicacao, opcoes)
+  })
+
+  // exceções de hifenização do usuário (Configurações → Hifenização); servidor antigo sem a rota: sem exceções
+  const carregarExcecoes = async () => {
+    const { definirExcecoes } = await import('../services/pdf/hifenizacaoExcecoes.js')
+    definirExcecoes(await getRailwayClient().requisitar('GET', '/api/configuracoes/hifenizacao').then(r => r?.valor || {}).catch(() => ({})))
+  }
+
+  // ajustes locais de paginação; servidor antigo sem a rota: segue sem
+  const buscarAjustes = id => getRailwayClient().requisitar('GET', `/api/publicacoes/${id}/ajustes`)
+    .then(itens => ({ versao: 1, itens: Array.isArray(itens) ? itens : [] })).catch(() => ({ versao: 1, itens: [] }))
+
+  ipcMain.handle('railway:paginacao:abrir', async (_, id) => {
+    await carregarExcecoes()
+    const publicacao = await buscarPublicacao(id)
+    assertPublicacaoExportavel(publicacao)
+    const { abrirSessao } = await import('../services/pdf/sessaoPaginacao.js')
+    const { pastaModeloNormando } = await import('../services/idml/salvarIdml.js')
+    const { executavelTypst } = await import('../services/pdf/salvarPdf.js')
+    const { itens } = await buscarAjustes(id)
+    const { opcoesDoLivro } = await import('../services/idml/livroBase.js')
+    const doLivro = await opcoesDoLivro(publicacao, pastaModeloNormando())
+    const s = await abrirSessao(`railway:${id}`, doLivro?.publicacaoPlano ?? publicacao, { ...doLivro?.opcoes, institucional: await buscarInstitucional(), pastaModelo: doLivro?.opcoes.pastaModelo ?? pastaModeloNormando(), typst: executavelTypst() })
+    // ajustes salvos valem para o formato normal: fora dele, as páginas são outras
+    return s.aplicar(doLivro?.opcoes.formato?.cabeco ? [] : itens)
+  })
+
+  ipcMain.handle('railway:exportar:publicacao:pdf', async (evento, id, opcoes = {}) => {
+    await carregarExcecoes()
+    const publicacao = await buscarPublicacao(id)
+    assertPublicacaoExportavel(publicacao)
+    const { exportarPdfComDialogo } = await import('../services/pdf/salvarPdf.js')
+    return exportarPdfComDialogo(publicacao, { institucional: await buscarInstitucional(), ajustes: await buscarAjustes(id), ...opcoes, progresso: p => { if (!evento.sender.isDestroyed()) evento.sender.send('pdf:progresso', p) } })
+  })
+
   ipcMain.handle('railway:exportar:publicacao:indesign', async (_, id) => {
     const publicacao = await buscarPublicacao(id)
     assertPublicacaoExportavel(publicacao)

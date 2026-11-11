@@ -14,6 +14,12 @@ files:
 extraResources:
   - from: build/railway-default.json
     to: railway-default.json
+  # modelo da exportação IDML (scripts/idml/criar-modelo-normando.mjs)
+  - from: build/modelo-normando
+    to: modelo-normando
+  # compositor do PDF de revisão (Typst, Apache-2.0; LICENSE e NOTICE vão junto)
+  - from: build/typst
+    to: typst
 
 publish:
   provider: github

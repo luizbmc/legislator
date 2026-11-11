@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS publicacoes (
   lancado_em    TEXT,
   descricao     TEXT,
   caminho_rede  TEXT,
+  formato       TEXT,
   cor_capa      TEXT,
   status        TEXT DEFAULT 'previsto',
   ultima_edicao INTEGER DEFAULT 0,
@@ -315,6 +316,11 @@ async function init() {
   if (!colsPub.includes('caminho_rede')) {
     _sqlDb.exec('ALTER TABLE publicacoes ADD COLUMN caminho_rede TEXT')
     console.log('Migration: coluna caminho_rede adicionada a publicacoes')
+  }
+  // formato da publicação: normal, bolso, vade_mecum, outro
+  if (!colsPub.includes('formato')) {
+    _sqlDb.exec('ALTER TABLE publicacoes ADD COLUMN formato TEXT')
+    console.log('Migration: coluna formato adicionada a publicacoes')
   }
 
   const colsPubNormas = (_sqlDb.exec('PRAGMA table_info(publicacao_normas)')[0]?.values ?? []).map(v => v[1])

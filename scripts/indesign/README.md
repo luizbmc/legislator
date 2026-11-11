@@ -105,3 +105,13 @@ O script:
 - cria/atualiza as condicoes de modificacao e exclusao abaixo;
 - aplica condicoes aos paragrafos marcados no XML com `alterado="modificado"` ou `alterado="remocaoApos"`;
 - exibe um resumo com a quantidade de paragrafos inseridos e condicoes aplicadas.
+
+## `ajustes_finos_normando.jsx`
+
+Ajuste fino de linhas abertas, como o diagramador (mesmas regras do PDF do Normando).
+
+- mede o espaco entre palavras de cada linha dos paragrafos justificados (pela posicao dos caracteres, em relacao ao espaco da ultima linha do paragrafo);
+- linha acima de 170%: tenta apertar o paragrafo (tracking -3 a -12, espaco entre palavras 97%), aceitando so o passo que mantem o numero de linhas;
+- marca os paragrafos alterados com a condicao `Normando - ajuste fino`;
+- grava `<documento>_ajustes-finos.txt` ao lado do documento, com o tempo de execucao, os alterados e os sem solucao;
+- tudo num unico Desfazer; `SOMENTE_MEDIR = true` (no topo) so mede, sem alterar.

@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS publicacoes (
   lancado_em    TEXT,
   descricao     TEXT,
   caminho_rede  TEXT,
+  formato       TEXT,
   status        TEXT NOT NULL DEFAULT 'previsto',
   ultima_edicao INTEGER NOT NULL DEFAULT 0,
   criado_em     TEXT NOT NULL DEFAULT (datetime('now')),
@@ -320,6 +321,14 @@ export async function initDatabase() {
     _sqlDb.exec('ALTER TABLE publicacoes ADD COLUMN cor_capa TEXT')
     console.log('Migration: coluna cor_capa adicionada a publicacoes')
   }
+  if (!colsPub.includes('pretextuais')) {
+    _sqlDb.exec('ALTER TABLE publicacoes ADD COLUMN pretextuais TEXT')
+    console.log('Migration: coluna pretextuais adicionada a publicacoes')
+  }
+  // configurações compartilhadas (ex.: "institucional": Mesa e créditos da Câmara)
+  _sqlDb.exec('CREATE TABLE IF NOT EXISTS configuracoes (chave TEXT PRIMARY KEY, valor TEXT, atualizado_em TEXT NOT NULL)')
+  // ajustes locais de paginação (tela de paginação): um registro por ajuste
+  _sqlDb.exec('CREATE TABLE IF NOT EXISTS publicacao_ajustes (id INTEGER PRIMARY KEY AUTOINCREMENT, publicacao_id INTEGER NOT NULL, dados TEXT NOT NULL, autor TEXT, criado_em TEXT NOT NULL, atualizado_em TEXT NOT NULL)')
   if (!colsPub.includes('ultima_edicao')) {
     _sqlDb.exec('ALTER TABLE publicacoes ADD COLUMN ultima_edicao INTEGER NOT NULL DEFAULT 0')
     console.log('Migration: coluna ultima_edicao adicionada a publicacoes')
@@ -327,6 +336,11 @@ export async function initDatabase() {
   if (!colsPub.includes('caminho_rede')) {
     _sqlDb.exec('ALTER TABLE publicacoes ADD COLUMN caminho_rede TEXT')
     console.log('Migration: coluna caminho_rede adicionada a publicacoes')
+  }
+  // formato da publicação: normal, bolso, vade_mecum, outro (miniatura da capa e etiqueta na lombada)
+  if (!colsPub.includes('formato')) {
+    _sqlDb.exec('ALTER TABLE publicacoes ADD COLUMN formato TEXT')
+    console.log('Migration: coluna formato adicionada a publicacoes')
   }
 
   const colsPubNormas = (_sqlDb.exec('PRAGMA table_info(publicacao_normas)')[0]?.values ?? [])

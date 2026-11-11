@@ -1,6 +1,8 @@
 node_modules/
 out/
 dist/
+out-comparador/
+dist-comparador*/
 server-data/
 secrets/
 railway-remoto.json
@@ -13,3 +15,12 @@ railway-remoto.json
 
 .env
 .DS_Store
+
+# compositor do PDF de revisão (38 MB) — ver build/typst/LEIA-ME.txt
+build/typst/typst.exe
+
+# PDFs e pastas de teste locais (grandes)
+PDF output/
+
+# arquivos temporários do Word
+~$*

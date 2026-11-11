@@ -33,6 +33,10 @@ function prepararEsquema(db) {
   if (!colunaExiste(db, 'publicacoes', 'pretextuais')) {
     db.exec('ALTER TABLE publicacoes ADD COLUMN pretextuais TEXT')
   }
+  // formato da publicação: normal, bolso, vade_mecum, outro (miniatura da capa e etiqueta na lombada)
+  if (!colunaExiste(db, 'publicacoes', 'formato')) {
+    db.exec('ALTER TABLE publicacoes ADD COLUMN formato TEXT')
+  }
   db.exec(`
     -- ajustes locais de paginação (tela de paginação): um registro por ajuste, para revisores e
     -- diagramador mexerem ao mesmo tempo sem sobrescrever um ao outro (dados: JSON do ajuste)
@@ -650,9 +654,9 @@ function registrarNormandoApi(app, db) {
     const agora = new Date().toISOString()
     const id = Number(db.prepare(`
       INSERT INTO publicacoes (
-        titulo, edicao, organizador, lancado_em, descricao, caminho_rede,
+        titulo, edicao, organizador, lancado_em, descricao, caminho_rede, formato,
         cor_capa, status, ultima_edicao, criado_em, atualizado_em, revisao
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `).run(
       dados.titulo || '',
       dados.edicao || null,
@@ -660,6 +664,7 @@ function registrarNormandoApi(app, db) {
       dados.lancado_em || null,
       dados.descricao || null,
       dados.caminho_rede || null,
+      dados.formato || null,
       dados.cor_capa || null,
       dados.status || 'previsto',
       dados.ultima_edicao ? 1 : 0,
@@ -684,7 +689,7 @@ function registrarNormandoApi(app, db) {
         UPDATE publicacoes SET
           titulo = ?, edicao = ?, organizador = ?, lancado_em = ?,
           descricao = ?, caminho_rede = ?, cor_capa = ?, status = ?,
-          ultima_edicao = ?, pretextuais = ?, atualizado_em = ?, revisao = revisao + 1
+          ultima_edicao = ?, pretextuais = ?, formato = ?, atualizado_em = ?, revisao = revisao + 1
         WHERE id = ? AND revisao = ?
       `).run(
         dados.titulo ?? atual.titulo,
@@ -698,6 +703,7 @@ function registrarNormandoApi(app, db) {
         dados.ultima_edicao ? 1 : 0,
         // versões antigas do app não mandam o campo: mantém o que está salvo
         dados.pretextuais === undefined ? atual.pretextuais : textoJson(dados.pretextuais),
+        dados.formato === undefined ? (atual.formato ?? null) : (dados.formato || null),
         agora,
         atual.id,
         atual.revisao,
@@ -747,9 +753,9 @@ function registrarNormandoApi(app, db) {
     const agora = new Date().toISOString()
     const id = Number(db.prepare(`
       INSERT INTO publicacoes (
-        titulo, edicao, organizador, lancado_em, descricao, caminho_rede,
+        titulo, edicao, organizador, lancado_em, descricao, caminho_rede, formato,
         cor_capa, status, ultima_edicao, pretextuais, criado_em, atualizado_em, revisao
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `).run(
       `Cópia de ${original.titulo}`,
       original.edicao,
@@ -757,6 +763,7 @@ function registrarNormandoApi(app, db) {
       original.lancado_em,
       original.descricao,
       original.caminho_rede,
+      original.formato ?? null,
       original.cor_capa,
       original.status,
       original.ultima_edicao ? 1 : 0,
