@@ -27,7 +27,7 @@ export const PT_MM = 72 / 25.4
  * tirar o espaço sem quebra que deixa a linha anterior aberta.
  * `cabeco`: posição e estilo do fólio e dos cabeços, quando diferem do modelo (livroCompleto.js).
  */
-const PADRAO = { largura: 170 * PT_MM, altura: 255 * PT_MM, topo: 19 * PT_MM, baixo: 14 * PT_MM, dentro: 22 * PT_MM, fora: 17 * PT_MM, linha: 13.25, corpo: 9.5, ultimaLinha: 8, ultimaComplexa: 7, espacoMinimo: 82, apertada: 0.8, limiteAperto: 0.76, ajustesExtra: [], visivelMinimo: null, ultimaOcupacao: false, notaMaisUm: false, soltarNbsp: false, cabeco: null }
+const PADRAO = { largura: 170 * PT_MM, altura: 255 * PT_MM, topo: 19 * PT_MM, baixo: 14 * PT_MM, dentro: 22 * PT_MM, fora: 17 * PT_MM, linha: 13.25, corpo: 9.5, ultimaLinha: 8, ultimaComplexa: 7, espacoMinimo: 82, apertada: 0.8, limiteAperto: 0.76, ajustesExtra: [], visivelMinimo: null, ultimaOcupacao: false, notaMaisUm: false, soltarNbsp: false, epigrafeMetade: false, cabeco: null }
 export const formato = { ...PADRAO }
 export const definirFormato = f => { Object.assign(formato, PADRAO, f || {}) }
 /** Ocupação mínima da última linha (fração da largura) para um parágrafo de n linhas (formato com ultimaOcupacao). */

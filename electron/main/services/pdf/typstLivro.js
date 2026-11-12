@@ -240,7 +240,9 @@ function runsTypst(runs, estilos, notaEstilo) {
  * O texto vai em bloco de conteúdo ([…]), não em soma de strings: um parágrafo longo viraria uma
  * soma com milhares de termos, e o Typst estoura a pilha ao avaliá-la.
  */
-export function runsMarcados(runs, estilos, i, marcas, protegidas = null, { compostasLivres = null, inseparavel = null, seisLetras = null, quebras = null } = {}) {
+export function runsMarcados(runs, estilos, i, marcas, protegidas = null, { compostasLivres = null, inseparavel = null, seisLetras = null, quebras = null, estiloPar = null } = {}) {
+  // parágrafo já itálico pelo estilo (ementa): o itálico do estilo de caractere não impede a hifenização
+  const parItalico = italicoDoPar(estiloPar, estilos)
   // último run com texto: ganha também uma marca no fim do parágrafo, logo depois da última palavra
   // — sem ela, a linha com o resto da última palavra hifenizada não teria marca nenhuma
   const ultimoTexto = runs.reduce((u, r, ri) => (!r.nota && r.texto?.trim() ? ri : u), -1)
@@ -269,7 +271,7 @@ export function runsMarcados(runs, estilos, i, marcas, protegidas = null, { comp
         anterior = parte
         continue
       }
-      marcas.push({ palavra: parte, run: ri, espaco: anterior != null && !anterior.includes('\u2028') })
+      marcas.push({ palavra: parte, run: ri, espaco: anterior != null && !anterior.includes('\u2028'), italico: !parItalico && italicoDoRun(r, estilos) })
       // palavra protegida pela verificação (hífen no fim de página ímpar): sem hifenização
       const k = marcas.length - 1
       // palavra composta ("Salário-Educação", "nomeando-as"): quebra de preferência no hífen próprio —
@@ -296,6 +298,8 @@ export function runsMarcados(runs, estilos, i, marcas, protegidas = null, { comp
       } else {
         const base = strTexto(parte, { prefixoPreferido: !compostasLivres?.has(k), minLetras: seisLetras?.has(k) ? 6 : undefined })
         t = protegidas?.has(k) || composta ? `text(hyphenate: false, ${base})` : base
+        // itálico liberado pela verificação (linha aberta demais): hifeniza, por cima do estilo de caractere
+        if (!protegidas?.has(k) && !composta && (parItalico || compostasLivres?.has(k)) && italicoDoRun(r, estilos)) t = `text(hyphenate: true, ${base})`
       }
       pecas.push({ k, typ: `#metadata((${i}, ${k}))<w>#(${t})` })
       fimPalavra = pecas.length
@@ -318,6 +322,11 @@ export function runsMarcados(runs, estilos, i, marcas, protegidas = null, { comp
     return `#(${trecho(r, estilos, `[${markup}]`)})`
   }).join('')
 }
+
+// estilo de caractere itálico (não se hifeniza, salvo como último recurso de linha aberta demais)
+const italicoDoRun = (r, estilos) => !!r?.char && /italic|oblique/i.test(estilos.char(r.char).FontStyle || '')
+// estilo de parágrafo itálico por definição (ementa)
+export const italicoDoPar = (estilo, estilos) => !!estilo && /italic|oblique/i.test(estilos.par(estilo)?.FontStyle || '')
 
 export function trecho(r, estilos, s = strTexto(r.texto)) {
   if (!r.char) return s
@@ -509,7 +518,7 @@ export function documentoTypst(partes, estilos) {
         const marcas = []
         conteudo = runsMarcados(it.runs, estilos, it.i, marcas, rs.semHifen ? new Set(rs.semHifen) : null,
           { compostasLivres: rs.compostasLivres ? new Set(rs.compostasLivres) : null, inseparavel: rs.pilha?.nbsp || null, seisLetras: rs.seisLetras ? new Set(rs.seisLetras) : null,
-            quebras: modo === 'final' ? partes.quebras?.get(it.i) || null : null })
+            quebras: modo === 'final' ? partes.quebras?.get(it.i) || null : null, estiloPar: it.fn.estilo })
         if (modo === 'final') partes.linhas.set(it.i, { marcas, runs: it.runs, fn: it.fn })
       }
       if (modo === 'medir') {
@@ -817,6 +826,10 @@ function cabecoDoFormato(partes) {
       '    let modo = if modoAqui.len() > 0 { modoAqui.first().value } else if modoAntes.len() > 0 { modoAntes.last().value } else { "artigo" }',
       ...corrente('artigo-cab', 'art', 'none'),
       `    if modo == "artigo" and art != none { ${em(c.artigo.quadro, 'right', `text(${fonte(c.artigo, ', weight: 700, fill: cmyk(0%, 0%, 0%, 60%)')}, smallcaps(art))`)} }`,
+      // (norma com cabeço de título: o quadro da mestra dela, quando o livro tem — c.titulo)
+      // (mestra dessas normas sem quadro de cabeço na ímpar — c.tituloVazio: a ímpar fica sem cabeço)
+      c.tituloVazio ? '    else if modo != "artigo" { }' :
+      `    else if modo != "artigo" { ${em((c.titulo || c.direita).quadro, 'right', `text(${fonte(c.titulo || c.direita, `, fill: ${tinta(c.titulo || c.direita, 60)}`)}, upper(t))`)} }`,
       `    else { ${em(c.direita.quadro, 'right', `text(${fonte(c.direita, `, fill: ${tinta(c.direita, 60)}`)}, upper(t))`)} }`,
       '  }',
       '  return',
@@ -883,7 +896,7 @@ export function documentoTentativas(tentativas, estilos, { hifenizacao, marcasPo
     const fn = f(t.it.fn.estilo)
     const marcas = []
     const conteudo = runsMarcados(t.it.runs, estilos, t.id, marcas, t.semHifen ? new Set(t.semHifen) : null,
-      { compostasLivres: t.compostasLivres ? new Set(t.compostasLivres) : null, inseparavel: t.nbsp || null, quebras: t.quebras || null })
+      { compostasLivres: t.compostasLivres ? new Set(t.compostasLivres) : null, inseparavel: t.nbsp || null, quebras: t.quebras || null, estiloPar: t.it.fn.estilo })
     marcasPorId.set(t.id, marcas)
     const args = [`tr: ${t.tr}em`, `sp: ${t.sp}%`, `lf: ${t.lf ?? 1}`, 'plano: true']
     if (t.hc) args.push(`hc: ${t.hc}%`)

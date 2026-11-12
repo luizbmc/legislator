@@ -10,19 +10,19 @@ import { execFile } from 'child_process'
 import JSZip from 'jszip'
 import { prepararPublicacao } from '../idml/exportIdml.js'
 import { aplicarTextosDoIdml } from '../idml/textosDeIdml.js'
-import { acharDicionarioIndesign, prepararComposicao } from './composicaoLivro.js'
+import { acharDicionarioIndesign, prepararComposicao, pontoBomComposta } from './composicaoLivro.js'
 import { resolverAjustes } from './ajustesLocais.js'
 import { paragrafosDaPublicacao, novoRelatorio, aplicarGrep, soltarNbsp } from '../idml/historia.js'
 import { valoresDosCampos, aplicarCampos } from '../idml/pretextuais.js'
 import { aplicarPretextuaisDoLivro } from '../idml/pretextuaisLivro.js'
 import { lerEstilos } from './estilosModelo.js'
 import { documentoTypst, documentoLarguras, documentoTentativas, paragrafosDaStory, itensParaPaginacao, HIFENIZACAO, AJUSTES, ABRIR, aplicarFormato, definirCalibracao, ESPACO_MINIMO } from './typstLivro.js'
-import { semConferencia } from './mancha.js'
+import { semConferencia, formato } from './mancha.js'
 import { divisoes, candidatosPilha, pilhasConfirmadas } from './pilhas.js'
 import { itensConferencia, numeracaoDeLinhas, anotarPdf, palavrasParaTestar } from './conferencia.js'
 import { planejarPaginas } from './paginacao.js'
 import { SessaoPaginacao } from './sessaoPaginacao.js'
-import { montarLinhas, hifenizacao, pedidosDeLargura, aberturas, revisar, ABERTA, pedidosDePrefixos, listaHifenizacoes, pedidosHifenProprio } from './linhas.js'
+import { montarLinhas, hifenizacao, pedidosDeLargura, aberturas, revisar, ABERTA, LIBERAR_JA, pedidosDePrefixos, listaHifenizacoes, pedidosHifenProprio } from './linhas.js'
 
 // rodadas de verificação da composição (medir → paginar → compor → conferir as linhas): as
 // primeiras corrigem tudo; as seguintes, só hífens seguidos (até RODADAS_ESCADA a mais)
@@ -174,6 +174,58 @@ export async function gerarPdfPublicacao(publicacao, opcoes = {}) {
       rel.ajustes = { pedidos: (opcoes.ajustes?.itens || []).length, aplicados: manual.aplicados, naoEncontrados: manual.naoEncontrados }
       // passos de ajuste que o parágrafo ainda pode usar (sem os proibidos pela verificação)
       const permitidos = (passos, proibidos) => passos.filter(([t, s]) => !(proibidos || []).some(([pt, ps]) => Math.abs(pt - t) < 1e-6 && Math.abs(ps - s) < 1e-6))
+      // compostas liberadas que podem quebrar no hífen próprio (ver o uso, depois de revisar): tira a
+      // liberação e fixa o tracking/espaço que serve; devolve quantas
+      const voltarAoHifenProprio = (restricoes, plano, novos) => {
+        let n = 0
+        for (const [i, rs] of restricoes) {
+          if (!rs.compostasLivres?.length || !composicao.tem(i) || manualDe(i)?.tr != null) continue
+          const est = composicao.pars.get(i)
+          const compostas = new Set(est.atomos.flatMap(a => a.pecas || []).filter(p => p.composta).map(p => p.k))
+          const ks = rs.compostasLivres.filter(k => compostas.has(k) && !(rs.compostasNoHifen || []).includes(k) && !(rs.noHifenFalhou || []).includes(k))
+          if (!ks.length) continue
+          const pl = plano[i] || {}
+          const base = rsDe(i)
+          const atual = composicao.textos(i, { tr: pl.tr ?? 0, sp: pl.sp ?? 100, rs: base, base: baseHifen })
+          const sem = { ...base, compostasLivres: base.compostasLivres.filter(k => !ks.includes(k)) }
+          const igual = composicao.textos(i, { tr: pl.tr ?? 0, sp: pl.sp ?? 100, rs: sem, base: baseHifen })
+          // a liberação não mudou nada: nada a fazer
+          const texto = l => l.partes.map(q => q.t).join('')
+          if (igual.map(texto).join('|') === atual.map(texto).join('|')) continue
+          // só quando alguma composta ficou dividida fora do hífen próprio (linha terminada em hífen de
+          // hifenização, e a palavra dividida tem hífen entre letras)
+          // (só as divisões fora da regra das 4 letras: as outras são divisões comuns — pontoBomComposta)
+          const divididas = atual.map((l, n) => {
+            if (!l.hifen || !atual[n + 1]) return null
+            const pre = texto(l).split(' ').pop() || ''
+            const w = pre + (texto(atual[n + 1]).split(' ')[0] || '')
+            return /\p{L}[-‐]\p{L}/u.test(w) && !pontoBomComposta(w, pre.length) ? w : null
+          }).filter(Boolean)
+          if (!divididas.length) continue
+          // serve: mesmo nº de linhas, nenhuma acima de LIBERAR_JA nem apertada além do limite, e a
+          // composta quebra no hífen próprio ou cabe inteira na linha — descer inteira para a linha
+          // seguinte não é quebrar no hífen ("au-|sentar-se" fica melhor que "|ausentar-se")
+          const desceu = ls => ls.some((l, n) => n > 0 && divididas.includes(texto(l).split(' ')[0]))
+          const serve = ls => ls.length === atual.length && !desceu(ls) && ls.every(l => !l.justificada || (l.espaco <= LIBERAR_JA && l.espaco >= formato.apertada))
+          // (nunca um passo proibido pela verificação, nem o atual)
+          const passos = permitidos([[pl.tr ?? 0, pl.sp ?? 100], [0, 100], ...AJUSTES, ...ABRIR], rs.proibidos)
+          // de todos os passos que servem, o de menor abertura (a pior linha do parágrafo)
+          const pior = ls => Math.max(0, ...ls.filter(l => l.justificada).map(l => l.espaco))
+          let ok = null, melhor = Infinity
+          for (const [tr, sp] of passos) {
+            const ls = composicao.textos(i, { tr, sp, rs: sem, base: baseHifen })
+            if (serve(ls) && pior(ls) < melhor - 1e-6) { ok = [tr, sp]; melhor = pior(ls) }
+          }
+          if (!ok) continue
+          const novo = { ...restricoes.get(i), compostasLivres: rs.compostasLivres.filter(k => !ks.includes(k)), compostasNoHifen: [...new Set([...(rs.compostasNoHifen || []), ...ks])], fixo: { tr: ok[0], sp: ok[1] }, fixoHifen: true, semAperto: true }
+          delete novo.aperto
+          if (!novo.compostasLivres.length) delete novo.compostasLivres
+          restricoes.set(i, novo)
+          if (!novos.includes(i)) novos.push(i)
+          n++
+        }
+        return n
+      }
       const fixoDe = rs => rs.manual?.tr != null ? [rs.manual.tr, rs.manual.sp] : rs.fixo ? [rs.fixo.tr, rs.fixo.sp] : rs.aperto != null ? AJUSTES[rs.aperto] : rs.pilha?.tr != null ? [rs.pilha.tr, rs.pilha.sp] : null
       // quebras do compositor para a composição final, com o ajuste do plano
       const quebrasDoPlano = plano => {
@@ -361,6 +413,13 @@ export async function gerarPdfPublicacao(publicacao, opcoes = {}) {
         const restricoesDaRodada = structuredClone(restricoes)
         const { alterados: novos, ...resumoRodada } = revisar(hif, abert, plano, restricoes,
           { soEscada: rodada >= RODADAS, base: opcoes.hifenizacao ?? HIFENIZACAO })
+        // composta liberada: se ela pode quebrar no hífen próprio sem linha acima de LIBERAR_JA nem
+        // apertada além do limite (com o tracking/espaço de algum passo permitido, com o mesmo nº de
+        // linhas), quebra no hífen — a liberação fica só para quando o hífen não serve (regra do usuário)
+        if (composicao) {
+          const noHifen = voltarAoHifenProprio(restricoes, plano, novos)
+          if (noHifen) resumoRodada.compostasNoHifen = noHifen
+        }
         // acabaram as correções: o parágrafo que ficou aberto demais e pior do que já esteve (com o
         // mesmo nº de linhas, então sem mexer na paginação) volta àquela composição, com o tracking e
         // o espaço dela fixos
@@ -369,7 +428,11 @@ export async function gerarPdfPublicacao(publicacao, opcoes = {}) {
             const pior = abert.get(i)?.pior || 0
             const m = melhores.get(i)?.get(h.linhas)
             if (pior < (opcoes.limiteAberta ?? ABERTA) || !m || m.pior > pior - 0.03 || restricoes.get(i)?.restaurado || manual.porPar.get(i)?.tr != null) continue
-            restricoes.set(i, { ...m.rs, fixo: { tr: m.tr, sp: m.sp }, restaurado: { rodada: m.rodada, antes: m.pior, depois: pior } })
+            // as palavras já liberadas (compostas, prefixo, itálico) continuam liberadas: voltar à
+            // composição anterior não pode desfazer a liberação
+            const noHifen = restricoes.get(i)?.compostasNoHifen || []
+            const livres = [...new Set([...(m.rs.compostasLivres || []), ...(restricoes.get(i)?.compostasLivres || [])])].filter(k => !noHifen.includes(k))
+            restricoes.set(i, { ...m.rs, ...(livres.length ? { compostasLivres: livres } : {}), ...(noHifen.length ? { compostasNoHifen: noHifen } : {}), fixo: { tr: m.tr, sp: m.sp }, restaurado: { rodada: m.rodada, antes: m.pior, depois: pior } })
             if (!novos.includes(i)) novos.push(i)
             resumoRodada.restaurados = (resumoRodada.restaurados || 0) + 1
           }

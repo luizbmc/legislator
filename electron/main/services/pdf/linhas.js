@@ -219,12 +219,19 @@ export function hifenizacao(linhasPorPar, info, folio = p => p, largurasProprio 
       })
     }
     // palavra composta que abre a linha seguinte (desceu inteira): marca dela, por linha
+    // e composta dividida no próprio hífen ("Vices-|-Coordenadorias"): a parte que desceu também
+    // pode ser hifenizada ("Vices-Coordena-|dorias"), como no InDesign
     const compostaSeguinte = linhas.map((l, n) => {
       const prox = linhas[n + 1]
-      if (!prox?.inteira) return null
+      if (!prox) return null
+      if (!prox.inteira) {
+        const k = ultima(l)
+        return !hifens[n] && COMPOSTA.test(marcas[k]?.palavra || '') ? k : null
+      }
       const k = prox.ks[0]
-      // (ou palavra com prefixo, que também quebra de preferência num ponto só)
-      return COMPOSTA.test(marcas[k]?.palavra || '') || prefixoDe(marcas[k]?.palavra) ? k : null
+      // (ou palavra com prefixo, que também quebra de preferência num ponto só; ou em itálico de
+      // estilo de caractere, que não se hifeniza — melhor hifenizar que deixar a linha aberta demais)
+      return COMPOSTA.test(marcas[k]?.palavra || '') || prefixoDe(marcas[k]?.palavra) || marcas[k]?.italico ? k : null
     })
     // 1ª palavra de cada linha (a que desce quando a linha anterior fica aberta)
     const primeiras = linhas.map(l => l.ks[0] ?? null)
@@ -337,6 +344,9 @@ function passosAPartirDe(tr, sp) {
 // acima desta abertura, as palavras da linha e a que desceu dela podem ser hifenizadas com 6 letras
 // (o normal é 7 ou mais)
 export const SEIS_LETRAS = 1.9
+// acima desta abertura, a palavra composta, com prefixo ou em itálico que desceu inteira é liberada
+// para hifenização já na primeira correção (abaixo dela, só como último recurso)
+export const LIBERAR_JA = 2.1
 
 export function revisar(hif, abert, plano, restricoes, { soEscada = false, base = HIFENIZACAO } = {}) {
   const r = { linhas: 0, hifens: 0, escadas: 0, fimImpar: 0, linhasAbertas: 0, abertasAjuste: 0, apertos: 0, abertasJustificacao: 0 }
@@ -372,15 +382,40 @@ export function revisar(hif, abert, plano, restricoes, { soEscada = false, base 
       continue
     }
     if (soEscada || !a?.abertas) continue
+    // composta que voltou a quebrar no hífen próprio com tracking/espaço fixo (exportPdf): a linha
+    // aberta até LIBERAR_JA é aceita; acima disso, a composta volta a ser liberada
+    if (rs.fixoHifen) {
+      if (!(a.detalhes || []).some(d => d.razao > LIBERAR_JA)) continue
+      rs.compostasLivres = [...new Set([...(rs.compostasLivres || []), ...(rs.compostasNoHifen || [])])]
+      // (não se tenta de novo o hífen próprio dessas)
+      rs.noHifenFalhou = [...new Set([...(rs.noHifenFalhou || []), ...(rs.compostasNoHifen || [])])]
+      delete rs.compostasNoHifen; delete rs.fixo; delete rs.fixoHifen
+      restricoes.set(i, rs)
+      alterados.push(i)
+      continue
+    }
     // palavra composta ou com prefixo que desceu inteira e deixou a linha aberta demais: último
     // recurso (depois do aperto), ela pode ser hifenizada em qualquer ponto — a preferência é a quebra
     // no hífen próprio ou logo depois do prefixo
-    const compostas = a.quais.map(n => h.compostaSeguinte[n]).filter(k => k != null && !(rs.compostasLivres || []).includes(k))
+    // (compostasNoHifen: as que quebram no hífen próprio dentro dos limites — não voltam a ser liberadas)
+    const fora = k => (rs.compostasLivres || []).includes(k) || (rs.compostasNoHifen || []).includes(k)
+    const compostas = a.quais.map(n => h.compostaSeguinte[n]).filter(k => k != null && !fora(k))
     const liberarCompostas = () => {
       if (!compostas.length) return false
       r.compostas = (r.compostas || 0) + 1
       rs.compostasLivres = [...(rs.compostasLivres || []), ...compostas]
       return true
+    }
+    // linha acima de LIBERAR_JA (210%): a composta, a palavra com prefixo ou o itálico que desceu é
+    // liberado logo, sem esperar o aperto — hifenizar custa menos que esse espaçamento (regra do usuário)
+    const urgentes = (a.detalhes || []).filter(d => d.razao > LIBERAR_JA).map(d => h.compostaSeguinte[d.n])
+      .filter(k => k != null && !fora(k))
+    if (urgentes.length) {
+      r.compostas = (r.compostas || 0) + 1
+      rs.compostasLivres = [...new Set([...(rs.compostasLivres || []), ...urgentes])]
+      restricoes.set(i, rs)
+      alterados.push(i)
+      continue
     }
     const tr = pl.tr ?? 0, sp = pl.sp ?? 100
     const antes = JSON.stringify(rs)

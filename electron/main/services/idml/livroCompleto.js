@@ -144,6 +144,11 @@ export async function publicacaoDoLivro(baseBytes, publicacao, { paginasPartes =
   // livro dividido pelas epígrafes (Regimento): cabeço como no livro — o texto em `parte1` de cada
   // norma e, na página ímpar, o artigo ou o título conforme a mestra da página onde a norma começa
   const comArtigo = modo === 'epigrafe' && paginasPartes ? await cabecoArtigoPorPagina(zipLivro) : null
+  // página do livro onde começa cada norma da publicação
+  const inicios = normasDe(publicacao).filter(n => n.exportacao === 'completa').map(n => {
+    const p = parteDaNorma(partes, n.epigrafe)
+    return p ? Number(paginasPartes?.find(x => normalizar(x.titulo) === normalizar(p.titulo))?.pagina) : NaN
+  }).filter(Number.isFinite)
   const secoes = (publicacao.secoes || []).map(secao => ({
     ...secao,
     normas: (secao.normas || []).flatMap(norma => {
@@ -155,7 +160,18 @@ export async function publicacaoDoLivro(baseBytes, publicacao, { paginasPartes =
       if (i >= 0 && modo === 'epigrafe') {
         // a epígrafe é a da própria norma; do livro vem só o estilo (ex.: epigrafe-quebra)
         const pagina = paginasPartes?.find(x => normalizar(x.titulo) === normalizar(parte.titulo))?.pagina
-        const cabModo = comArtigo && pagina != null ? (comArtigo.get(Number(pagina)) ? 'artigo' : 'titulo') : null
+        // a mestra da maioria das páginas da norma (da 1ª até a véspera da norma seguinte): a página
+        // onde ela começa pode ser ainda a do fim da norma anterior, com a mestra dela
+        let cabModo = null
+        if (comArtigo && pagina != null) {
+          const ini = Number(pagina)
+          // (a norma seguinte da publicação — não a parte seguinte do livro: o título "Código de Ética"
+          // é uma parte dentro da Resolução nº 25 de 2001)
+          const prox = Math.min(...inicios.filter(p => p > ini), Infinity)
+          let sim = 0, nao = 0
+          for (let p = ini; p < Math.min(prox, ini + 2000); p++) { if (!comArtigo.has(p)) break; if (comArtigo.get(p)) sim++; else nao++ }
+          cabModo = sim === nao ? (comArtigo.get(ini) ? 'artigo' : 'titulo') : sim > nao ? 'artigo' : 'titulo'
+        }
         doc.content[i] = { ...doc.content[i], attrs: { ...doc.content[i].attrs, estiloIdml: parte.estilo, ...(cabModo ? { cabModo } : {}) } }
         marcarParte1(doc, parte1DoLivro(principal.xml.slice(parte.inicio, parte.fim)))
       } else if (i >= 0) {
@@ -310,6 +326,8 @@ export async function formatoDoLivro(baseBytes) {
     // mantida no meio para absorver, empurrou o resto do livro: 75% dá um ponto de folga (2026-11-10)
     f.visivelMinimo = 0.75
     f.soltarNbsp = true
+    // epígrafe nova com menos de meia mancha livre na página: começa na página seguinte
+    f.epigrafeMetade = true
   }
   // GREP dos estilos do texto (o que muda a largura das linhas)
   f.grep = {}
@@ -318,23 +336,39 @@ export async function formatoDoLivro(baseBytes) {
       .filter(g => g[1] !== 'nao-hifenizar').map(g => ({ char: g[1], expressao: decodificar(g[2]) }))
     if (lista.length) f.grep[decodeURIComponent(m[1])] = lista
   }
-  // quadros de fólio e cabeço da mestra, em coordenadas da página (origem no canto superior esquerdo)
-  const quadros = {}
-  for (const t of xml.matchAll(/<TextFrame Self="[^"]+" ParentStory="([^"]+)"[^>]*>[\s\S]*?<\/TextFrame>/g)) {
-    const historia = await ler(`Stories/Story_${t[1]}.xml`).catch(() => '')
-    const nome = historia.match(/AppliedParagraphStyle="ParagraphStyle\/pg-mestra%3a([^"]+)"/)?.[1]
-    if (!nome) continue
-    const it = attr(t[0].slice(0, t[0].indexOf('>')), 'ItemTransform').split(' ').map(Number)
-    const a = [...t[0].match(/<PathPointArray>[\s\S]*?<\/PathPointArray>/)[0].matchAll(/Anchor="([-\d.e]+) ([-\d.e]+)"/g)].map(m => [Number(m[1]) + it[4], Number(m[2]) + it[5]])
-    const x0 = Math.min(...a.map(p => p[0])), x1 = Math.max(...a.map(p => p[0])), y0 = Math.min(...a.map(p => p[1])), y1 = Math.max(...a.map(p => p[1]))
-    const q = { x: x0 < 0 ? x0 + largura : x0, y: y0 + altura / 2, w: x1 - x0, h: y1 - y0 }
-    quadros[nome] = q
+  // quadros de fólio e cabeço de uma mestra, em coordenadas da página (origem no canto superior esquerdo)
+  const quadrosDe = async xmlMestra => {
+    const quadros = {}
+    for (const t of xmlMestra.matchAll(/<TextFrame Self="[^"]+" ParentStory="([^"]+)"[^>]*>[\s\S]*?<\/TextFrame>/g)) {
+      const historia = await ler(`Stories/Story_${t[1]}.xml`).catch(() => '')
+      const nome = historia.match(/AppliedParagraphStyle="ParagraphStyle\/pg-mestra%3a([^"]+)"/)?.[1]
+      if (!nome) continue
+      const it = attr(t[0].slice(0, t[0].indexOf('>')), 'ItemTransform').split(' ').map(Number)
+      const a = [...t[0].match(/<PathPointArray>[\s\S]*?<\/PathPointArray>/)[0].matchAll(/Anchor="([-\d.e]+) ([-\d.e]+)"/g)].map(m => [Number(m[1]) + it[4], Number(m[2]) + it[5]])
+      const x0 = Math.min(...a.map(p => p[0])), x1 = Math.max(...a.map(p => p[0])), y0 = Math.min(...a.map(p => p[1])), y1 = Math.max(...a.map(p => p[1]))
+      quadros[nome] = { x: x0 < 0 ? x0 + largura : x0, y: y0 + altura / 2, w: x1 - x0, h: y1 - y0 }
+    }
+    return quadros
+  }
+  const quadros = await quadrosDe(xml)
+  // mestra das normas com cabeço de título (Regimento: "B", sem o quadro do artigo): o quadro do
+  // título à direita é o dela — o "cab-dir" da 1ª mestra pode estar em outro lugar
+  // (sem nenhum quadro de cabeço na ímpar, a página ímpar dessas normas fica sem cabeço)
+  let quadroTitulo = null, tituloVazio = false
+  for (const m of mestras.slice(1)) {
+    const q = await quadrosDe(await ler(m))
+    if (q['cab-art']) continue
+    if (q['cab-dir']) { quadroTitulo = q['cab-dir']; break }
+    tituloVazio = true
+    break
   }
   const num = estilo('pg-mestra%3anum-par')
   const c = n => ({ ...estilo(`pg-mestra%3a${n}`), quadro: quadros[n] })
   f.cabeco = {
     folio: { corpo: num.corpo || 8, tinta: num.tinta || 70, impar: { ...quadros['num-impar'], alinhar: 'right' }, par: { ...quadros['num-par'], alinhar: 'left' } },
     esquerda: c('cab-esq'), artigo: c('cab-art'), direita: c('cab-dir'),
+    ...(quadroTitulo ? { titulo: { ...estilo('pg-mestra%3acab-dir'), quadro: quadroTitulo } } : {}),
+    ...(tituloVazio ? { tituloVazio: true } : {}),
   }
   return f
 }

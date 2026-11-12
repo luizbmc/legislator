@@ -286,6 +286,11 @@ export function paragrafosDaPublicacao(publicacao, opcoes = {}, rel = novoRelato
         if ((ehEmenda || ehConstituicao) && b.type === 'notaTitulo') {
           for (const r of runs) r.char = r.char === 'nota novo formato' ? null : r.char === 'italico' ? 'italico light' : r.char
         }
+        // nota-titulos de qualquer norma ("…publicado no DOU de…"): o itálico é o light, na cor da nota
+        // (o "italico" comum sai mais escuro que o resto do parágrafo)
+        if (b.type === 'notaTitulo' || estilo === ESTILO.notaTitulo) {
+          for (const r of runs) if (r.char === 'italico') r.char = 'italico light'
+        }
         if (!estilo) { rel.ignorados[b.type] = (rel.ignorados[b.type] || 0) + 1; return }
         aposTitulo = b.type === 'textoComumTitulo' && !lista
         if (!runs.length) return   // parágrafo vazio

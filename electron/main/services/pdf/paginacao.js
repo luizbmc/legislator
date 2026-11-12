@@ -257,6 +257,9 @@ export function planejarPaginas(itens, medidas, paridadeInicial = 1, { semHifenI
       // fim de página pedido pelo usuário antes deste parágrafo
       if (!primeiro && u.fins?.has(0) && fim(m, 0, 0, false, true)) return
       if (!primeiro && u.it.quebra) { fim(m, 0, 0, true); return }
+      // bolso: a epígrafe só começa na página se sobra pelo menos metade da mancha; senão, vai para a
+      // próxima (regra do usuário, 2026-11-11) — o espaço que sobra conta com a entrelinha normal
+      if (!primeiro && formato.epigrafeMetade && u.it.inicioNorma && ALTURA - (fixo + variavel) < ALTURA / 2) { fim(m, 0, 0, true); return }
       if (!primeiro && !U[m - 1].sticky && !u.proibidas?.has(0)) fim(m, 0, 0, false)
       const esp = primeiro ? 0 : u.espaco
       if (primeiro && !u.tabela) { variavel -= u.L; fixo += u.asc }

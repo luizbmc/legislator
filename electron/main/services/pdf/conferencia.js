@@ -11,6 +11,7 @@
 
 import { prefixoDe, trechosProtegidos } from '../idml/translineacao.js'
 import { semConferencia } from './mancha.js'
+import { pontoBomComposta } from './composicaoLivro.js'
 
 const semConferenciaDe = inf => semConferencia(inf?.fn?.estilo)
 
@@ -130,9 +131,9 @@ export function itensConferencia({ ultima, restricoes, div, numerar, italico, ba
     const nao = m => `A palavra que desceu para a linha seguinte não pôde ser dividida: ${m}`
     if (w.includes(NBSP)) return nao(`“${w.replace(new RegExp(NBSP, 'g'), ' ')}” é um bloco unido por espaço sem quebra e não pode ser separado`)
     if ((w.match(/\p{Lu}/gu) || []).length >= 2) return nao(`“${w}” é sigla (não se hifeniza)`)
-    if (italico(runs[marcas[k].run])) return nao(`“${w}” está em itálico de estilo de caractere (não se hifeniza)`)
+    if ((marcas[k].italico ?? italico(runs[marcas[k].run])) && !livre) return nao(`“${w}” está em itálico de estilo de caractere (não se hifeniza)`)
     if ((rs.semHifen || []).includes(k)) return nao(`“${w}” foi protegida: hifenizada, cairia no fim de página ímpar`)
-    if (COMPOSTA.test(w) && !livre) return nao(`“${w}” é palavra composta e só quebra no hífen próprio, que não cabia na linha`)
+    if (COMPOSTA.test(w) && !livre) return nao(`“${w}” é palavra composta e só se divide no hífen próprio ou com 4 letras ou mais entre a divisão e o hífen, o que não cabia na linha`)
     if (prefixoDe(w) && !livre) return nao(`“${w}” só quebra logo depois do prefixo, que não cabia na linha`)
     const minimo = (rs.seisLetras || []).includes(k) ? 6 : 7
     if (letras.length < minimo) return nao(`“${w}” tem menos de ${minimo} letras (não se hifeniza${minimo === 6 ? ', nem com a exceção do espaçamento acima de 190%' : ''})`)
@@ -214,6 +215,9 @@ export function itensConferencia({ ultima, restricoes, div, numerar, italico, ba
       if (k == null) return
       const w = marcas[k].palavra
       if ((rs.compostasLivres || []).includes(k)) {
+        // composta dividida com 4 letras ou mais até o hífen próprio: divisão comum, sem comentário
+        const pd = div.get(`${i}:${n}`)
+        if (COMPOSTA.test(w) && pd != null && pontoBomComposta(w, pd)) return
         const tipo = COMPOSTA.test(w) ? 'palavra composta dividida fora do hífen próprio' : 'palavra com prefixo dividida fora do ponto depois do prefixo'
         novo('hifen', i, [n], `Hifenização: “${dividida(i, n, w)}”`,
           `É ${tipo}: inteira, ela deixava a linha anterior com espaçamento aberto demais, e apertar o parágrafo até o limite não resolveu.`)

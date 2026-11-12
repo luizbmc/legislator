@@ -170,10 +170,29 @@ function pecaDePalavra(t, run, k, e, estilos, dic, minimos, hifenizaMaiuscula, p
   return {
     k, t, run, segs, dicio, proprios, posPrefixo, excecao,
     hifen: pedir(e, run, '-'),
-    italico: /italic|oblique/i.test(c.FontStyle || ''),
+    // itálico de estilo de caractere não se hifeniza — salvo em parágrafo já itálico pelo estilo (ementa)
+    italico: /italic|oblique/i.test(c.FontStyle || '') && !/italic|oblique/i.test(estilos.par(e).FontStyle || ''),
     composta: /\p{L}[-‐]\p{L}/u.test(t),
     ...propsDoRun(run, e, estilos),
   }
+}
+
+/**
+ * Ponto de divisão p (índice em t) de uma palavra composta que não precisa de liberação (regra do
+ * usuário, 2026-11-11): o pedaço que começa a linha seguinte, até o próximo hífen ou o fim da
+ * palavra, tem mais de 3 letras; e, se há hífen próprio antes da divisão, o pedaço entre ele e a
+ * divisão também.
+ * "au-|sentar-se" (sentar), "téc-|nico-legislativo" (nico), "técnico-legis-|lativo" (legis, lativo): sim;
+ * "técni-|co-legislativo" (co), "técnico-legislati-|vo" (vo), "Relator-Par-|cial" (Par): não.
+ */
+export function pontoBomComposta(t, p) {
+  const letras = s => (s.match(/\p{L}/gu) || []).length
+  const antes = t.slice(0, p), depois = t.slice(p)
+  const hAntes = Math.max(antes.lastIndexOf('-'), antes.lastIndexOf('‐'))
+  const hDepois = [depois.indexOf('-'), depois.indexOf('‐')].filter(x => x >= 0)
+  if (hAntes >= 0 && letras(antes.slice(hAntes + 1)) <= 3) return false
+  if (letras(hDepois.length ? depois.slice(0, Math.min(...hDepois)) : depois) <= 3) return false
+  return true
 }
 
 class Composicao {
@@ -206,21 +225,25 @@ class Composicao {
       const todos = new Set([...peca.dicio, ...(peca.posPrefixo ? [peca.posPrefixo] : [])].filter(p => !proprio.has(p)))
       return { hifen: todos, proprio }
     }
-    if (semHifenPar || peca.italico) return { hifen: new Set(), proprio }
+    const livre = (rs.compostasLivres || []).includes(peca.k)
+    // itálico: só quando a verificação o liberou (linha aberta demais, último recurso)
+    if (semHifenPar || (peca.italico && !livre)) return { hifen: new Set(), proprio }
     // exceção do usuário: os pontos dela, sem as regras de translineação (fim de página ímpar ainda protege)
     if (peca.excecao) {
       if ((rs.semHifen || []).includes(peca.k)) return { hifen: new Set(), proprio: new Set() }
       return { hifen: new Set([...peca.excecao].filter(p => !proprio.has(p))), proprio }
     }
-    const livre = (rs.compostasLivres || []).includes(peca.k)
     // palavra protegida (fim de página ímpar): nem hifenização nem quebra no hífen próprio
     if ((rs.semHifen || []).includes(peca.k)) return { hifen: new Set(), proprio: new Set() }
-    if (peca.composta && !livre) return { hifen: new Set(), proprio }
     const seis = (rs.seisLetras || []).includes(peca.k)
     const prot = trechosProtegidos(peca.t, { vogais: true, regras: true, prefixoPreferido: !livre, ...(seis ? { minLetras: 6 } : {}) })
     const candidatos = new Set(peca.dicio)
     if (peca.posPrefixo && !livre) candidatos.add(peca.posPrefixo)
-    const hifen = new Set([...candidatos].filter(p => !proprio.has(p) && !prot.some(([a, b, h]) => a < p && p < b && !h?.includes(p))))
+    let hifen = new Set([...candidatos].filter(p => !proprio.has(p) && !prot.some(([a, b, h]) => a < p && p < b && !h?.includes(p))))
+    // palavra composta: além do hífen próprio, só os pontos com 4 letras ou mais entre a divisão e o
+    // hífen da palavra ("au-|sentar-se", "téc-|nico-legislativo", "técnico-legis-|lativo"); os outros
+    // ("técni-|co-legislativo", "Relator-Par-|cial") só quando a verificação libera a palavra
+    if (peca.composta && !livre) hifen = new Set([...hifen].filter(p => pontoBomComposta(peca.t, p)))
     return { hifen, proprio }
   }
 
