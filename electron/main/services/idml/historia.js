@@ -133,7 +133,8 @@ export function runsInline(nos = [], rel) {
     // texto vindo de um IDML (textosDeIdml.js) já traz o estilo de caractere
     const char = 'char' in no ? no.char : estiloDasMarcas(no.marks || [])
     if (no.marks?.some(m => m.type === 'subscript') && rel) rel.subscritos++
-    runs.push({ texto: no.text || '', char })
+    // tracking local do texto (título da parte tirado do livro, com o ajuste manual do InDesign)
+    runs.push({ texto: no.text || '', char, ...(no.tracking != null ? { tracking: no.tracking } : {}) })
   }
   return semColchetesNaChamada(juntar(runs))
 }
@@ -156,7 +157,7 @@ function juntar(runs) {
   const out = []
   for (const r of runs) {
     const ant = out[out.length - 1]
-    if (ant && !ant.nota && !r.nota && ant.char === r.char) ant.texto += r.texto
+    if (ant && !ant.nota && !r.nota && ant.char === r.char && ant.tracking === r.tracking) ant.texto += r.texto
     else out.push({ ...r })
   }
   return out

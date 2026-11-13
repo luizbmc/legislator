@@ -35,9 +35,10 @@ export async function escolherPastaDoLivro(id, { remover = false } = {}) {
 }
 
 /**
- * Ação de cada norma no livro: a Constituição (CF e ADCT) é gerada, as emendas são acrescentadas,
- * o resto fica como no InDesign. Num livro dividido pelas epígrafes (Regimento), `noLivro` são as
- * normas que o livro tem: elas são geradas e as outras ficam de fora (o de bolso tem só as normas
+ * Ação de cada norma no livro: todo o texto vem do Normando — cada norma que tem parte no livro é
+ * gerada inteira (CF, ADCT, emendas, tratados e convenções); do InDesign ficam só o projeto gráfico,
+ * as pré-textuais e o que não é norma. Num livro dividido pelas epígrafes (Regimento), `noLivro` são
+ * as normas que o livro tem: elas são geradas e as outras ficam de fora (o de bolso tem só as normas
  * principais). Não depende da "exportação" gravada na publicação.
  */
 const comAcoes = (publicacao, noLivro = null) => ({
@@ -46,8 +47,7 @@ const comAcoes = (publicacao, noLivro = null) => ({
     ...s,
     normas: (s.normas || []).map(n => ({
       ...n,
-      exportacao: noLivro ? (noLivro.has(n.id) ? 'completa' : 'ignorar')
-        : n.tipo === 'Constituição' ? 'completa' : n.tipo === 'Emenda Constitucional' ? 'atualizacao' : 'ignorar',
+      exportacao: noLivro && !noLivro.has(n.id) ? 'ignorar' : 'completa',
     })),
   })),
 })

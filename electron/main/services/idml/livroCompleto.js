@@ -67,6 +67,12 @@ function partesDaHistoria(xml, { modo = 'abertura', aceitar = () => true } = {})
       titulo: decodificar(textoDoXml(abertura)).replace(/\uFEFF/g, '').split('\n').filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(),
       estilo: decodeURIComponent(attr(psrs[k].abertura, 'AppliedParagraphStyle').replace('ParagraphStyle/', '')),
       char: abertura.match(/AppliedCharacterStyle="CharacterStyle\/(parte1)"/)?.[1] ?? null,
+      // tracking ajustado à mão no título (o mesmo em todos os trechos com texto): o título sai com ele
+      tracking: (() => {
+        const ts = [...abertura.matchAll(/<CharacterStyleRange ([^>]*)>([\s\S]*?)<\/CharacterStyleRange>/g)]
+          .filter(m => /<Content>[^<]*\S/.test(m[2])).map(m => attr(m[1], 'Tracking'))
+        return ts.length && ts.every(t => t && t === ts[0]) ? Number(ts[0]) : null
+      })(),
       inicio: psrs[k].inicio,
       fim: psrs[ate - 1].fim,
     }
@@ -175,11 +181,17 @@ export async function publicacaoDoLivro(baseBytes, publicacao, { paginasPartes =
         doc.content[i] = { ...doc.content[i], attrs: { ...doc.content[i].attrs, estiloIdml: parte.estilo, ...(cabModo ? { cabModo } : {}) } }
         marcarParte1(doc, parte1DoLivro(principal.xml.slice(parte.inicio, parte.fim)))
       } else if (i >= 0) {
-        doc.content[i] = {
-          ...doc.content[i],
-          attrs: { ...doc.content[i].attrs, estiloIdml: parte.estilo },
-          content: [{ type: 'text', text: parte.titulo, char: parte.char }],
+        // cabeço corrido: só o trecho do título em `parte1` no livro ("TRATADO DE MARRAQUECHE", sem o
+        // resto do título), como a variável "Epígrafe parte 1" do InDesign
+        let content = [{ type: 'text', text: parte.titulo, char: parte.char }]
+        const alvo = parte.char && parte1DoLivro(principal.xml.slice(parte.inicio, parte.fim))
+        const j = alvo ? parte.titulo.toLocaleLowerCase('pt-BR').indexOf(alvo.toLocaleLowerCase('pt-BR')) : -1
+        if (j >= 0) {
+          content = [parte.titulo.slice(0, j), parte.titulo.slice(j, j + alvo.length), parte.titulo.slice(j + alvo.length)]
+            .map((t, q) => t ? { type: 'text', text: t, ...(q === 1 ? { char: 'parte1' } : {}) } : null).filter(Boolean)
         }
+        if (parte.tracking != null) content = content.map(n => ({ ...n, tracking: parte.tracking }))
+        doc.content[i] = { ...doc.content[i], attrs: { ...doc.content[i].attrs, estiloIdml: parte.estilo }, content }
       }
       return [{ ...norma, conteudo_doc: JSON.stringify(doc) }]
     }),
@@ -189,9 +201,16 @@ export async function publicacaoDoLivro(baseBytes, publicacao, { paginasPartes =
 
 /** Primeiro texto em `parte1` (o que a variável do cabeço lê) num trecho da história do livro. */
 function parte1DoLivro(xml) {
-  for (const m of xml.matchAll(/<CharacterStyleRange AppliedCharacterStyle="CharacterStyle\/parte1"[^>]*>([\s\S]*?)<\/CharacterStyleRange>/g)) {
-    const t = decodificar([...m[1].matchAll(/<Content>([^<]*)<\/Content>/g)].map(c => c[1]).join('')).replace(INVISIVEIS, '').replace(/\s+/g, ' ').trim()
-    if (t) return t
+  const RE = /<CharacterStyleRange AppliedCharacterStyle="CharacterStyle\/parte1"[^>]*>([\s\S]*?)<\/CharacterStyleRange>/g
+  const texto = m => decodificar([...m[1].replace(/<Br\s*\/>/g, '<Content> </Content>').matchAll(/<Content>([^<]*)<\/Content>/g)].map(c => c[1]).join('')).replace(INVISIVEIS, '').replace(/\s+/g, ' ').trim()
+  for (const m of xml.matchAll(RE)) {
+    if (!texto(m)) continue
+    // o trecho pode vir em vários pedaços no mesmo parágrafo (quebra de linha, outro atributo):
+    // juntam-se todos os do parágrafo, como a variável do InDesign
+    const ini = xml.lastIndexOf('<ParagraphStyleRange', m.index)
+    const fim = xml.indexOf('</ParagraphStyleRange>', m.index)
+    const par = xml.slice(ini < 0 ? m.index : ini, fim < 0 ? undefined : fim)
+    return [...par.matchAll(RE)].map(texto).filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
   }
   return null
 }
@@ -346,7 +365,10 @@ export async function formatoDoLivro(baseBytes) {
       const it = attr(t[0].slice(0, t[0].indexOf('>')), 'ItemTransform').split(' ').map(Number)
       const a = [...t[0].match(/<PathPointArray>[\s\S]*?<\/PathPointArray>/)[0].matchAll(/Anchor="([-\d.e]+) ([-\d.e]+)"/g)].map(m => [Number(m[1]) + it[4], Number(m[2]) + it[5]])
       const x0 = Math.min(...a.map(p => p[0])), x1 = Math.max(...a.map(p => p[0])), y0 = Math.min(...a.map(p => p[1])), y1 = Math.max(...a.map(p => p[1]))
-      quadros[nome] = { x: x0 < 0 ? x0 + largura : x0, y: y0 + altura / 2, w: x1 - x0, h: y1 - y0 }
+      // alinhamento vertical do quadro (InDesign: topo, com a 1ª linha de base na ascendente da fonte)
+      const vj = t[0].match(/<TextFramePreference [^>]*VerticalJustification="([^"]+)"/)?.[1]
+      const vertical = vj === 'CenterAlign' ? 'centro' : vj === 'BottomAlign' ? 'baixo' : 'topo'
+      quadros[nome] = { x: x0 < 0 ? x0 + largura : x0, y: y0 + altura / 2, w: x1 - x0, h: y1 - y0, vertical }
     }
     return quadros
   }
@@ -488,7 +510,11 @@ export async function gerarLivroCompleto(baseBytes, publicacao, opcoes) {
     const caracteres = textoDoXml(xml).length
     const porPagina = CARACTERES_POR_PAGINA * (f.largura - f.dentro - f.fora) / 371.3 * (9.5 / f.corpo) * (f.altura - f.topo - f.baixo) / 629.3 * (13.25 / f.linha)
     const paginas = Math.ceil(caracteres / porPagina / 2) * 2
-    if (pars.length) acrescimo = { apos: Number(seguinte.pagina.anterior), fim: seguinte.pagina.fim ?? null, xml, paginas, posicao: p.fim, norma: p.norma, blocos: novos.flat(), titulo: p.titulo }
+    // último parágrafo que o livro já tem (ex.: a ementa da última emenda): a junção no PDF imita
+    // o espaço entre ele e o título da 1ª emenda nova
+    const conteudo = p.norma.doc?.content || []
+    const anterior = novos.length ? conteudo[conteudo.indexOf(novos[0][0]) - 1] ?? null : null
+    if (pars.length) acrescimo = { apos: Number(seguinte.pagina.anterior), fim: seguinte.pagina.fim ?? null, xml, paginas, posicao: p.fim, norma: p.norma, blocos: novos.flat(), anterior, titulo: p.titulo }
     rel.partes.push({ titulo: p.titulo, acao: 'acrescida', emendas: novos.map(titulo), paginas })
   })
 

@@ -329,6 +329,8 @@ const italicoDoRun = (r, estilos) => !!r?.char && /italic|oblique/i.test(estilos
 export const italicoDoPar = (estilo, estilos) => !!estilo && /italic|oblique/i.test(estilos.par(estilo)?.FontStyle || '')
 
 export function trecho(r, estilos, s = strTexto(r.texto)) {
+  // tracking local (milésimos de em, como no InDesign): substitui o do estilo
+  if (r.tracking != null) return `text(tracking: ${r.tracking / 1000}em, ${trecho({ ...r, tracking: null }, estilos, s)})`
   if (!r.char) return s
   const c = estilos.char(r.char)
   const args = argsTexto(c, estilos)
@@ -798,9 +800,12 @@ function cabecoDoFormato(partes) {
   const c = formato.cabeco
   if (!c) return []
   const tinta = (e, d) => `cmyk(0%, 0%, 0%, ${e.tinta ?? d}%)`
-  const em = (q, alinhar, conteudo) => `place(top + left, dx: ${q.x}pt, dy: ${q.y}pt, box(width: ${q.w}pt, height: ${q.h}pt, align(${alinhar} + top, ${conteudo})))`
-  const fonte = (e, resto = '') => `font: "Montserrat", size: ${e.corpo || 7.5}pt, tracking: ${(e.tracking || 0) / 1000}em, top-edge: "cap-height", bottom-edge: "baseline"${resto}`
-  const num = (q, alinhar) => `place(top + left, dx: ${q.x}pt, dy: ${q.y}pt, box(width: ${q.w}pt, height: ${q.h}pt, align(${alinhar} + horizon, text(font: "Montserrat", size: ${c.folio.corpo}pt, fill: cmyk(0%, 0%, 0%, ${c.folio.tinta}%), top-edge: "cap-height", bottom-edge: "baseline", num))))`
+  // quadro do InDesign alinhado no topo: 1ª linha de base na ascendente da fonte (top-edge
+  // "ascender"); centro/baixo conforme o quadro da mestra
+  const vert = q => q.vertical === 'centro' ? 'horizon' : q.vertical === 'baixo' ? 'bottom' : 'top'
+  const em = (q, alinhar, conteudo) => `place(top + left, dx: ${q.x}pt, dy: ${q.y}pt, box(width: ${q.w}pt, height: ${q.h}pt, align(${alinhar} + ${vert(q)}, ${conteudo})))`
+  const fonte = (e, resto = '') => `font: "Montserrat", size: ${e.corpo || 7.5}pt, tracking: ${(e.tracking || 0) / 1000}em, top-edge: "ascender", bottom-edge: "baseline"${resto}`
+  const num = (q, alinhar) => `place(top + left, dx: ${q.x}pt, dy: ${q.y}pt, box(width: ${q.w}pt, height: ${q.h}pt, align(${alinhar} + ${q.vertical ? vert(q) : 'horizon'}, text(font: "Montserrat", size: ${c.folio.corpo}pt, fill: cmyk(0%, 0%, 0%, ${c.folio.tinta}%), top-edge: "${q.vertical && q.vertical !== 'centro' ? 'ascender' : 'cap-height'}", bottom-edge: "baseline", num))))`
   // valor em vigor na página: o 1º marcado nela ou, sem nenhum, o último antes (como as variáveis
   // "primeiro na página" do InDesign)
   const corrente = (rotulo, nome, padrao) => [
@@ -850,7 +855,10 @@ function cabecoDoFormato(partes) {
     '    let artAntes = arts.filter(m => m.location().page() < pg)',
     '    let art = if t != "" { none } else if artAqui.len() > 0 { artAqui.first().value } else if artAntes.len() > 0 { artAntes.last().value } else { none }',
     `    if art != none { ${em(c.artigo.quadro, 'right', `text(${fonte(c.artigo, ', weight: 700, fill: cmyk(0%, 0%, 0%, 60%)')}, smallcaps(art))`)} }`,
-    `    else { ${em(c.direita.quadro, 'right', `text(${fonte(c.direita, `, fill: ${tinta(c.direita, 60)}`)}, upper(t))`)} }`,
+    // título na ímpar: o quadro da mestra das páginas de título (c.titulo), quando o livro tem
+    // um — o cab-dir da mestra A pode estar em outro lugar (CF de bolso: ADCT)
+    c.tituloVazio ? '    else { }' :
+    `    else { ${em((c.titulo || c.direita).quadro, 'right', `text(${fonte(c.titulo || c.direita, `, fill: ${tinta(c.titulo || c.direita, 60)}`)}, upper(t))`)} }`,
     '  }',
     '  return',
   ]

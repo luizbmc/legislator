@@ -26,7 +26,9 @@ function folio(n) {
   const c = formato.cabeco?.folio
   if (!c) return `#place(top + left, dx: ${n % 2 ? '156.2mm' : '4.1mm'}, dy: 7.9mm, box(${CAIXA}, align(center + horizon, text(font: "Montserrat", weight: 500, size: 8.5pt, fill: cmyk(0%, 0%, 0%, 60%), top-edge: "cap-height", bottom-edge: "baseline", ${str(n)}))))`
   const q = n % 2 ? c.impar : c.par
-  return `#place(top + left, dx: ${q.x}pt, dy: ${q.y}pt, box(width: ${q.w}pt, height: ${q.h}pt, fill: cmyk(0%, 0%, 0%, 0%), align(${q.alinhar} + horizon, text(font: "Montserrat", size: ${c.corpo}pt, fill: cmyk(0%, 0%, 0%, ${c.tinta}%), top-edge: "cap-height", bottom-edge: "baseline", ${str(n)}))))`
+  // quadro alinhado no topo (InDesign): 1ª linha de base na ascendente da fonte
+  const topo = q.vertical && q.vertical !== 'centro'
+  return `#place(top + left, dx: ${q.x}pt, dy: ${q.y}pt, box(width: ${q.w}pt, height: ${q.h}pt, fill: cmyk(0%, 0%, 0%, 0%), align(${q.alinhar} + ${topo ? (q.vertical === 'baixo' ? 'bottom' : 'top') : 'horizon'}, text(font: "Montserrat", size: ${c.corpo}pt, fill: cmyk(0%, 0%, 0%, ${c.tinta}%), top-edge: "${topo ? 'ascender' : 'cap-height'}", bottom-edge: "baseline", ${str(n)}))))`
 }
 
 /** Texto trocado no lugar do antigo: fundo branco e texto novo na mesma linha-base. */
@@ -40,13 +42,20 @@ function troca(t, novo, alinhar) {
   return fundo + '\n' + texto
 }
 
-/** Linhas em branco que levam o começo das novas emendas ao fim da parte no livro. */
-function comBrancos(blocos, fim) {
+/**
+ * Linhas em branco que levam o começo das novas emendas ao fim da parte no livro. A última tem o
+ * tipo do último parágrafo do livro (`anterior`, ex.: a ementa), para o espaço até a 1ª emenda nova
+ * ser o mesmo; a sobra (as linhas não caem na grade do livro) é acertada depois, medindo o PDF.
+ */
+function comBrancos(blocos, fim, anterior) {
   const primeira = formato.topo + ascendente('Source Sans 3', formato.corpo ?? 9.5)
-  const linhas = Math.max(1, Math.round((fim - primeira) / formato.linha) + 1)
+  // linhas até passar do fim do livro: o acerto sobe a página (nunca desce para o fólio)
+  const linhas = Math.max(1, Math.ceil((fim - primeira) / formato.linha) + 1)
   // linha com texto (espaço sem quebra não ocupa altura): o recorte da página esconde estas linhas
   const branco = { type: 'paragrafLei', content: [{ type: 'text', text: '–' }] }
-  return [...Array.from({ length: linhas }, () => branco), ...blocos]
+  const ultimo = anterior && anterior.type !== 'epigrafe' && Array.isArray(anterior.content) && anterior.content.every(c => c.type === 'text')
+    ? { ...anterior, content: [{ type: 'text', text: '–' }] } : branco
+  return { conteudo: [...Array.from({ length: linhas - 1 }, () => branco), ultimo, ...blocos], linhas }
 }
 
 /**
@@ -60,10 +69,11 @@ export async function montarPdfLivro(pdfMiolo, { livro, sessao, opcoes, rel, com
   const { primeira, primeiraMantida, paginasPlano, paginasGeradas, ultimaTexto, acrescimo, paginaNova } = mapa
 
   // novas emendas: composição própria, a partir da página onde a parte termina
-  let emendas = null, paginasEmendas = 0
+  let emendas = null, paginasEmendas = 0, acerto = 0
   if (acrescimo?.blocos?.length) {
     const inicio = paginaNova(acrescimo.apos)
-    const norma = { ...acrescimo.norma, conteudo_doc: JSON.stringify({ type: 'doc', content: comBrancos(acrescimo.blocos, acrescimo.fim) }), exportacao: 'completa' }
+    const brancos = comBrancos(acrescimo.blocos, acrescimo.fim, acrescimo.anterior)
+    const norma = { ...acrescimo.norma, conteudo_doc: JSON.stringify({ type: 'doc', content: brancos.conteudo }), exportacao: 'completa' }
     const r = await gerarPdfPublicacao({ ...livro.publicacao, secoes: [{ titulo: '', normas: [norma] }] }, {
       ...opcoes, livro: null, sessao: null, ajustes: null, somenteMiolo: true, primeiraPaginaMiolo: inicio,
       // barra de progresso: as emendas ficam no trecho final, sem voltar ao começo
@@ -71,7 +81,15 @@ export async function montarPdfLivro(pdfMiolo, { livro, sessao, opcoes, rel, com
       cabecalhoImpar: acrescimo.titulo, cabecalhoPar: livro.cabecalhoPar,
     })
     emendas = r.pdf
-    paginasEmendas = (await PDFDocument.load(emendas, { updateMetadata: false })).getPageCount()
+    const docEmendas = await PDFDocument.load(emendas, { updateMetadata: false })
+    paginasEmendas = docEmendas.getPageCount()
+    // acerto da junção: a última linha em branco na linha de base do fim do livro
+    if (acrescimo.fim != null) {
+      const { linhasDeBase } = await import('./apagarTexto.js')
+      const bases = (await linhasDeBase(docEmendas, 1)).filter(y => y > formato.topo && y < formato.altura - formato.baixo)
+      const ultimaBranca = bases[brancos.linhas - 1]
+      if (ultimaBranca != null && Math.abs(acrescimo.fim - ultimaBranca) <= 2 * formato.linha) acerto = acrescimo.fim - ultimaBranca
+    }
     rel.livro = { emendas: paginasEmendas }
     if (paginasEmendas - 1 > acrescimo.paginas) rel.avisos?.push?.('As novas emendas ocuparam mais páginas do que o previsto no IDML.')
   }
@@ -106,24 +124,30 @@ export async function montarPdfLivro(pdfMiolo, { livro, sessao, opcoes, rel, com
     const extras = ultimaTexto == null || n <= ultimaTexto ? [folio(paginaNova(n))] : []
     if (acrescimo && n === acrescimo.apos && emendas) {
       const y = acrescimo.fim + FOLGA_RECORTE
-      extras.push(`#place(top + left, dy: ${y}pt, box(width: ${formato.largura}pt, height: ${formato.altura - y}pt, clip: true, move(dy: ${-y}pt, image("emendas.pdf", page: 1, width: ${formato.largura}pt, height: ${formato.altura}pt))))`)
+      extras.push(`#place(top + left, dy: ${y}pt, box(width: ${formato.largura}pt, height: ${formato.altura - formato.baixo + 4 + Math.min(0, acerto) - y}pt, clip: true, move(dy: ${-y + acerto}pt, image("emendas.pdf", page: 1, width: ${formato.largura}pt, height: ${formato.altura}pt))))`)
       doLivro(n, extras)
       for (let k = 1; k < paginasEmendas; k++) ordem.push({ de: 'emendas', pagina: k })
       for (let k = paginasEmendas - 1; k < acrescimo.paginas; k++) branca()
       continue
     }
     doLivro(n, extras)
+    if (extras.length) ordem.at(-1).folio = true
   }
 
   // total múltiplo de 4 (cadernos da gráfica): o colofão (última página do livro) fica no fim e as
   // páginas em branco antes dele são refeitas — as do livro saem e entram as que faltam
   {
-    const { paginaVazia } = await import('./apagarTexto.js')
+    const { paginaVazia, paginaSemTexto } = await import('./apagarTexto.js')
     const docLivro = pdfOriginal || await PDFDocument.load(readFileSync(join(livro.pasta, 'livro.pdf')), { updateMetadata: false })
+    // páginas do livro depois do fim do texto, só com cabeço e fólio da mestra (CF de bolso: o texto
+    // termina antes e o InDesign completou o caderno): saem também
+    const mancha = { x0: 0, x1: formato.largura, y0: formato.topo, y1: formato.altura - formato.baixo }
+    const sobra = async o => o.livro && (o.extras === 0 || (o.folio && o.extras === 1)) &&
+      (await paginaVazia(docLivro, o.livro) || await paginaSemTexto(docLivro, o.livro, mancha))
     const colofao = ordem.pop()
     while (ordem.length) {
       const o = ordem.at(-1)
-      if (o.de !== 'moldura' || !(o.branca || (o.livro && !o.extras && await paginaVazia(docLivro, o.livro)))) break
+      if (o.de !== 'moldura' || !(o.branca || await sobra(o))) break
       ordem.pop()
     }
     while ((ordem.length + 1) % 4) branca()

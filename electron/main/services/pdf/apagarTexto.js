@@ -203,6 +203,36 @@ export function textoPorMcid(conteudo, altura) {
   return out
 }
 
+/** Linhas de base (de cima para baixo, em pt, sem repetição e em ordem) do texto da página n. */
+export async function linhasDeBase(doc, n) {
+  const conteudo = await conteudoDaPagina(doc, n)
+  const altura = doc.getPages()[n - 1].getHeight()
+  const ys = new Set()
+  let ops = [], ctm = [1, 0, 0, 1, 0, 0], pilha = [], tm = null, tlm = null, lead = 0
+  for (const tk of tokens(conteudo)) {
+    if (tk.t !== 'op') { ops.push(tk); continue }
+    const v = tk.v, num = k => ops[ops.length - k]?.v
+    switch (v) {
+      case 'q': pilha.push(ctm); break
+      case 'Q': ctm = pilha.pop() || [1, 0, 0, 1, 0, 0]; break
+      case 'cm': if (ops.length >= 6) ctm = mult(ops.slice(-6).map(o => o.v), ctm); break
+      case 'BT': tm = tlm = [1, 0, 0, 1, 0, 0]; break
+      case 'Tm': tm = tlm = ops.slice(-6).map(o => o.v); break
+      case 'Td': case 'TD': { const tx = num(2), ty = num(1); if (v === 'TD') lead = -ty; tlm = mult([1, 0, 0, 1, tx, ty], tlm); tm = tlm; break }
+      case 'TL': lead = num(1); break
+      case 'T*': tlm = mult([1, 0, 0, 1, 0, -lead], tlm); tm = tlm; break
+      case "'": case '"': tlm = mult([1, 0, 0, 1, 0, -lead], tlm); tm = tlm
+      // falls through
+      case 'Tj': case 'TJ': if (tm) ys.add(Math.round((altura - mult(tm, ctm)[5]) * 100) / 100); break
+    }
+    ops = []
+  }
+  // linhas a menos de 0,5 pt uma da outra são a mesma (trechos da mesma linha)
+  const out = []
+  for (const y of [...ys].sort((a, b) => a - b)) if (!out.length || y - out.at(-1) > 0.5) out.push(y)
+  return out
+}
+
 /** Conteúdo (latin1) da página n (1…) de um PDF do pdf-lib. */
 export async function conteudoDaPagina(doc, n) {
   const { PDFArray, decodePDFRawStream, PDFRawStream } = await import('pdf-lib')
@@ -258,6 +288,37 @@ export async function paragrafosDaEstrutura(doc, n) {
   }
   visita(raiz, null)
   return out
+}
+
+/**
+ * Página sem texto nem imagem dentro da região (a mancha): só os elementos da mestra (cabeço,
+ * fólio). Página que sobrou depois do fim do texto do livro. regiao: { x0, x1, y0, y1 }, de cima
+ * para baixo.
+ */
+export async function paginaSemTexto(doc, n, regiao) {
+  const { PDFName, PDFRawStream, decodePDFRawStream } = await import('pdf-lib')
+  const pagina = doc.getPages()[n - 1], altura = pagina.getHeight()
+  const conteudo = await conteudoDaPagina(doc, n)
+  const xobjetos = pagina.node.Resources()?.lookup(PDFName.of('XObject'))
+  let ops = [], transformado = false
+  for (const tk of tokens(conteudo)) {
+    if (tk.t !== 'op') { ops.push(tk); continue }
+    if (tk.v === 'cm') transformado = true
+    if (/^(sh|EI)$/.test(tk.v)) return false
+    if (tk.v === 'Do') {
+      // formulário (o InDesign põe o cabeço da página par num): olha o texto dele; imagem conta
+      const nome = ops.at(-1) ? conteudo.slice(ops.at(-1).ini, ops.at(-1).fim).replace(/^\//, '') : ''
+      const x = xobjetos?.lookup(PDFName.of(nome))
+      if (transformado || !(x instanceof PDFRawStream) || x.dict.lookup(PDFName.of('Subtype'))?.toString() !== '/Form') return false
+      const matriz = x.dict.lookup(PDFName.of('Matrix'))
+      if (matriz && matriz.toString().replace(/\s+/g, ' ').trim() !== '[ 1 0 0 1 0 0 ]') return false
+      const sub = Buffer.from(decodePDFRawStream(x).decode()).toString('latin1')
+      if ([...tokens(sub)].some(t => t.t === 'op' && /^(Do|sh|EI)$/.test(t.v))) return false
+      if (apagarTextoDoConteudo(sub, [regiao], altura).apagados) return false
+    }
+    ops = []
+  }
+  return apagarTextoDoConteudo(conteudo, [regiao], altura).apagados === 0
 }
 
 /** Página sem nada desenhado (texto, imagem ou traço): página em branco do livro. */
