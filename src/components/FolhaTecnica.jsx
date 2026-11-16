@@ -126,7 +126,7 @@ export default function FolhaTecnica({ publicacaoId, publicacao, valor, onSalvar
           {!dados ? <p className="pub-vazio">Carregando…</p> : (
             <>
               <p className="pub-pretextuais-dica">
-                {origem === 'livro' ? 'Os campos vêm do livro (pasta do livro). ' : origem === 'modelo' ? 'Sem pasta do livro: os campos vêm como o modelo do Normando sai para esta publicação. ' : ''}
+                {origem === 'livro' ? 'Os campos vêm da pasta do modelo. ' : origem === 'modelo' ? 'Sem pasta do modelo: os campos vêm como o modelo padrão do Normando sai para esta publicação. ' : ''}
                 Os textos entram nos estilos do .indd. Campo vazio mantém o texto do livro. Na ficha, cada campo é um parágrafo.
               </p>
               <ListaCreditos titulo="a) Créditos institucionais" itens={dados.creditosInstitucionais || []} onChange={set('creditosInstitucionais')} />

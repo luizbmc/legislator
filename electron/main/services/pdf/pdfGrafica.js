@@ -80,7 +80,7 @@ export async function pdfParaGrafica(pdf, { nome, compilar, pasta, origem = [], 
         const p = fonte.getPage(n - 1), corte = p.getTrimBox(), caixa = p.getMediaBox()
         molduras.set(n, { emb: embutidas[k], dx: caixa.x - corte.x, dy: caixa.y - corte.y, w: caixa.width, h: caixa.height })
       })
-    } else avisos.push('A pasta do livro não tem o livro-sangria.pdf (rode de novo o preparar_livro_normando.jsx): as páginas do livro saíram sem sangria.')
+    } else avisos.push('A pasta do modelo não tem o livro-sangria.pdf (rode de novo o preparar_livro_normando.jsx): as páginas do livro saíram sem sangria.')
   }
 
   // cada página vira um Form XObject desenhado dentro da folha maior. Não basta deslocar o conteúdo

@@ -57,6 +57,7 @@ export async function quadrosDoLivro(zip) {
       quadros.push({
         story: a.ParentStory, pagina: pg.n,
         x0: Math.min(...xs) - pg.x0, y0: Math.min(...ys) - pg.y0, x1: Math.max(...xs) - pg.x0, y1: Math.max(...ys) - pg.y0,
+        larguraPagina: pg.x1 - pg.x0,
         colunas: num(ta.TextColumnCount) || 1, medianiz: num(ta.TextColumnGutter) ?? 12,
         inset: inset.length === 4 ? inset : [0, 0, 0, 0], vertical: ta.VerticalJustification || 'TopAlign',
       })
@@ -67,7 +68,7 @@ export async function quadrosDoLivro(zip) {
 }
 
 // formatação local (atributos do ParagraphStyleRange/CharacterStyleRange e <Properties>)
-const LOCAL = ['PointSize', 'FontStyle', 'Tracking', 'Position', 'Capitalization', 'FillColor', 'FillTint', 'Justification', 'SpaceBefore', 'SpaceAfter', 'LeftIndent', 'RightIndent', 'FirstLineIndent', 'Leading', 'AppliedFont']
+const LOCAL = ['PointSize', 'FontStyle', 'Tracking', 'Position', 'Capitalization', 'FillColor', 'FillTint', 'Justification', 'SpaceBefore', 'SpaceAfter', 'LeftIndent', 'RightIndent', 'FirstLineIndent', 'Leading', 'AppliedFont', 'Hyphenation']
 function locais(abre, props) {
   const a = attrs(abre), o = {}
   for (const k of LOCAL) if (a[k] != null) o[k] = a[k]
@@ -311,7 +312,8 @@ async function faixasDoLivro(pdf, q, velhos) {
  * ao lado do livro.pdf apagado); os trocados são compostos pelo Typst.
  * @param zip IDML final (com os textos trocados); historias: Self das histórias trocadas
  * @param filtro (pagina) → true para as páginas que entram (pré-textuais e colofão)
- * @param base { zip: IDML do livro (geometria e textos antigos), pdf: PDF do livro (pdf-lib), arquivo: nome do PDF original no Typst }
+ * @param base { zip: IDML do livro (geometria e textos antigos), pdf: PDF do livro (pdf-lib), arquivo: nome do PDF original no Typst,
+ *   alargar: Self das histórias cujo quadro vai até a margem espelhada }
  */
 export async function pretextuaisNasPaginas(zip, historias, filtro = () => true, base = {}) {
   const out = new Map()
@@ -319,6 +321,10 @@ export async function pretextuaisNasPaginas(zip, historias, filtro = () => true,
   const estilos = lerEstilos(await zip.file('Resources/Styles.xml').async('string'), await zip.file('Resources/Graphic.xml')?.async('string') || '')
   // páginas na numeração do livro: geometria do IDML do livro
   const quadros = (await quadrosDoLivro(base.zip || zip)).filter(q => historias.includes(q.story) && filtro(q.pagina))
+  // quadro que precisa de mais largura (Mesa com o Presidente do Conselho Editorial): a borda direita
+  // vai até a margem espelhada da esquerda, para o cargo não quebrar a linha
+  // (as faixas do PDF do livro continuam procuradas no quadro original)
+  for (const q of quadros) if (base.alargar?.includes(q.story)) q.x1Largo = Math.max(q.x1, q.larguraPagina - q.x0)
   const regiao = q => ({ x0: q.x0 - 2, y0: q.y0 - 2, x1: q.x1 + 2, y1: q.y1 + 2 })
   const naPagina = (n, r, typ) => {
     if (!out.has(n)) out.set(n, { regioes: [], typst: [] })
@@ -341,7 +347,8 @@ export async function pretextuaisNasPaginas(zip, historias, filtro = () => true,
     const xml = await zip.file(`Stories/Story_${q.story}.xml`)?.async('string')
     if (!xml) continue
     const [it, il, ib, ir] = q.inset
-    const w = q.x1 - q.x0, hgt = q.y1 - q.y0
+    const x1 = q.x1Largo ?? q.x1
+    const w = x1 - q.x0, hgt = q.y1 - q.y0
     let bandas = [], faixa = null
     const velhoXml = base.zip && base.pdf && quadros.filter(x => x.story === q.story).length === 1 ? await base.zip.file(`Stories/Story_${q.story}.xml`)?.async('string') : null
     if (velhoXml) {
@@ -394,7 +401,7 @@ export async function pretextuaisNasPaginas(zip, historias, filtro = () => true,
       `})`
     if (!out.has(q.pagina)) out.set(q.pagina, { regioes: [], typst: [] })
     const pg = out.get(q.pagina)
-    pg.regioes.push({ x0: q.x0 - 2, y0: q.y0 - 2, x1: q.x1 + 2, y1: q.y1 + 2 })
+    pg.regioes.push({ x0: q.x0 - 2, y0: q.y0 - 2, x1: x1 + 2, y1: q.y1 + 2 })
     pg.typst.push(typ)
   }
   return out

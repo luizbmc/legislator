@@ -740,7 +740,7 @@ export async function gerarLivroCompleto(baseBytes, publicacao, opcoes) {
   }
 
   // ── pré-textuais: Mesa (Configurações), rosto e folha técnica (publicação), nos estilos do livro ──
-  const { historias: pretextuaisTrocados } = await aplicarPretextuaisDoLivro(zip, { publicacao, institucional: opcoes.institucional })
+  const { historias: pretextuaisTrocados, alargar: quadrosAlargados } = await aplicarPretextuaisDoLivro(zip, { publicacao, institucional: opcoes.institucional })
 
   // ── pré-textuais: última emenda no texto de apresentação ──────
   const ultimaEmenda = (rel.partes.find(p => p.emendas?.length)?.emendas || []).at(-1)?.match(/N[ºo°]\s*(\d+),\s*DE\s*(\d{4})/i)
@@ -780,6 +780,6 @@ export async function gerarLivroCompleto(baseBytes, publicacao, opcoes) {
   return {
     idml, relatorio: rel,
     paginacao: { primeiraPagina: primeira, paginas: d.paginas, ultimaLinha: f.ultimaLinha ?? 8, ultimaComplexa: f.ultimaComplexa ?? 7, ultimaOcupacao: !!f.ultimaOcupacao, notaMaisUm: !!f.notaMaisUm, espacoMinimo: f.espacoMinimo ?? 82, limiteAperto: f.limiteAperto ?? 0.76, paragrafos: d.esperado },
-    mapa: { primeira, primeiraMantida, paginasPlano, paginasGeradas: d.paginas, ultimaTexto, acrescimo, paginaNova, entradasSumario, sumarioTrocado, pretextuais: [...new Set([...pretextuaisTrocados, ...trocadosEmenda, sumarioTrocado])].filter(Boolean), zip, ultimaEmenda: ultimaEmenda ? `${ultimaEmenda[1]}/${ultimaEmenda[2]}` : null },
+    mapa: { primeira, primeiraMantida, paginasPlano, paginasGeradas: d.paginas, ultimaTexto, acrescimo, paginaNova, entradasSumario, sumarioTrocado, alargar: quadrosAlargados, pretextuais: [...new Set([...pretextuaisTrocados, ...trocadosEmenda, sumarioTrocado])].filter(Boolean), zip, ultimaEmenda: ultimaEmenda ? `${ultimaEmenda[1]}/${ultimaEmenda[2]}` : null },
   }
 }

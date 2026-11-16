@@ -334,10 +334,11 @@ function trocarUm(x, t, mudou) {
 
 /**
  * Aplica no IDML os dados da publicação e a Mesa (Configurações). Campo vazio mantém o texto do
- * livro. Devolve { historias: [Self das histórias trocadas], trocas: [descrições] }.
+ * livro. Devolve { historias: [Self das histórias trocadas], alargar: [Self das histórias cujo quadro
+ * precisa de mais largura no PDF] }.
  * institucional: { legislatura, cargos: [{ chave, cargo, nome }] }
  * publicacao: descricao (ementa do rosto), edicao, lancado_em (ano do rosto e colofão), pretextuais
- *   ({ atualizadoAte, folhaTecnica: { creditosInstitucionais, creditosPublicacao, informacoes, ficha, copyright, endereco } })
+ *   ({ atualizadoAte, mesaConselhoEditorial (põe o Presidente do Conselho Editorial na Mesa), folhaTecnica: { creditosInstitucionais, creditosPublicacao, informacoes, ficha, copyright, endereco } })
  */
 export async function aplicarPretextuaisDoLivro(zip, { publicacao = {}, institucional = {} } = {}) {
   const historias = await historiasDoLivro(zip)
@@ -354,6 +355,28 @@ export async function aplicarPretextuaisDoLivro(zip, { publicacao = {}, instituc
     if (!c) continue
     trocarUm(m.cargo, c.cargo, mudou)
     if (m.nome) trocarUm(m.nome, c.nome, mudou)
+  }
+  // Presidente do Conselho Editorial (opção da publicação): o livro que não tem ganha o par cargo/nome
+  // no fim da Mesa, separado como o Secretário-Geral (cargo-separa, com o espaço antes)
+  const pce = cargos.get('pce')
+  const alargar = []
+  if (pre.mesaConselhoEditorial && pce?.nome?.trim() && L.mesa.length && !L.mesa.some(m => m.chave === 'pce')) {
+    const ult = L.mesa.at(-1)
+    const base = L.mesa.find(m => m.chave === 'sgm' && m.nome) || ult
+    const ancora = (ult.nome || ult.cargo).p
+    const h = ult.cargo.h
+    const pars = h.h.pars
+    const pc = copiaDe(base.cargo.p, pce.cargo || 'Presidente do Conselho Editorial')
+    // o quadro da Mesa é estreito: o cargo quebra entre palavras, sem hífen e alinhado à esquerda (o
+    // estilo é justificado, o que não aparece nos cargos de uma linha)
+    pc.abre = pc.abre.replace(/\s(Hyphenation|Justification)="[^"]*"/g, '')
+      .replace(/^<ParagraphStyleRange\b/, '$& Hyphenation="false" Justification="LeftAlign"')
+    const pn = copiaDe((base.nome || ult.nome || ult.cargo).p, pce.nome.trim())
+    pn.br = ancora.br
+    if (!ancora.br) { ancora.br = true; ancora.brRun = ancora.brRun || ancora.runs.at(-1) }
+    pars.splice(pars.indexOf(ancora) + 1, 0, pc, pn)
+    mudou.add(h)
+    alargar.push(h.self)
   }
 
   // folha de rosto
@@ -385,7 +408,7 @@ export async function aplicarPretextuaisDoLivro(zip, { publicacao = {}, instituc
   }
 
   for (const x of mudou) zip.file(x.arquivo, escreverHistoria(x.h))
-  return { historias: [...mudou].map(x => x.self) }
+  return { historias: [...mudou].map(x => x.self), alargar }
 }
 
 export const _teste = { localizar, historiasDoLivro, NBSP }

@@ -898,7 +898,7 @@ export default function PublicacaoPage({ usuarioAtual }) {
     } catch (e) { alert(e?.message || String(e)) }
   }
   async function removerPastaLivro() {
-    if (!confirm('Tirar a pasta do livro desta publicação? O PDF, a paginação e o IDML voltam a sair só com o que está no Normando, e as pré-textuais com o modelo do Normando.')) return
+    if (!confirm('Tirar a pasta do modelo desta publicação? O PDF, a paginação e o IDML voltam a sair só com o que está no Normando, e as pré-textuais com o modelo padrão do Normando.')) return
     await window.legislator.publicacoes.escolherLivro(parseInt(id), { remover: true })
     setPastaLivro(null)
   }
@@ -1334,12 +1334,12 @@ export default function PublicacaoPage({ usuarioAtual }) {
       }
       if (tipo === 'livro') {
         const atual = await window.legislator.publicacoes.pastaDoLivro(parseInt(id))
-        if (atual && confirm(`Esta publicação usa a pasta do livro:\n${atual}\n\nOK: tirar a pasta (volta a sair só o que está no Normando).\nCancelar: escolher outra.`)) {
+        if (atual && confirm(`Esta publicação usa a pasta do modelo:\n${atual}\n\nOK: tirar a pasta (volta a sair só o que está no Normando).\nCancelar: escolher outra.`)) {
           await window.legislator.publicacoes.escolherLivro(parseInt(id), { remover: true })
           return
         }
         const result = await window.legislator.publicacoes.escolherLivro(parseInt(id))
-        if (result?.ok) alert(`Pasta do livro definida:\n${result.pasta}\n\nO PDF de revisão, a tela de paginação e o IDML ajustado agora saem com o livro completo.`)
+        if (result?.ok) alert(`Pasta do modelo definida:\n${result.pasta}\n\nO PDF de revisão, a tela de paginação e o IDML ajustado agora saem com o livro completo.`)
       }
       if (tipo === 'pdf' || tipo === 'pdf-grafica') {
         const grafica = tipo === 'pdf-grafica'
@@ -1502,7 +1502,7 @@ export default function PublicacaoPage({ usuarioAtual }) {
                 rows={2}
                 value={form.pretextuais?.tituloRosto || ''}
                 onChange={e => { const v = e.target.value; setForm(f => ({ ...f, pretextuais: { ...(f.pretextuais || {}), tituloRosto: v } })); marcarModificado() }}
-                placeholder="Vazio: o título dividido em até 3 linhas (só no modelo do Normando; o livro com pasta mantém o título dele)"
+                placeholder="Vazio: o título dividido em até 3 linhas (só no modelo padrão do Normando; com pasta do modelo, fica o título dela)"
               />
             </div>
             <div className="campo pub-meta-descricao">
@@ -1534,11 +1534,20 @@ export default function PublicacaoPage({ usuarioAtual }) {
               Folha técnica…
             </button>
             {form.pretextuais?.folhaTecnica && <span className="pub-pretextuais-resumo">preenchida</span>}
+            <label className="pub-mesa-pce"
+              title="Com pasta do modelo: acrescenta na página da Mesa o Presidente do Conselho Editorial das Configurações (Mesa Diretora), depois do Diretor-Geral. O livro que já tem o cargo não muda; o modelo padrão do Normando mostra todos os cargos preenchidos">
+              <input
+                type="checkbox"
+                checked={!!form.pretextuais?.mesaConselhoEditorial}
+                onChange={e => { const v = e.target.checked; setForm(f => ({ ...f, pretextuais: { ...(f.pretextuais || {}), mesaConselhoEditorial: v } })); marcarModificado() }}
+              />
+              Presidente do Conselho Editorial na Mesa
+            </label>
           </div>
           <div className="pub-pasta-livro">
-            <span className="pub-pasta-livro-rotulo">Pasta do livro:</span>
+            <span className="pub-pasta-livro-rotulo">Pasta do modelo:</span>
             <span className="pub-pasta-livro-caminho" title={pastaLivro || ''}>
-              {pastaLivro || 'nenhuma — as pré-textuais saem do modelo do Normando'}
+              {pastaLivro || 'nenhuma — as pré-textuais saem do modelo padrão do Normando'}
             </span>
             <button type="button" className="btn-ghost" onClick={escolherPastaLivro}
               title="Pasta preparada no InDesign (preparar_livro_normando.jsx): o PDF, a paginação e o IDML saem com as pré-textuais, as partes mantidas e o índice do livro">

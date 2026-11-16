@@ -100,7 +100,7 @@ export async function montarPdfLivro(pdfMiolo, { livro, sessao, opcoes, rel, com
   const { default: JSZip } = await import('jszip')
   const pdfOriginal = mapa.pretextuais?.length ? await PDFDocument.load(readFileSync(join(livro.pasta, 'livro.pdf')), { updateMetadata: false }) : null
   const pre = await pretextuaisNasPaginas(mapa.zip, mapa.pretextuais, n => n < primeira || n >= primeiraMantida,
-    { zip: await JSZip.loadAsync(livro.base), pdf: pdfOriginal, arquivo: 'livro-original.pdf' })
+    { zip: await JSZip.loadAsync(livro.base), pdf: pdfOriginal, arquivo: 'livro-original.pdf', alargar: mapa.alargar })
   const recomposto = (n, t) => (pre.get(n)?.regioes || []).some(r => t.x0 >= r.x0 && t.x0 <= r.x1 && t.base >= r.y0 && t.base <= r.y1)
 
   // ordem final: { de: 'moldura' | 'miolo' | 'emendas', pagina }

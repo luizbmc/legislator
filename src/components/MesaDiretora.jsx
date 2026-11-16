@@ -78,7 +78,7 @@ export default function MesaDiretora() {
       <div className="config-card-header">
         <div>
           <h2>Mesa diretora</h2>
-          <p>Página da Mesa nos livros (CF, Regimento e os demais com pasta do livro). Cada livro mostra só os cargos que já tem no .indd, nos estilos dele. Cargo sem nome mantém o do livro.</p>
+          <p>Página da Mesa nos livros (CF, Regimento e os demais com pasta do modelo). Cada livro mostra só os cargos que já tem no .indd, nos estilos dele. Cargo sem nome mantém o do livro.</p>
         </div>
       </div>
       {!dados ? <p className="pub-vazio">Carregando…</p> : (

@@ -1460,7 +1460,7 @@ export default function Configuracoes() {
               {aba === 'hifenizacao'
                 ? 'Palavras com os pontos de divisão definidos pelo usuário, para todas as publicações.'
                 : aba === 'mesa'
-                ? 'Mesa da Câmara comum a todas as publicações exportadas com a pasta do livro.'
+                ? 'Mesa da Câmara comum a todas as publicações exportadas com a pasta do modelo.'
                 : aba === 'backup'
                 ? 'Crie cópias de segurança do banco local e restaure um arquivo de backup quando necessário.'
                 : aba === 'remoto'

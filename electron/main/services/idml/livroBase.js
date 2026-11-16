@@ -25,7 +25,7 @@ export async function escolherPastaDoLivro(id, { remover = false } = {}) {
     writeFileSync(arquivoConfig(), JSON.stringify(cfg, null, 2))
     return { ok: true, pasta: null }
   }
-  const r = await dialog.showOpenDialog({ title: 'Pasta do livro (preparar_livro_normando.jsx)', properties: ['openDirectory'] })
+  const r = await dialog.showOpenDialog({ title: 'Pasta do modelo (preparar_livro_normando.jsx)', properties: ['openDirectory'] })
   if (r.canceled || !r.filePaths?.[0]) return { cancelado: true }
   const pasta = r.filePaths[0]
   const falta = ARQUIVOS.filter(n => !existsSync(join(pasta, n)))
