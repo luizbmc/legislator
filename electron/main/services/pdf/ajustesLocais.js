@@ -59,6 +59,39 @@ export function marcaDaPalavra(par, palavra, ocorrencia = 0) {
   return null
 }
 
+/** Ajustes de estilo de parágrafo de uma lista de ajustes (vão para a composição, não para a sessão). */
+export const ajustesDeEstilo = itens => (itens || []).filter(a => a?.tipo === 'estilo' && a.estilo)
+
+/**
+ * Estilo de parágrafo escolhido na tela de paginação ({ tipo: 'estilo', ancora, estilo }): troca o
+ * estilo do parágrafo do miolo antes de toda a composição — no PDF da exportação e na tela, pelo
+ * mesmo caminho (exportPdf.js), para os dois saírem iguais. O estilo que as regras dariam fica em
+ * `estiloPadrao`. Estilo que o modelo não tem não é aplicado (vai para naoEncontrados).
+ * @returns { aplicados, naoEncontrados: [ajuste] }
+ */
+export function aplicarEstilos(itens, pars, existe = () => true) {
+  const out = { aplicados: 0, naoEncontrados: [] }
+  const lista = ajustesDeEstilo(itens)
+  if (!lista.length) return out
+  const indice = new Map()
+  pars.forEach((par, i) => {
+    if (!par.runs) return
+    const a = ancoraDe(par)
+    const c = `${a.norma}|${a.texto}`
+    if (!indice.has(c)) indice.set(c, [])
+    indice.get(c).push({ i, bloco: a.bloco })
+  })
+  for (const aj of lista) {
+    const i = aj.ancora ? acharParagrafo(indice, aj.ancora) : null
+    if (i == null || !existe(aj.estilo)) { out.naoEncontrados.push(aj); continue }
+    const par = pars[i]
+    if (par.estiloPadrao == null) par.estiloPadrao = par.estilo
+    par.estilo = aj.estilo
+    out.aplicados++
+  }
+  return out
+}
+
 /**
  * Resolve os ajustes para os parágrafos do miolo.
  * @returns {
@@ -100,6 +133,8 @@ export function resolverAjustes(ajustes, pars) {
       case 'fimPagina': add(out.fins, i, aj.linha ?? 0); break
       case 'naoTerminar': add(out.proibidos, i, aj.linha ?? 0); break
       case 'entrelinha': out.entrelinhas.set(`${i}|${aj.linha ?? 0}`, aj.fator); break
+      // estilo do parágrafo: aplicado antes da composição (aplicarEstilos); aqui só conta
+      case 'estilo': break
       default: out.naoEncontrados.push(aj); continue
     }
     out.aplicados++

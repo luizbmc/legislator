@@ -23,6 +23,7 @@ import { aplicarDecisoes } from './decisoesIdml.js'
 import { prepararPublicacao } from './exportIdml.js'
 import { filhos, attr, setAttr, normalizar, textoDoXml } from './atualizarEdicao.js'
 import { aplicarPretextuaisDoLivro } from './pretextuaisLivro.js'
+import { lerEstiloSumario, entradasDoNormando, montarSumario } from './sumarioLivro.js'
 import { excecoesNoDesignmap } from '../pdf/hifenizacaoExcecoes.js'
 
 const STORY = 'nmiolo'
@@ -125,16 +126,30 @@ export async function normasDoLivro(baseBytes, publicacao) {
   return { modo, ids: new Set(normas.filter(n => noLivro.has(normalizar(n.epigrafe))).map(n => n.id)) }
 }
 
-/** Parte do livro que corresponde a uma norma: título igual ganha; senão, o maior começo em comum. */
+/**
+ * Parte do livro que corresponde a uma norma: título igual ganha; senão, o maior começo em comum —
+ * um título contido no começo do outro, ou os dois iguais em pelo menos 70% do mais curto (só o fim
+ * muda: "(Guatemala, 2013)" no Normando × "(Antígua, 2013)" no livro).
+ */
 function parteDaNorma(partes, titulo) {
   const t = normalizar(titulo)
   let melhor = null, pontos = 0
   for (const p of partes) {
     const x = normalizar(p.titulo)
-    const pt = x === t ? 1e4 : t.startsWith(x) || x.startsWith(t) ? Math.min(x.length, t.length) : 0
+    let comum = 0
+    while (comum < x.length && comum < t.length && x[comum] === t[comum]) comum++
+    const curto = Math.min(x.length, t.length)
+    const pt = x === t ? 1e4 : comum === curto || comum >= 0.7 * curto ? comum : 0
     if (pt > pontos && pt >= 8) { pontos = pt; melhor = p }
   }
   return melhor
+}
+
+/** Título de parte do livro mais parecido (para a mensagem de erro). */
+const parteMaisParecida = (partes, titulo) => {
+  const t = normalizar(titulo)
+  const comum = x => { let k = 0; while (k < x.length && k < t.length && x[k] === t[k]) k++; return k }
+  return partes.map(p => ({ p, k: comum(normalizar(p.titulo)) })).sort((a, b) => b.k - a.k)[0]?.p?.titulo
 }
 
 const normasDe = publicacao => (publicacao.secoes || []).flatMap(s => s.normas || [])
@@ -160,7 +175,10 @@ export async function publicacaoDoLivro(baseBytes, publicacao, { paginasPartes =
     normas: (secao.normas || []).flatMap(norma => {
       if (norma.exportacao !== 'completa') return []
       const parte = parteDaNorma(partes, norma.epigrafe)
-      if (!parte) throw new Error(`"${norma.epigrafe}" não corresponde a nenhuma parte do livro.`)
+      if (!parte) {
+        const perto = parteMaisParecida(partes, norma.epigrafe)
+        throw new Error(`"${norma.epigrafe}" não corresponde a nenhuma parte do livro. A epígrafe da norma tem de começar como o título da abertura no livro${perto ? ` (o mais parecido é "${perto}")` : ''}, ou a norma tem de sair da publicação.`)
+      }
       const doc = JSON.parse(norma.conteudo_doc || '{}')
       const i = (doc.content || []).findIndex(b => b.type === 'epigrafe')
       if (i >= 0 && modo === 'epigrafe') {
@@ -698,69 +716,28 @@ export async function gerarLivroCompleto(baseBytes, publicacao, opcoes) {
     .replace(/(<TextPreference [^>]*?)DeleteEmptyPages="[^"]*"/, '$1DeleteEmptyPages="false"')
   zip.file('Resources/Preferences.xml', pref)
 
-  // ── sumário: o texto fica como no livro (o diagramador acerta caixa e entradas à mão); só as
-  // páginas mudam — geradas pelo plano, mantidas pelo deslocamento
-  const titulos = d.pars.flatMap((p, k) => {
-    if (!(base.modo === 'epigrafe' ? ENTRADA_SUMARIO_EPIGRAFE : ENTRADA_SUMARIO).test(p.estilo)) return []
-    const pagina = d.esperado.find(e => e.par === k)?.pagina
-    return pagina == null ? [] : [{ t: normalizar((p.runs || []).map(r => r.texto ?? '').join('')), pagina: pagina + primeira, usado: false }]
-  })
+  // ── sumário: entradas do Normando, pelo estilo de sumário do livro (sumarioLivro.js) ──
   const deslocamento = paginasPlano - (primeiraMantida - primeira)
-  const numerosSumario = []
-  // entradas do sumário (título, estilo, página nova): marcadores e links do PDF (pdfLivroCompleto.js)
-  const entradasSumario = []
   const paginaNova = n => n + deslocamento + (acrescimo && n > acrescimo.apos ? acrescimo.paginas : 0)
+  // entradas do sumário (título, estilo, página nova): marcadores do PDF (pdfLivroCompleto.js)
+  let entradasSumario = []
+  let sumarioTrocado = null
   for (const m of [...designmap.matchAll(/<idPkg:Story src="([^"]+)"/g)]) {
     const xml = await ler(m[1])
     if (!/<Story [^>]*AppliedTOCStyle="TOCStyle/.test(xml)) continue
-    // cada entrada vai de <Br/> a <Br/>, em vários trechos; o número fica depois da tabulação
-    // (<?ACE 8?>), no mesmo trecho do título ou num trecho próprio
-    let cursor = 0, entrada = [], novoXml = '', copiado = 0
-    // estilo de parágrafo do sumário no ponto `i` do XML (nível do marcador do PDF)
-    const estiloEm = i => {
-      const k = xml.lastIndexOf('<ParagraphStyleRange ', i)
-      return k < 0 ? '' : decodeURIComponent(xml.slice(k, xml.indexOf('>', k)).match(/AppliedParagraphStyle="ParagraphStyle\/([^"]+)"/)?.[1] || '')
-    }
-    const fechar = () => {
-      const k8 = entrada.findIndex(c => c.texto.includes('<?ACE 8?>'))
-      // toda entrada com texto vai para os marcadores do PDF; a página vem do número (ou da seguinte)
-      if (entrada.length) {
-        const titulo = decodificar(entrada.map(c => c.texto).join('').split('<?ACE 8?>')[0].replace(/<\?[^>]*\?>/g, '')).replace(INVISIVEIS, '').replace(/\s+/g, ' ').trim()
-        if (titulo) entradasSumario.push({ titulo, estilo: estiloEm(entrada[0].inicio), numerada: false, pagina: null })
-      }
-      if (k8 >= 0) {
-        const fim = entrada[k8].texto.split('<?ACE 8?>')[1]
-        const alvoNum = /^\d+$/.test(fim) ? { c: entrada[k8], de: entrada[k8].texto.length - fim.length } : /^\d+$/.test(entrada[k8 + 1]?.texto || '') ? { c: entrada[k8 + 1], de: 0 } : null
-        if (alvoNum) {
-          const antiga = Number(alvoNum.c.texto.slice(alvoNum.de))
-          const titulo = decodificar(entrada.slice(0, k8 + 1).map(c => c.texto).join('').split('<?ACE 8?>')[0].replace(/<\?[^>]*\?>/g, ''))
-          let nova = null
-          if (antiga >= primeiraMantida) nova = paginaNova(antiga)
-          else {
-            const k = titulos.findIndex((x, i) => i >= cursor && x.t === normalizar(titulo))
-            if (k < 0) rel.avisos.push(`Sumário: "${titulo}" não foi encontrado no texto gerado.`)
-            else { cursor = k + 1; titulos[k].usado = true; nova = titulos[k].pagina }
-          }
-          numerosSumario.push(nova ?? antiga)
-          const ultimaEntrada = entradasSumario.at(-1)
-          if (ultimaEntrada) Object.assign(ultimaEntrada, { numerada: true, pagina: nova ?? antiga })
-          if (nova != null) {
-            const p0 = alvoNum.c.inicio + alvoNum.de
-            novoXml += xml.slice(copiado, p0) + nova
-            copiado = alvoNum.c.inicio + alvoNum.c.texto.length
-          }
-        }
-      }
-      entrada = []
-    }
-    for (const c of xml.matchAll(/<Content>([\s\S]*?)<\/Content>|<Br\s*\/>/g)) {
-      if (c[1] == null) fechar()
-      else entrada.push({ texto: c[1], inicio: c.index + '<Content>'.length })
-    }
-    fechar()
-    zip.file(m[1], novoXml + xml.slice(copiado))
+    const toc = lerEstiloSumario(estilosXml, xml)
+    if (!toc?.entradas.size) { rel.avisos.push('Sumário: o livro não tem estilo de sumário; o sumário ficou como no livro.'); break }
+    const chars = new Set([...estilosXml.matchAll(/<CharacterStyle Self="CharacterStyle\/([^"]+)"/g)].map(x => decodeURIComponent(x[1])))
+    const paginaDoPar = k => { const p = d.esperado.find(e => e.par === k)?.pagina; return p == null ? null : p + primeira }
+    const normando = entradasDoNormando(d.pars, toc, paginaDoPar, c => chars.has(c))
+    const s = montarSumario(xml, toc, normando, { primeira, primeiraMantida, paginaNova })
+    if (!s) { rel.avisos.push('Sumário: a história do sumário do livro não pôde ser lida; o sumário ficou como no livro.'); break }
+    zip.file(m[1], s.xml)
+    entradasSumario = s.entradas
+    rel.avisos.push(...s.avisos)
+    sumarioTrocado = xml.match(/<Story Self="([^"]+)"/)?.[1] || null
+    break
   }
-  for (const x of titulos) if (!x.usado) rel.avisos.push(`Sumário: "${x.t}" (p. ${x.pagina}) não tem entrada no sumário do livro.`)
 
   // ── pré-textuais: Mesa (Configurações), rosto e folha técnica (publicação), nos estilos do livro ──
   const { historias: pretextuaisTrocados } = await aplicarPretextuaisDoLivro(zip, { publicacao, institucional: opcoes.institucional })
@@ -803,6 +780,6 @@ export async function gerarLivroCompleto(baseBytes, publicacao, opcoes) {
   return {
     idml, relatorio: rel,
     paginacao: { primeiraPagina: primeira, paginas: d.paginas, ultimaLinha: f.ultimaLinha ?? 8, ultimaComplexa: f.ultimaComplexa ?? 7, ultimaOcupacao: !!f.ultimaOcupacao, notaMaisUm: !!f.notaMaisUm, espacoMinimo: f.espacoMinimo ?? 82, limiteAperto: f.limiteAperto ?? 0.76, paragrafos: d.esperado },
-    mapa: { primeira, primeiraMantida, paginasPlano, paginasGeradas: d.paginas, ultimaTexto, acrescimo, paginaNova, sumario: numerosSumario, entradasSumario, pretextuais: [...new Set([...pretextuaisTrocados, ...trocadosEmenda])].filter(Boolean), zip, ultimaEmenda: ultimaEmenda ? `${ultimaEmenda[1]}/${ultimaEmenda[2]}` : null },
+    mapa: { primeira, primeiraMantida, paginasPlano, paginasGeradas: d.paginas, ultimaTexto, acrescimo, paginaNova, entradasSumario, sumarioTrocado, pretextuais: [...new Set([...pretextuaisTrocados, ...trocadosEmenda, sumarioTrocado])].filter(Boolean), zip, ultimaEmenda: ultimaEmenda ? `${ultimaEmenda[1]}/${ultimaEmenda[2]}` : null },
   }
 }

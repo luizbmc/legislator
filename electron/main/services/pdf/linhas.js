@@ -344,6 +344,10 @@ function passosAPartirDe(tr, sp) {
 // acima desta abertura, as palavras da linha e a que desceu dela podem ser hifenizadas com 6 letras
 // (o normal é 7 ou mais)
 export const SEIS_LETRAS = 1.9
+// hierarquia intermediária (regra do usuário, 2026-11-14): linha acima desta abertura — uma palavra
+// de 6 letras da linha ou a que desceu dela pode ser hifenizada, se isso resolve o parágrafo (nenhuma
+// linha acima dela, mesmo nº de linhas); vem antes do aperto (exportPdf.js, seisQueResolvem)
+export const SEIS_LETRAS_RESOLVE = 1.75
 // acima desta abertura, a palavra composta, com prefixo ou em itálico que desceu inteira é liberada
 // para hifenização já na primeira correção (abaixo dela, só como último recurso)
 export const LIBERAR_JA = 2.1

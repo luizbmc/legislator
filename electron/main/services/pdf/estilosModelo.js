@@ -8,7 +8,8 @@
 // "SetIgnore" = não se aplica); BalanceRaggedLines: "equilibrar linhas irregulares" (NoBalancing,
 // VeeShape, PyramidShape, FullyBalanced)
 // RuleAboveType/RuleBelowType: tipo do fio do parágrafo ("StrokeStyle/$ID/Canned Dotted" = pontilhado)
-const ATRIBUTOS_FILHOS = ['AppliedFont', 'Leading', 'BasedOn', 'SameParaStyleSpacing', 'BalanceRaggedLines', 'RuleAboveType', 'RuleBelowType']
+// Leader: caractere de preenchimento da 1ª tabulação do estilo (pontilhado do sumário)
+const ATRIBUTOS_FILHOS = ['AppliedFont', 'Leading', 'BasedOn', 'SameParaStyleSpacing', 'BalanceRaggedLines', 'RuleAboveType', 'RuleBelowType', 'Leader']
 
 function atributos(tag) {
   const out = {}
@@ -71,8 +72,13 @@ export function lerEstilos(stylesXml, graphicXml = '') {
     if (c.Space === 'CMYK' && v.length === 4) cores.set(c.Self, { cmyk: v })
     else if (c.Space === 'RGB' && v.length === 3) cores.set(c.Self, { rgb: v })
   }
+  // nomes dos estilos de parágrafo do modelo (sem os internos do InDesign, "[Sem estilo de parágrafo]")
+  const nomes = pars.map(p => p.Name).filter(n => n && !n.startsWith('['))
+  const selfs = new Set(pars.map(p => p.Self))
   return {
     par: nome => propsPar(selfPar(nome)),
+    nomesPar: () => nomes,
+    temPar: nome => !!nome && selfs.has(selfPar(nome)),
     char: nome => (nome ? propsChar(selfChar(nome)) : {}),
     cor: self => cores.get(self) || null,
   }

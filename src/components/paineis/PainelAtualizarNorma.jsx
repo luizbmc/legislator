@@ -96,7 +96,7 @@ export default function PainelAtualizarNorma({ editorDoc, tipoNorma = '', tags =
     ignorarAspas:       true,
     ignorarHifens:      true,
     ignorarEspacos:     true,
-    ignorarAlteracoesNota: false,
+    ignorarAlteracoesNota: true,
     compararEstrutura: false,
   })
   function toggleOpcao(chave) {

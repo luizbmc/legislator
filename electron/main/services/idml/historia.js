@@ -38,6 +38,7 @@ export const ESTILO = {
   artigo: 'corpo-legis:art',
   artigoTitulo: 'corpo-legis:art-tit-centro',
   textoLei: 'corpo-legis:texto-lei',
+  textoLeiEspacoAnt: 'corpo-legis:texto-lei-espaco-ant',
   nomeJuridico: 'corpo-legis:nome-juridico',
   citacao: 'corpo-legis:texto-lei-citacao',
   data: 'corpo-legis:ass-data',
@@ -163,7 +164,9 @@ function juntar(runs) {
   return out
 }
 
-const textoDe = no => (no?.content || []).map(c => c.type === 'text' ? c.text : c.type === 'hardBreak' ? ' ' : '').join('').trim()
+/** Linha de local e data de assinatura: "Feito em …", "Dado em …" ou terminada em "de 2013". */
+const ehLocalEData = t => /^(feit|dad|celebrad|assinad|conclu[ií]d)[oa]s?\s+(em|n[oa]s?|aos?)\b/i.test(t) || /\bde\s+(1[89]|20)\d{2}\.?$/.test(t)
+const textoDe = no =>(no?.content || []).map(c => c.type === 'text' ? c.text : c.type === 'hardBreak' ? ' ' : '').join('').trim()
 
 // ── blocos → parágrafos ──────────────────────────────────────────
 
@@ -248,6 +251,9 @@ export function paragrafosDaPublicacao(publicacao, opcoes = {}, rel = novoRelato
           case 'data': estilo = ESTILO.data; aposData = true; break
           case 'assinatura':
           case 'assinaturaNome':
+            // local e data marcados como assinatura ("Feito em Marraqueche, no dia 27 de junho de 2013."):
+            // estilo de data, como no livro
+            if (b.type === 'assinatura' && ehLocalEData(textoDe(b))) { estilo = ESTILO.data; aposData = true; break }
             estilo = aposData ? ESTILO.assinaturaPrimeira : ESTILO.assinatura
             aposData = false
             break
@@ -279,9 +285,21 @@ export function paragrafosDaPublicacao(publicacao, opcoes = {}, rel = novoRelato
         }
         // emenda: a ementa vem como parágrafo comum em itálico, logo depois da publicação; o estilo
         // de ementa já é centrado e em itálico
-        if (ehEmenda && b.type === 'paragrafLei' && blocos[iBloco - 1]?.type === 'notaTitulo' && blocos[iBloco - 2]?.type === 'epigrafe') {
+        // (a epígrafe pode ter apelido: "EMENDA CONSTITUCIONAL Nº 106" + "(ORÇAMENTO DE GUERRA)")
+        const ementaDeEmenda = k => ehEmenda && blocos[k]?.type === 'paragrafLei' && blocos[k - 1]?.type === 'notaTitulo'
+          && /^epigrafe(Apelido)?$/.test(blocos[k - 2]?.type || '')
+        if (ementaDeEmenda(iBloco)) {
           estilo = ESTILO.ementaEmenda
           for (const r of runs) if (r.char === 'italico') r.char = null
+        }
+        // texto com espaço antes, como no livro: o preâmbulo da emenda logo depois da ementa ("As Mesas
+        // da Câmara…", não o "[...]" das emendas que só mostram a mudança); nos tratados, o 1º parágrafo
+        // depois da nota do título ou do título "Preâmbulo"
+        const anterior = blocos[iBloco - 1]
+        if (estilo === ESTILO.textoLei && !b.attrs?.estiloIdml && (
+          (b.type === 'paragrafLei' && ementaDeEmenda(iBloco - 1) && !/^\[/.test(textoDe(b))) ||
+          (b.type === 'corpoTratado' && (anterior?.type === 'notaTitulo' || (anterior?.type === 'artigoTitulo' && /^pre[aâ]mbulo$/i.test(textoDe(anterior))))))) {
+          estilo = ESTILO.textoLeiEspacoAnt
         }
         // "(Publicada no DOU…)" da CF e das emendas: o texto fica no estilo, e o DOU em itálico light
         if ((ehEmenda || ehConstituicao) && b.type === 'notaTitulo') {

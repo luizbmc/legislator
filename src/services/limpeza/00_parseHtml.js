@@ -276,8 +276,10 @@ export function fillNotaGaps(nodes) {
     return start
   })
   const joined = nodes.map(node => node.type === 'text' ? node.text : '').join('')
+  // continuação: " e " (às vezes ".e " ou ", e ", erro do docx) + trecho que fecha com ")" e
+  // termina numa data, ou trecho de nota ("com nova redação dada pela EC nº 58, de 2009)")
   const continuaNotaWord = closeIndex =>
-    /^\)[\s ]+e[\s ]+(?=[^)]*\d{1,2}\/\d{1,2}\/\d{4}\))/.test(joined.slice(closeIndex))
+    /^\)[\s ]*[.,]?[\s ]*e[\s ]+(?=[^()]*\d{1,2}\/\d{1,2}\/\d{4}\)|(?:com\s+(?:nova\s+)?reda[cç][aã]o|renumerad|transformad|alterad|acrescid|inclu[ií]d|revogad)[^()]*\b(?:1[89]|20)\d{2}\))/i.test(joined.slice(closeIndex))
 
   return nodes.map((node, nodeIndex) => {
     if (node.type !== 'text') return node

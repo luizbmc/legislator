@@ -45,6 +45,8 @@ export async function abrirSessao(chave, publicacao, opcoes) {
   const s = estado.sessao || new SessaoPaginacao(estado, relatorio, publicacao)
   // opções da exportação, para o "Gerar PDF" da tela (institucional, modelo, Typst)
   s.opcoes = opcoes
+  // estilos de parágrafo da tela (ajustes 'estilo'), já aplicados na composição: resultado para o modelo
+  s.estilosParagrafo = relatorio?.estilosParagrafo || { aplicados: 0, naoEncontrados: [] }
   sessoes.set(chave, s)
   return s
 }
@@ -398,6 +400,8 @@ export class SessaoPaginacao {
         }
         bloco.notas = (it.runs || []).filter(r => r.nota).map(r => r.nota.map(x => x.texto).join(''))
         bloco.ancora = ancoraDe(this.miolo[it.i])
+        // estilo trocado na tela: o que as regras dariam
+        if (this.miolo[it.i].estiloPadrao) bloco.estiloPadrao = this.miolo[it.i].estiloPadrao
         bloco.fimPedido = fimPedido.get(`${it.i}|${j === j1 ? k1 : bloco.total}`) ?? null
         blocos.push(bloco)
       }
@@ -407,9 +411,12 @@ export class SessaoPaginacao {
         ajustadas: (pg.ajustes || []).length, cabeco: pg.par === 0 ? this.publicacao.titulo : parte1, blocos,
       })
     })
-    const naoEncontrados = this.manual.naoEncontrados.map(a => ({ id: a.id, tipo: a.tipo, texto: a.ancora?.texto }))
+    const naoEncontrados = [...this.manual.naoEncontrados.filter(a => a.tipo !== 'estilo'), ...(this.estilosParagrafo?.naoEncontrados || [])]
+      .map(a => ({ id: a.id, tipo: a.tipo, texto: a.ancora?.texto }))
     return {
       paginas, estilos: this.estilosUsados(), resumo: this.resumo, ms: this.ms ?? null,
+      // estilos de parágrafo do modelo (livro.idml da pasta do livro, ou o modelo do Normando), para trocar
+      estilosParagrafo: this.estilos.nomesPar?.() || [],
       // replanejamento do último ajuste: janela de N páginas, ou null (até o fim do livro)
       janela: this.janela ?? null,
       ajustes: { aplicados: this.manual.aplicados, naoEncontrados, fins: this.finsManuais },

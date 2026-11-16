@@ -11,7 +11,7 @@ import JSZip from 'jszip'
 import { prepararPublicacao } from '../idml/exportIdml.js'
 import { aplicarTextosDoIdml } from '../idml/textosDeIdml.js'
 import { acharDicionarioIndesign, prepararComposicao, pontoBomComposta } from './composicaoLivro.js'
-import { resolverAjustes } from './ajustesLocais.js'
+import { resolverAjustes, aplicarEstilos, ajustesDeEstilo } from './ajustesLocais.js'
 import { paragrafosDaPublicacao, novoRelatorio, aplicarGrep, soltarNbsp } from '../idml/historia.js'
 import { valoresDosCampos, aplicarCampos } from '../idml/pretextuais.js'
 import { aplicarPretextuaisDoLivro } from '../idml/pretextuaisLivro.js'
@@ -22,7 +22,7 @@ import { divisoes, candidatosPilha, pilhasConfirmadas } from './pilhas.js'
 import { itensConferencia, numeracaoDeLinhas, anotarPdf, palavrasParaTestar } from './conferencia.js'
 import { planejarPaginas } from './paginacao.js'
 import { SessaoPaginacao } from './sessaoPaginacao.js'
-import { montarLinhas, hifenizacao, pedidosDeLargura, aberturas, revisar, ABERTA, LIBERAR_JA, pedidosDePrefixos, listaHifenizacoes, pedidosHifenProprio } from './linhas.js'
+import { montarLinhas, hifenizacao, pedidosDeLargura, aberturas, revisar, ABERTA, LIBERAR_JA, SEIS_LETRAS_RESOLVE, pedidosDePrefixos, listaHifenizacoes, pedidosHifenProprio } from './linhas.js'
 
 // rodadas de verificação da composição (medir → paginar → compor → conferir as linhas): as
 // primeiras corrigem tudo; as seguintes, só hífens seguidos (até RODADAS_ESCADA a mais)
@@ -84,7 +84,13 @@ export async function gerarPdfPublicacao(publicacao, opcoes = {}) {
 
   // PDF da tela de paginação: o miolo, as medidas, o compositor e as restrições são os da sessão
   const sessao = opcoes.sessao || null
-  const miolo = sessao ? sessao.miolo : soltarNbsp(aplicarGrep(paragrafosDaPublicacao(pub, { cabecalho: opcoes.cabecalho || 'secao' }, rel), opcoes.formato?.grep), opcoes.semNbsp, { numeroParentese: !!opcoes.formato?.soltarNbsp })
+  // estilo de parágrafo escolhido na tela de paginação (ajustes 'estilo'): antes do GREP e de toda a
+  // composição — a tela e a exportação passam por aqui com os mesmos ajustes
+  const comEstilos = pars => {
+    rel.estilosParagrafo = aplicarEstilos(opcoes.estilosParagrafo ?? ajustesDeEstilo(opcoes.ajustes?.itens), pars, nome => estilos.temPar(nome))
+    return pars
+  }
+  const miolo = sessao ? sessao.miolo : soltarNbsp(aplicarGrep(comEstilos(paragrafosDaPublicacao(pub, { cabecalho: opcoes.cabecalho || 'secao' }, rel)), opcoes.formato?.grep), opcoes.semNbsp, { numeroParentese: !!opcoes.formato?.soltarNbsp })
   const primeiraPaginaMiolo = opcoes.primeiraPaginaMiolo ?? cfg.paginasPreTextuais + 1
   // livro completo (pdfLivroCompleto.js): aqui só o miolo; o resto vem das páginas do livro
   const soMiolo = !!(opcoes.livro || opcoes.somenteMiolo)
@@ -220,6 +226,40 @@ export async function gerarPdfPublicacao(publicacao, opcoes = {}) {
           const novo = { ...restricoes.get(i), compostasLivres: rs.compostasLivres.filter(k => !ks.includes(k)), compostasNoHifen: [...new Set([...(rs.compostasNoHifen || []), ...ks])], fixo: { tr: ok[0], sp: ok[1] }, fixoHifen: true, semAperto: true }
           delete novo.aperto
           if (!novo.compostasLivres.length) delete novo.compostasLivres
+          restricoes.set(i, novo)
+          if (!novos.includes(i)) novos.push(i)
+          n++
+        }
+        return n
+      }
+      // hierarquia intermediária (regra do usuário): linha acima de SEIS_LETRAS_RESOLVE (175%) — se
+      // hifenizar uma palavra de 6 letras da linha (ou a 1ª da linha seguinte, que desceu dela) deixa o
+      // parágrafo sem linha acima disso e com o mesmo nº de linhas, essa hifenização é permitida e
+      // fica no lugar da correção de revisar (aperto, custo de hifenização) para o parágrafo
+      const seisQueResolvem = (hif, abert, linhas, plano, antes, novos) => {
+        let n = 0
+        for (const [i, h] of hif) {
+          const a = abert.get(i)
+          if (!a?.detalhes?.length || h.fimImpar.length || h.escada > 2 || !composicao?.tem(i) || manualDe(i)?.tr != null) continue
+          const marcas = linhas.get(i)?.marcas
+          if (!marcas) continue
+          const rs0 = antes.get(i) || {}
+          const seis = k => (String(marcas[k]?.palavra || '').match(/\p{L}/gu) || []).length === 6
+          const ks = [...new Set(a.detalhes.filter(d => d.razao > SEIS_LETRAS_RESOLVE)
+            .flatMap(d => [...(d.ks || []), h.primeiras?.[d.n + 1]]).filter(k => k != null && seis(k)))]
+            .filter(k => !(rs0.seisLetras || []).includes(k) && !(rs0.semHifen || []).includes(k))
+          if (!ks.length) continue
+          const pl = plano[i] || {}
+          const m = manualDe(i)
+          const comM = rs => m ? { ...rs, manual: m } : rs
+          const op = rs => ({ tr: pl.tr ?? 0, sp: pl.sp ?? 100, semHifen: pl.hy === false, rs: comM(rs), base: baseHifen })
+          const atual = composicao.textos(i, op(rs0))
+          const novo = { ...rs0, seisLetras: [...(rs0.seisLetras || []), ...ks] }
+          const ls = composicao.textos(i, op(novo))
+          const texto = l => l.partes.map(q => q.t).join('')
+          const resolve = ls.length === atual.length && ls.map(texto).join('|') !== atual.map(texto).join('|') &&
+            ls.every(l => !l.justificada || (l.espaco <= SEIS_LETRAS_RESOLVE && l.espaco >= formato.apertada))
+          if (!resolve) continue
           restricoes.set(i, novo)
           if (!novos.includes(i)) novos.push(i)
           n++
@@ -417,6 +457,10 @@ export async function gerarPdfPublicacao(publicacao, opcoes = {}) {
         // apertada além do limite (com o tracking/espaço de algum passo permitido, com o mesmo nº de
         // linhas), quebra no hífen — a liberação fica só para quando o hífen não serve (regra do usuário)
         if (composicao) {
+          if (rodada < RODADAS) {
+            const seis = seisQueResolvem(hif, abert, linhas, plano, restricoesDaRodada, novos)
+            if (seis) resumoRodada.seisLetrasResolvem = seis
+          }
           const noHifen = voltarAoHifenProprio(restricoes, plano, novos)
           if (noHifen) resumoRodada.compostasNoHifen = noHifen
         }

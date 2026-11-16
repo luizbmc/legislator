@@ -59,6 +59,21 @@ export function mergeComHtml(blocos, classifiedLinhas, { preferStyleHint = false
       return t === node.text ? node : { ...node, text: t }
     })
 
+    // " - " que atravessa nós (rótulo em negrito "V -" + " o Ministro…"): troca só o hífen
+    const juntos = normalizado.map(node => node.type === 'text' ? node.text || '' : '\u0000').join('')
+    for (const m of juntos.matchAll(/(?<=[  ])-(?=[  ])/g)) {
+      let pos = m.index
+      for (let i = 0; i < normalizado.length; i++) {
+        const node = normalizado[i]
+        const len = node.type === 'text' ? (node.text || '').length : 1
+        if (pos < len) {
+          if (node.type === 'text') normalizado[i] = { ...node, text: node.text.slice(0, pos) + '–' + node.text.slice(pos + 1) }
+          break
+        }
+        pos -= len
+      }
+    }
+
     // O texto puro da pipeline remove a indentacao visual importada do Word/HTML.
     // Faz o mesmo no conteudo rico sem perder marks como italico ou negrito.
     const semRecuoInicial = [...normalizado]

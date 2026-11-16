@@ -167,7 +167,7 @@ export function trocarTexto(p, novo) {
   const runs = p.runs.filter(r => !r.elemento)
   if (!runs.length) { p.runs = [{ abre: '<CharacterStyleRange AppliedCharacterStyle="CharacterStyle/$ID/[No character style]">', props: '', bruto: codificar(novo) }]; return }
   const textos = runs.map(r => decodificar(r.bruto))
-  const sobre = runs.find(ehSobrescrito)
+  const runsSobre = runs.find(ehSobrescrito)
   const normais = runs.filter(r => !ehSobrescrito(r))
   let rotulo = null, resto = runs
   if (normais.length >= 2 && normais[0] === runs[0] && normais[0].abre !== normais[1].abre && /:\s*$/.test(textos[0])) {
@@ -177,6 +177,12 @@ export function trocarTexto(p, novo) {
   const corpo = (resto.filter(r => !ehSobrescrito(r)).sort((a, b) => decodificar(b.bruto).length - decodificar(a.bruto).length)[0]) || runs[0]
   const saida = []
   let texto = String(novo ?? '')
+  // "nos"/"nºs" abreviando "números" ("Emendas Constitucionais nos 1/1992 a 141/2026", "nos 1 a
+  // 6/1994"): "n" + "os" sobrescrito; no livro sem sobrescrito, o do InDesign no trecho do corpo
+  // (número seguido de "/ano", " a ", " e " ou ",": "nos 30 dias" é a palavra "nos")
+  const NUMEROS = /\bn(?:[ºo°]s|os)(?=\s+\d+(?:\/\d|\s+(?:a|e)\s+\d|,\s*\d))/
+  let sobre = runsSobre
+  if (!sobre && NUMEROS.test(texto)) sobre = { ...corpo, abre: corpo.abre.replace(/>$/, ' Position="Superscript">') }
   if (rotulo) {
     const i = texto.indexOf(':')
     if (i >= 0) {
@@ -186,14 +192,14 @@ export function trocarTexto(p, novo) {
     }
   }
   if (sobre) {
-    // ordinais: "3ª" → "3" + "a" sobrescrito; "nºs" → "n" + "os" sobrescrito
-    const re = /(\d)([ºª])|\b(n)([ºª])(s?)(?=[\s\d]|$)/g
+    // ordinais: "3ª" → "3" + "a" sobrescrito (só onde o livro já tem sobrescrito); "nºs"/"nos" →
+    // "n" + "os" sobrescrito. O "nº" singular fica como está (no livro é o caractere "º")
+    const re = new RegExp((runsSobre ? String.raw`(\d)([ºª])|` : '') + NUMEROS.source, 'g')
     let pos = 0, m
     while ((m = re.exec(texto))) {
       const ate = m.index + 1
       if (ate > pos) saida.push(trechoDe(corpo, texto.slice(pos, ate)))
-      const letra = (m[2] || m[4]) === 'ª' ? 'a' : 'o'
-      saida.push(trechoDe(sobre, letra + (m[5] || '')))
+      saida.push(trechoDe(sobre, m[2] === 'ª' ? 'a' : m[2] === 'º' ? 'o' : 'os'))
       pos = m.index + m[0].length
     }
     if (pos < texto.length) saida.push(trechoDe(corpo, texto.slice(pos)))

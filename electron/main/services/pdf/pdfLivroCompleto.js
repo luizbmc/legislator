@@ -114,7 +114,8 @@ export async function montarPdfLivro(pdfMiolo, { livro, sessao, opcoes, rel, com
 
   const sumario = livro.dados.sumario, trocas = livro.dados.trocas || []
   for (let n = 1; n < primeira; n++) {
-    const extras = sumario.flatMap((t, k) => t.pagina === n && mapa.sumario[k] != null && mapa.sumario[k] !== t.numero ? [troca(t, mapa.sumario[k], 'direita')] : [])
+    // (o sumário é refeito com as entradas do Normando: pretextuaisNasPaginas, sumarioLivro.js)
+    const extras = []
     if (mapa.ultimaEmenda) for (const t of trocas) if (t.pagina === n && !recomposto(n, t)) extras.push(troca(t, mapa.ultimaEmenda))
     doLivro(n, extras)
   }
@@ -186,15 +187,18 @@ export async function montarPdfLivro(pdfMiolo, { livro, sessao, opcoes, rel, com
     else rel.livro = { paginas: ordem.length }
     // página do livro de cada página do PDF (o PDF para a gráfica tira a sangria delas do livro-sangria.pdf)
     rel.livro.origem = ordem.map(o => o.livro || null)
-    // sumário clicável e marcadores do PDF com as entradas do sumário (navegacaoPdf.js); não no da gráfica
+    // sumário clicável (links "normando:pagina:N" da composição do sumário) e marcadores do PDF com as
+    // entradas do sumário (navegacaoPdf.js); no da gráfica, os links saem
+    const { navegacaoDoLivro, linksDoSumario } = await import('./navegacaoPdf.js')
+    const links = linksDoSumario(saida, { remover: !!opcoes.grafica })
     if (!opcoes.grafica) try {
-      const { navegacaoDoLivro } = await import('./navegacaoPdf.js')
       const nav = navegacaoDoLivro(saida, {
-        entradas: mapa.entradasSumario, posicoes: sumario, numeros: mapa.sumario, formato,
+        entradas: mapa.entradasSumario, formato,
         paginaSumario: sumario.length ? Math.min(...sumario.map(t => t.pagina)) : null,
       })
-      rel.livro.navegacao = nav
-      if (sumario.length && nav.links !== sumario.length) rel.avisos?.push?.(`Sumário clicável: ${nav.links} de ${sumario.length} entradas com link (o sumário do livro e o do IDML não bateram).`)
+      rel.livro.navegacao = { ...nav, links }
+      const numeradas = (mapa.entradasSumario || []).filter(e => e.numerada).length
+      if (mapa.sumarioTrocado && links !== numeradas) rel.avisos?.push?.(`Sumário clicável: ${links} de ${numeradas} entradas com link.`)
     } catch (e) {
       rel.avisos?.push?.(`Não foi possível pôr links e marcadores no PDF: ${e.message}`)
     }

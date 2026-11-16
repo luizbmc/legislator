@@ -369,13 +369,18 @@ export function corrigirPontuacaoEnumeracoes(linhas) {
     const ultimoIntroduzSublista =
       ESTILOS_ENUMERACAO.has(estiloSeguinte) &&
       NIVEL_ENUMERACAO[estiloSeguinte] > NIVEL_ENUMERACAO[estilo]
+    // a enumeracao de cima continua logo depois (alinea seguida do proximo inciso, item seguido
+    // da proxima alinea): o ultimo elemento nao fecha a lista, termina com ponto e virgula
+    const enumeracaoDeCimaContinua =
+      ESTILOS_ENUMERACAO.has(estiloSeguinte) &&
+      NIVEL_ENUMERACAO[estiloSeguinte] < NIVEL_ENUMERACAO[estilo]
 
     for (let g = 0; g < grupo.length; g++) {
       const ultimo = g === grupo.length - 1
       if (ultimo && ultimoIntroduzSublista) continue
 
       const indice = grupo[g]
-      const pontuacao = ultimo ? '.' : ';'
+      const pontuacao = ultimo && !enumeracaoDeCimaContinua ? '.' : ';'
       const corrigida = corrigirLinha(output[indice], pontuacao)
       if (corrigida !== output[indice]) {
         output[indice] = corrigida

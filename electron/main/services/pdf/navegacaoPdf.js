@@ -101,6 +101,33 @@ export function marcadores(doc, itens) {
 }
 
 /**
+ * Links do sumário composto pelo Normando (pretextuaisPdf.js): o Typst grava cada entrada como link
+ * para "normando:pagina:N"; aqui ele vira destino interno (página N do PDF). `remover`: só tira os
+ * links (PDF da gráfica). Devolve quantos foram trocados.
+ */
+export function linksDoSumario(doc, { remover = false } = {}) {
+  let feitos = 0
+  for (const pagina of doc.getPages()) {
+    const annots = pagina.node.lookup(PDFName.of('Annots'))
+    if (!(annots instanceof PDFArray)) continue
+    for (let i = annots.size() - 1; i >= 0; i--) {
+      const ref = annots.get(i)
+      const a = doc.context.lookup(ref)
+      const acao = a?.lookup?.(PDFName.of('A'))
+      const uri = acao?.lookup?.(PDFName.of('URI'))
+      const texto = uri?.decodeText?.() ?? uri?.asString?.() ?? ''
+      const m = String(texto).match(/^normando:pagina:(\d+)$/)
+      if (!m) continue
+      if (remover) { annots.remove(i); continue }
+      a.delete(PDFName.of('A'))
+      a.set(PDFName.of('Dest'), destino(doc, Number(m[1]) - 1))
+      feitos++
+    }
+  }
+  return feitos
+}
+
+/**
  * Sumário clicável + marcadores no PDF do livro completo.
  * @param entradas  mapa.entradasSumario: [{ titulo, estilo, numerada, pagina }]
  */

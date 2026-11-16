@@ -627,7 +627,9 @@ export function registerPublicacoesHandlers() {
     const itens = listarAjustes(getDb(), id)
     const { opcoesDoLivro } = await import('../services/idml/livroBase.js')
     const doLivro = await opcoesDoLivro(publicacao, pastaModeloNormando())
-    const s = await abrirSessao(`local:${id}`, doLivro?.publicacaoPlano ?? publicacao, { ...doLivro?.opcoes, institucional, pastaModelo: doLivro?.opcoes.pastaModelo ?? pastaModeloNormando(), typst: executavelTypst() })
+    // estilos de parágrafo da tela (ajustes 'estilo'): entram na composição, como na exportação
+    const { ajustesDeEstilo } = await import('../services/pdf/ajustesLocais.js')
+    const s = await abrirSessao(`local:${id}`, doLivro?.publicacaoPlano ?? publicacao, { ...doLivro?.opcoes, institucional, pastaModelo: doLivro?.opcoes.pastaModelo ?? pastaModeloNormando(), typst: executavelTypst(), estilosParagrafo: ajustesDeEstilo(itens) })
     // ajustes salvos valem para o formato normal: fora dele, as páginas são outras
     return s.aplicar(doLivro?.opcoes.formato?.cabeco ? [] : itens)
   })

@@ -28,6 +28,62 @@ function getNodeTextSemMark(node, markType) {
   return ''
 }
 
+/**
+ * "Ignorar alterações de nota": o parágrafo novo que veio sem notas (rotina Notas Vade Mecum)
+ * recebe as notas do antigo, nas mesmas posições (contadas no texto sem notas).
+ */
+function comNotasDoAntigo(oldNode, newNode) {
+  if (!Array.isArray(oldNode?.content) || !Array.isArray(newNode?.content)) return newNode
+  const ehNota = n => n?.type === 'text' && nodeHasMark(n, 'nota')
+  // notas do antigo: grupos de nós seguidos com a marca, e onde entram no texto sem notas
+  const grupos = []
+  let pos = 0, atual = null
+  for (const n of oldNode.content) {
+    if (ehNota(n)) {
+      if (!atual) { atual = { pos, nos: [] }; grupos.push(atual) }
+      atual.nos.push(n)
+    } else {
+      atual = null
+      pos += n.type === 'text' ? (n.text || '').length : 1
+    }
+  }
+  // o novo já tem notas (redação nova do dispositivo): ficam as dele
+  if (!grupos.length || newNode.content.some(ehNota)) return newNode
+  const base = newNode.content
+  const total = base.reduce((s, n) => s + (n.type === 'text' ? (n.text || '').length : 1), 0)
+  const fimAntigo = pos
+  const content = []
+  let feito = 0, g = 0
+  const alvo = grupo => (grupo.pos >= fimAntigo ? total : Math.min(grupo.pos, total))
+  const inserir = grupo => {
+    const ultimo = content[content.length - 1]
+    if (ultimo?.type === 'text' && !/\s$/.test(ultimo.text) && !/^\s/.test(grupo.nos[0].text || '')) content.push({ type: 'text', text: ' ' })
+    content.push(...grupo.nos)
+  }
+  for (const n of base) {
+    if (n.type !== 'text') {
+      while (g < grupos.length && alvo(grupos[g]) <= feito) inserir(grupos[g++])
+      content.push(n)
+      feito += 1
+      continue
+    }
+    let t = n.text || ''
+    // nota que cai dentro (ou no começo) deste trecho: corta o trecho e põe a nota no meio
+    while (g < grupos.length && alvo(grupos[g]) - feito < t.length) {
+      const corte = Math.max(0, alvo(grupos[g]) - feito)
+      if (corte > 0) content.push({ ...n, text: t.slice(0, corte) })
+      inserir(grupos[g++])
+      t = t.slice(corte)
+      feito += corte
+      if (t && !/^\s/.test(t) && !/\s$/.test(content[content.length - 1].text || '')) content.push({ type: 'text', text: ' ' })
+    }
+    content.push({ ...n, text: t })
+    feito += t.length
+  }
+  while (g < grupos.length) inserir(grupos[g++])
+  return { ...newNode, content: content.filter(n => n.type !== 'text' || n.text) }
+}
+
 function isNotaTituloNode(node) {
   return node?.type === 'notaTitulo'
 }
@@ -275,19 +331,26 @@ export function compararNormas(oldDoc, newDoc, opcoes = {}) {
       const rawEqual = oldTexts[op.oldIdx] === newTexts[op.newIdx]
       mergedContent.push(rawEqual ? newNodes[op.newIdx] : oldNodes[op.oldIdx])
 
+    } else if (op.type === 'modified' && ignorarAlteracoesNota && isNotaTituloNode(oldNodes[op.oldIdx]) && isNotaTituloNode(newNodes[op.newIdx])) {
+      // nota de título com outra redação: alteração de nota, fica a do Normando
+      mergedContent.push(oldNodes[op.oldIdx])
+
     } else if (op.type === 'modified') {
       // subtype: 'format' se só a formatação mudou; 'text' se o conteúdo mudou
       const subtype = oldNorm[op.oldIdx] === newNorm[op.newIdx] ? 'format' : 'text'
-      mergedContent.push(newNodes[op.newIdx])
+      // ignorando as notas: o texto novo com as notas que o parágrafo já tem (o docx pode vir
+      // sem elas, como na rotina Notas Vade Mecum, ou com outra redação)
+      const novo = ignorarAlteracoesNota ? comNotasDoAntigo(oldNodes[op.oldIdx], newNodes[op.newIdx]) : newNodes[op.newIdx]
+      mergedContent.push(novo)
       diffs.push({
         id: `diff-${diffId++}`,
         type: 'modified',
         subtype,
         contentIdx,
         oldNode: oldNodes[op.oldIdx],
-        newNode: newNodes[op.newIdx],
+        newNode: novo,
         oldText: oldTexts[op.oldIdx],
-        newText: newTexts[op.newIdx],
+        newText: getNodeText(novo),
         resolved: false,
       })
 
@@ -308,6 +371,8 @@ export function compararNormas(oldDoc, newDoc, opcoes = {}) {
     } else if (op.type === 'delete') {
       // Insere o nó removido no local correto para que o usuário possa vê-lo
       mergedContent.push(oldNodes[op.oldIdx])
+      // nota de título que o docx não tem (a rotina Notas Vade Mecum tira): fica, sem diferença
+      if (ignorarAlteracoesNota && isNotaTituloNode(oldNodes[op.oldIdx])) continue
       diffs.push({
         id: `diff-${diffId++}`,
         type: 'removed',

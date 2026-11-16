@@ -131,7 +131,7 @@ function propsDoRun(run, e, estilos) {
 function pecaDePalavra(t, run, k, e, estilos, dic, minimos, hifenizaMaiuscula, pedir) {
   const c = estilos.char(run.char)
   // pontos possíveis: dicionário do InDesign, logo depois do prefixo e depois de hífen próprio
-  const dicio = new Set(), proprios = new Set()
+  const dicio = new Set(), proprios = new Set(), seisPts = new Set()
   // exceção do usuário (Configurações → Hifenização): só os pontos dela, no lugar do dicionário e das
   // regras (vale a palavra inteira, com hífen próprio, ou cada sequência de letras)
   let excecao = null
@@ -144,13 +144,16 @@ function pecaDePalavra(t, run, k, e, estilos, dic, minimos, hifenizaMaiuscula, p
     if (ex) { excecao ||= new Set(); for (const p of ex) excecao.add(m.index + p); continue }
     if (!hifenizaMaiuscula && /^\p{Lu}/u.test(m[0])) continue
     for (const q of pontosDaPalavra(m[0], dic, minimos)) dicio.add(m.index + q)
+    // palavra de 6 letras abaixo do mínimo do estilo (7): pontos guardados à parte, só valem quando
+    // a verificação a libera (rs.seisLetras: linha aberta acima de 175%/190%)
+    if ([...m[0]].length === 6 && minimos.palavra > 6) for (const q of pontosDaPalavra(m[0], dic, { ...minimos, palavra: 6 })) seisPts.add(m.index + q)
   }
   if (excecao) for (const p of excecao) dicio.add(p)
   for (let i = 1; i < t.length - 1; i++) if ((t[i] === '-' || t[i] === '‐') && LETRA.test(t[i - 1]) && LETRA.test(t[i + 1])) proprios.add(i + 1)
   const pref = prefixoDe(t)
   const inicioLetras = t.search(LETRA)
   const posPrefixo = pref && inicioLetras >= 0 && !excecao ? inicioLetras + pref.length : null
-  const cortes = new Set([...dicio, ...proprios])
+  const cortes = new Set([...dicio, ...proprios, ...seisPts])
   if (posPrefixo) cortes.add(posPrefixo)
   // espaços sem quebra: segmento próprio
   for (let i = 0; i < t.length; i++) if (t[i] === NBSP) { cortes.add(i); cortes.add(i + 1) }
@@ -168,7 +171,7 @@ function pecaDePalavra(t, run, k, e, estilos, dic, minimos, hifenizaMaiuscula, p
     })
   }
   return {
-    k, t, run, segs, dicio, proprios, posPrefixo, excecao,
+    k, t, run, segs, dicio, proprios, posPrefixo, excecao, seisPts,
     hifen: pedir(e, run, '-'),
     // itálico de estilo de caractere não se hifeniza — salvo em parágrafo já itálico pelo estilo (ementa)
     italico: /italic|oblique/i.test(c.FontStyle || '') && !/italic|oblique/i.test(estilos.par(e).FontStyle || ''),
@@ -237,7 +240,7 @@ class Composicao {
     if ((rs.semHifen || []).includes(peca.k)) return { hifen: new Set(), proprio: new Set() }
     const seis = (rs.seisLetras || []).includes(peca.k)
     const prot = trechosProtegidos(peca.t, { vogais: true, regras: true, prefixoPreferido: !livre, ...(seis ? { minLetras: 6 } : {}) })
-    const candidatos = new Set(peca.dicio)
+    const candidatos = new Set(seis ? [...peca.dicio, ...peca.seisPts] : peca.dicio)
     if (peca.posPrefixo && !livre) candidatos.add(peca.posPrefixo)
     let hifen = new Set([...candidatos].filter(p => !proprio.has(p) && !prot.some(([a, b, h]) => a < p && p < b && !h?.includes(p))))
     // palavra composta: além do hífen próprio, só os pontos com 4 letras ou mais entre a divisão e o

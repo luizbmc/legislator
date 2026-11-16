@@ -61,6 +61,8 @@
 .pg-coluna { flex-direction: column; align-items: stretch; }
 .pg-botoes .btn-ghost { text-align: left; }
 .pg-entrelinha { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 6px; }
+.pg-estilo { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 8px; font-size: 13px; }
+.pg-estilo select { width: 100%; padding: 3px 4px; }
 
 .pg-alt { width: 100%; border-collapse: collapse; font-size: 12px; }
 .pg-alt th, .pg-alt td { padding: 3px 4px; text-align: right; border-bottom: 1px solid var(--border-soft); }

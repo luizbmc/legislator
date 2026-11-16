@@ -108,13 +108,18 @@ function fios(p, f) {
 const nomeEstilo = (abre, tipo) => decodeURIComponent(abre.match(new RegExp(`Applied${tipo}Style="${tipo}Style/([^"]+)"`))?.[1] || '')
 
 /** Conteúdo Typst de uma história, para o quadro dela. */
-function typstDaHistoria(xml, estilos, largura, { bandas = [], faixa = null } = {}) {
+// livre: sem faixas do livro, entrelinha multiplicada pela variável Typst `lf` (folha técnica que
+// não cabe no quadro: entrelinha apertada)
+// sumario: história do sumário (tabulação com pontilhado até o número, sem hifenização); devolve
+// também os parágrafos em separado (`itens`), para correr pelos quadros (sumarioNosQuadros)
+function typstDaHistoria(xml, estilos, largura, { bandas = [], faixa = null, livre = false, sumario = false } = {}) {
   const h = lerHistoria(xml)
   if (!h) return ''
   const extraPar = new Map(), extraChar = new Map()
   const E = { par: n => fonteSeparada(extraPar.get(n) || estilos.par(n)), char: n => (n ? fonteSeparada(extraChar.get(n) || estilos.char(n)) : {}), cor: estilos.cor }
   const defs = new Map()
   const blocos = []
+  const itens = []
   let anterior = null, primeiro = null, ultimo = null
   h.pars.forEach((p, k) => {
     let estilo = nomeEstilo(p.abre, 'Paragraph')
@@ -141,32 +146,110 @@ function typstDaHistoria(xml, estilos, largura, { bandas = [], faixa = null } = 
       if (Object.keys(lc).length) { const nome = `${char || 'sem'}__local${k}_${j}`; extraChar.set(nome, { ...estilos.char(char), ...lc }); char = nome }
       return { char, bruto: r.bruto }
     })
-    const conteudo = runs.map(r => r.bruto.split('<?ACE 8?>').map(parte => {
-      const t = parte.replace(/<\?[^>]*\?>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&').split(String.fromCharCode(0xfeff)).join('')
+    const limpo = parte => parte.replace(/<\?[^>]*\?>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&').split(String.fromCharCode(0xfeff)).join('')
+    const deTrechos = rs => rs.map(r => { const t = limpo(r.bruto); return t ? `#(${trecho({ texto: t, char: r.char || null }, E)})` : '' }).join('')
+    let conteudo = runs.map(r => r.bruto.split('<?ACE 8?>').map(parte => {
+      const t = limpo(parte)
       return t ? `#(${trecho({ texto: t, char: r.char || null }, E)})` : ''
     }).join('#h(1fr)')).join('')
+    if (sumario) {
+      const ps = E.par(estilo)
+      const tab = runs.findIndex(r => r.bruto.includes('<?ACE 8?>'))
+      if (tab >= 0) {
+        // tabulação de recuo à direita: pontilhado até o número; pelo menos 3 pontos colados ao fim do
+        // texto (sem espaço para eles, a última palavra desce); recuo da última linha negativo (o número
+        // na margem, além do recuo à direita): o número e o fim do pontilhado saem da linha para a direita
+        const [a, ...b] = runs[tab].bruto.split('<?ACE 8?>')
+        const antes = [...runs.slice(0, tab), { ...runs[tab], bruto: a }]
+        const depois = [{ ...runs[tab], bruto: b.join('') }, ...runs.slice(tab + 1)]
+        const lider = w => ps.Leader ? `box(width: ${w}, repeat[${ps.Leader.replace(/[\\\[\]#*_`$<>@]/g, m => '\\' + m)}])` : `h(${w})`
+        const sobra = -(num(ps.LastLineIndent) || 0)
+        const fim = sobra > 0 ? `#box(width: 0pt)[#box(width: ${pt(sobra)})[#${lider('1fr')}${deTrechos(depois)}]]` : deTrechos(depois)
+        // (os 3 pontos mínimos como texto: num trecho de largura fixa o Typst espaçaria os pontos)
+        const minimo = ps.Leader ? `#(${JSON.stringify(ps.Leader.repeat(3))})` : '#h(0.75em)'
+        conteudo = `${deTrechos(antes)}#sym.wj${minimo}#sym.wj#${lider('1fr')}${fim}`
+      }
+      conteudo = `#text(hyphenate: false)[${conteudo}]`
+    }
     // parágrafo que não mudou: a faixa dele no PDF do livro (composição do InDesign), no lugar novo
-    const b = bandas[k]
+    const b = livre ? null : bandas[k]
     // espaço entre parágrafos: o do livro entre duas faixas que já eram seguidas; senão, o dos estilos
+    const entre = anterior == null ? 0 : anterior.f.estilo === f.estilo && anterior.f.mesmoEstilo != null ? anterior.f.mesmoEstilo : anterior.f.depois + f.antes
     const gap = anterior == null ? 0
       : b && anterior.b && b.velho === anterior.b.velho + 1 ? (b.b - f.asc) - anterior.b.e
-      : (anterior.f.estilo === f.estilo && anterior.f.mesmoEstilo != null ? anterior.f.mesmoEstilo : anterior.f.depois + f.antes) + (f.leading - f.asc)
-    if (anterior) blocos.push(`#v(${pt(gap)})`)
+      : entre + (f.leading - f.asc)
+    if (anterior) blocos.push(livre ? `#v(${pt(entre)} + ${pt(f.leading)} * lf - ${pt(f.asc)})` : `#v(${pt(gap)})`)
     const fs = fios(E.par(estilo), f)
     let corpoPar
     if (b && faixa) {
       const alto = b.e - b.b + b.asc + b.desc
       const img = `place(top + left, dx: ${pt(-b.x0)}, dy: ${pt(-(b.b - b.asc))}, image(${JSON.stringify(faixa.arquivo)}, page: ${faixa.pagina}, width: ${pt(faixa.largura)}, height: ${pt(faixa.altura)}))`
       corpoPar = `block(width: 100%, height: ${pt(b.e - b.b + f.asc)}, above: 0pt, below: 0pt, place(top + left, dx: ${pt(b.x0 - faixa.x0)}, dy: ${pt(f.asc - b.asc)}, box(width: ${pt(b.x1 - b.x0)}, height: ${pt(alto)}, clip: true, ${img})))`
-    } else corpoPar = `${f.nome}(plano: true)[${conteudo || '#sym.space.nobreak'}]`
-    blocos.push(fs.length ? `#block(width: 100%, above: 0pt, below: 0pt, { ${corpoPar}; ${fs.join('; ')} })` : `#${corpoPar}`)
+    } else corpoPar = `${f.nome}(plano: true${livre ? ', lf: lf' : ''})[${conteudo || '#sym.space.nobreak'}]`
+    const bloco = fs.length ? `block(width: 100%, above: 0pt, below: 0pt, { ${corpoPar}; ${fs.join('; ')} })` : corpoPar
+    blocos.push('#' + bloco)
+    // página da entrada do sumário (número depois da tabulação) e "manter com o seguinte"
+    const pagina = Number(p.runs.map(r => r.bruto || '').join('').match(/<\?ACE 8\?>\s*(\d+)\s*$/)?.[1]) || null
+    const pe = E.par(estilo)
+    itens.push({ bloco, gap: anterior ? gap : 0, pagina, comSeguinte: num(pe.KeepWithNext) > 0, comAnterior: pe.KeepWithPrevious === 'true' })
     if (k === 0) primeiro = { b, f }
     anterior = { f, b }
     ultimo = { b, f }
   })
   // fonte que falta (ex.: "Roboto (TT)" do colofão do bolso): a Source Sans 3 no lugar da serifada do Typst
   const reserva = t => t.replace(/font: ("[^"]+")/g, (m, f) => (f === '"Source Sans 3"' ? m : `font: (${f}, "Source Sans 3")`))
-  return { defs: [...defs.values()].map(reserva), corpo: reserva(blocos.join('\n')), primeiro, ultimo }
+  return { defs: [...defs.values()].map(reserva), corpo: reserva(blocos.join('\n')), itens: itens.map(x => ({ ...x, bloco: reserva(x.bloco) })), primeiro, ultimo }
+}
+
+/**
+ * História que corre por vários quadros (sumário): Typst do quadro `k`. Cada quadro refaz a mesma
+ * distribuição dos parágrafos (medidos), parágrafo inteiro por quadro, respeitando "manter com o
+ * seguinte/anterior"; o que não cabe no último quadro é marcado como texto excedente. As entradas
+ * com página levam um link "normando:pagina:N" (navegacaoPdf.js troca pelo destino no PDF).
+ */
+function quadroCorrido(t, quadros, k) {
+  const q = quadros[k]
+  const [it, il, , ir] = q.inset
+  const W = pt(q.x1 - q.x0 - il - ir)
+  const alturas = quadros.map(x => pt(x.y1 - x.y0 - x.inset[0] - x.inset[2]))
+  const liga = t.itens.map((x, i) => x.comSeguinte || !!t.itens[i + 1]?.comAnterior)
+  const pars = t.itens.map(x => x.pagina ? `link("normando:pagina:${x.pagina}", ${x.bloco})` : x.bloco)
+  const arr = a => `(${a.join(', ')}${a.length === 1 ? ',' : ''})`
+  return `${t.defs.join('\n')}\n#place(top + left, dx: ${pt(q.x0 + il)}, dy: ${pt(q.y0 + it)}, context {\n` +
+    `  let W = ${W}\n` +
+    `  let alturas = ${arr(alturas)}\n` +
+    `  let pars = ${arr(pars)}\n` +
+    `  let gaps = ${arr(t.itens.map(x => pt(x.gap)))}\n` +
+    `  let liga = ${arr(liga.map(String))}\n` +
+    `  let n = pars.len()\n` +
+    `  let alt = pars.map(p => measure(block(width: W, p)).height)\n` +
+    `  let inicio = (0,)\n` +
+    `  let usado = 0pt\n` +
+    `  let i = 0\n` +
+    `  while i < n {\n` +
+    `    let ini = inicio.last()\n` +
+    `    let g = if i == ini { 0pt } else { gaps.at(i) }\n` +
+    `    if i > ini and inicio.len() < alturas.len() and usado + g + alt.at(i) > alturas.at(inicio.len() - 1) + 0.5pt {\n` +
+    `      let s = i\n` +
+    `      while s - 1 > ini and liga.at(s - 1) { s -= 1 }\n` +
+    `      inicio.push(s)\n` +
+    `      usado = 0pt\n` +
+    `      i = s\n` +
+    `      continue\n` +
+    `    }\n` +
+    `    usado += g + alt.at(i)\n` +
+    `    i += 1\n` +
+    `  }\n` +
+    `  inicio.push(n)\n` +
+    `  if ${k} < inicio.len() - 1 {\n` +
+    `    let a = inicio.at(${k})\n` +
+    `    let b = inicio.at(${k} + 1)\n` +
+    `    block(width: W, { for j in range(a, b) { if j > a { v(gaps.at(j)) }; pars.at(j) } })\n` +
+    `  }\n` +
+    (k === quadros.length - 1
+      ? `  if inicio.len() - 1 == alturas.len() and usado > alturas.last() + 0.5pt { place(top + left, dy: alturas.last() + 2pt, box(fill: rgb(220, 0, 0), inset: 2pt, text(font: "Source Sans 3", size: 7pt, fill: white)[Texto excedente: o sumário não cabe nas páginas do livro])) }\n`
+      : '') +
+    `})`
 }
 
 const VERTICAL = { TopAlign: 'top', CenterAlign: 'horizon', BottomAlign: 'bottom', JustifyAlign: 'top' }
@@ -236,7 +319,25 @@ export async function pretextuaisNasPaginas(zip, historias, filtro = () => true,
   const estilos = lerEstilos(await zip.file('Resources/Styles.xml').async('string'), await zip.file('Resources/Graphic.xml')?.async('string') || '')
   // páginas na numeração do livro: geometria do IDML do livro
   const quadros = (await quadrosDoLivro(base.zip || zip)).filter(q => historias.includes(q.story) && filtro(q.pagina))
+  const regiao = q => ({ x0: q.x0 - 2, y0: q.y0 - 2, x1: q.x1 + 2, y1: q.y1 + 2 })
+  const naPagina = (n, r, typ) => {
+    if (!out.has(n)) out.set(n, { regioes: [], typst: [] })
+    out.get(n).regioes.push(r)
+    out.get(n).typst.push(typ)
+  }
+  // história em vários quadros (sumário): o texto corre de um quadro para o seguinte
+  const corridas = new Set()
+  for (const story of new Set(quadros.map(q => q.story))) {
+    const qs = quadros.filter(q => q.story === story).sort((a, b) => a.pagina - b.pagina || a.y0 - b.y0)
+    if (qs.length < 2) continue
+    const xml = await zip.file(`Stories/Story_${story}.xml`)?.async('string')
+    const t = xml && typstDaHistoria(xml, estilos, qs[0].x1 - qs[0].x0 - qs[0].inset[1] - qs[0].inset[3], { sumario: true })
+    if (!t?.itens?.length) continue
+    corridas.add(story)
+    qs.forEach((q, k) => naPagina(q.pagina, regiao(q), quadroCorrido(t, qs, k)))
+  }
   for (const q of quadros) {
+    if (corridas.has(q.story)) continue
     const xml = await zip.file(`Stories/Story_${q.story}.xml`)?.async('string')
     if (!xml) continue
     const [it, il, ib, ir] = q.inset
@@ -265,10 +366,29 @@ export async function pretextuaisNasPaginas(zip, historias, filtro = () => true,
     const dy = v === 'top' && t.primeiro?.b ? pt(t.primeiro.b.b - t.primeiro.f.asc - topo)
       : v === 'bottom' && t.ultimo?.b ? `${pt(t.ultimo.b.e - topo)} - h`
       : v === 'bottom' ? `${H} - h` : v === 'horizon' ? `(${H} - h) / 2` : '0pt'
-    const typ = `${t.defs.join('\n')}\n#place(top + left, dx: ${pt(q.x0 + il)}, dy: ${pt(topo)}, context {\n` +
+    // folha técnica que não cabe: o texto sobe até 5 mm para a margem de cima e, se ainda não
+    // couber, é composto todo pelo Typst com a entrelinha apertada (até 90%); o limite de baixo
+    // não se passa
+    const tl = /folha-tecnica/.test(xml) ? typstDaHistoria(xml, estilos, w - il - ir, { livre: true }) : null
+    const colunas = c => q.colunas > 1 ? `#columns(${q.colunas}, gutter: ${pt(q.medianiz)})[\n${c}\n]` : c
+    const encaixe = !tl ? '' :
+      `  if dy + h > ${H} + 0.5pt {\n` +
+      `    let sobe = 5mm\n` +
+      `    if h <= ${H} + sobe + 0.5pt { dy = calc.max(${H} - h, -sobe) } else {\n` +
+      `      for lf in range(99, 89, step: -1).map(x => x / 100) {\n` +
+      `        c = block(width: ${W})[\n${colunas(tl.corpo)}\n]\n` +
+      `        h = measure(c).height\n` +
+      `        dy = calc.max(calc.min(dy, ${H} - h), -sobe)\n` +
+      `        if dy + h <= ${H} + 0.5pt { break }\n` +
+      `      }\n` +
+      `    }\n` +
+      `  }\n`
+    const defsLivre = tl ? tl.defs.filter(d => !t.defs.includes(d)) : []
+    const typ = `${[...t.defs, ...defsLivre].join('\n')}\n#place(top + left, dx: ${pt(q.x0 + il)}, dy: ${pt(topo)}, context {\n` +
       `  let c = block(width: ${W})[\n${corpo}\n]\n` +
       `  let h = measure(c).height\n` +
       `  let dy = ${dy}\n` +
+      encaixe +
       `  place(top + left, dy: dy, c)\n` +
       `  if dy + h > ${H} + 0.5pt { place(top + left, dy: ${H} + 2pt, box(fill: rgb(220, 0, 0), inset: 2pt, text(font: "Source Sans 3", size: 7pt, fill: white)[Texto excedente: o quadro do livro não comporta este texto])) }\n` +
       `})`

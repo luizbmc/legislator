@@ -453,6 +453,8 @@ export function itensDoMiolo(pars, estilos, f, { ajustes = true } = {}) {
       cabArtigo: textoPuro(p.runs.filter(r => r.char === 'bold-artigo' && !r.grep).slice(0, 1)).replace(/[.\s]+$/, ''),
       nivel: nivelSumario(p.estilo),
       titulo: textoPuro(p.runs),
+      // data e assinaturas: página só com elas fica sem o artigo no cabeço
+      assinatura: /^corpo-legis:ass-/.test(p.estilo),
     })
     depoisAnterior = fn.depois
   })
@@ -502,9 +504,11 @@ export function documentoTypst(partes, estilos) {
   }
 
   // miolo: simples, medição ou final (com o plano)
+  const assinaturas = []
   const emitirMiolo = pars => {
     const plano = partes.plano || {}
     for (const it of itensDoMiolo(pars, estilos, f)) {
+      if (it.assinatura) assinaturas.push(it.i)
       // medição parcial (rodadas da verificação): só os parágrafos pedidos
       if (modo === 'medir' && partes.somente && !partes.somente.has(it.i)) continue
       // parágrafo do compositor (composicaoLivro.js): ele mede; o Typst só mede as notas de rodapé
@@ -596,6 +600,10 @@ export function documentoTypst(partes, estilos) {
   // páginas ocupadas por algum trecho do miolo (calculado uma vez; o cabeço de cada página consulta)
   if (modo !== 'medir') {
     corpo.push('#context { let pares = query(<pi>).zip(query(<pf>)).map(((a, b)) => (a.location().page(), b.location().page())); let n = pares.fold(0, (m, p) => calc.max(m, p.at(1))); let oc = range(n + 1).map(_ => false); for (a, b) in pares { for p in range(a, b + 1) { oc.at(p) = true } }; [#metadata(oc) <ocupadas>] }')
+    // páginas só com data e assinaturas (Constituição: Mesa e constituintes): cabeço sem artigo
+    if (partes.cabecoArtigo && assinaturas.length) {
+      corpo.push(`#context { let ass = (${assinaturas.join(', ')},); let pares = query(<pi>).zip(query(<pf>)).map(((a, b)) => (a.value, a.location().page(), b.location().page())); let n = pares.fold(0, (m, p) => calc.max(m, p.at(2))); let so = range(n + 1).map(_ => none); for (i, a, b) in pares { let e = i in ass; for p in range(a, b + 1) { so.at(p) = if so.at(p) == none { e } else { so.at(p) and e } } }; [#metadata(so.map(x => x == true)) <so-assinaturas>] }`)
+    }
   }
   // posição final das marcas de linha: (parágrafo, marca, página, x, y)
   if (partes.linhas && modo === 'final') {
@@ -630,6 +638,7 @@ export function documentoTypst(partes, estilos) {
     `#show footnote.entry: it => par(hanging-indent: ${pt(recuoNota)}, box(width: ${pt(recuoNota)}, numbering(it.note.numbering, ..counter(footnote).at(it.note.location()))) + it.note.body)`,
     '',
     '// cabeço e fólio (mestra A-Miolo): par = fólio + título da publicação; ímpar = parte1 + fólio',
+    '#let soAssinaturas(pg) = { let s = query(<so-assinaturas>); s.len() > 0 and s.first().value.at(pg, default: false) }',
     '#let cabeco() = {',
     '  let pg = here().page()',
     '  let ini = query(<inicio-miolo>)',
@@ -654,6 +663,7 @@ export function documentoTypst(partes, estilos) {
     '    let artAqui = arts.filter(m => m.location().page() == pg)',
     '    let artAntes = arts.filter(m => m.location().page() < pg)',
     '    let art = if t != "" { none } else if artAqui.len() > 0 { artAqui.first().value } else if artAntes.len() > 0 { artAntes.last().value } else { none }',
+    '    if soAssinaturas(pg) { art = none }',
     '    place(top + left, dx: 156.2mm, dy: 7.9mm, caixa)',
     `    place(top + left, dx: 22mm, dy: 9.6mm, box(width: largura-mancha, align(right, text(font: "Montserrat", size: ${pt(n(cabImpar.PointSize) || 7.5)}, tracking: ${(n(cabImpar.Tracking) || 0) / 1000}em, fill: cmyk(0%, 0%, 0%, 60%), top-edge: "cap-height", upper(t)))))`,
     '    if art != none { place(top + left, dx: 22mm, dy: 9.3mm, box(width: largura-mancha, align(right, text(font: "Source Sans 3", weight: 700, size: 8pt, tracking: 0.02em, fill: cmyk(0%, 0%, 0%, 60%), top-edge: "cap-height", smallcaps(art))))) }',
@@ -830,6 +840,7 @@ function cabecoDoFormato(partes) {
       '    let modoAqui = modos.filter(m => m.location().page() == pg)',
       '    let modo = if modoAqui.len() > 0 { modoAqui.first().value } else if modoAntes.len() > 0 { modoAntes.last().value } else { "artigo" }',
       ...corrente('artigo-cab', 'art', 'none'),
+      '    if soAssinaturas(pg) { art = none }',
       `    if modo == "artigo" and art != none { ${em(c.artigo.quadro, 'right', `text(${fonte(c.artigo, ', weight: 700, fill: cmyk(0%, 0%, 0%, 60%)')}, smallcaps(art))`)} }`,
       // (norma com cabeço de título: o quadro da mestra dela, quando o livro tem — c.titulo)
       // (mestra dessas normas sem quadro de cabeço na ímpar — c.tituloVazio: a ímpar fica sem cabeço)
@@ -854,6 +865,7 @@ function cabecoDoFormato(partes) {
     '    let artAqui = arts.filter(m => m.location().page() == pg)',
     '    let artAntes = arts.filter(m => m.location().page() < pg)',
     '    let art = if t != "" { none } else if artAqui.len() > 0 { artAqui.first().value } else if artAntes.len() > 0 { artAntes.last().value } else { none }',
+    '    if soAssinaturas(pg) { art = none }',
     `    if art != none { ${em(c.artigo.quadro, 'right', `text(${fonte(c.artigo, ', weight: 700, fill: cmyk(0%, 0%, 0%, 60%)')}, smallcaps(art))`)} }`,
     // título na ímpar: o quadro da mestra das páginas de título (c.titulo), quando o livro tem
     // um — o cab-dir da mestra A pode estar em outro lugar (CF de bolso: ADCT)

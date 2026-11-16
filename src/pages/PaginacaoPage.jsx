@@ -7,8 +7,11 @@
  *   • parágrafo: apertar/soltar (tracking e espaço) — nas alternativas do compositor;
  *   • palavra: não hifenizar, liberar a hifenização, não separar da seguinte (painel técnico);
  *   • página: levar a última linha para a próxima, trazer a primeira da seguinte, começar página
- *     num parágrafo, entrelinha da página.
- * Cada ajuste recompõe só a partir da página afetada (as anteriores ficam).
+ *     num parágrafo, entrelinha da página;
+ *   • estilo do parágrafo (botão direito no parágrafo ou painel): um estilo do modelo no lugar do que
+ *     as regras dão — entra antes da composição, na tela e na exportação do PDF.
+ * Cada ajuste recompõe só a partir da página afetada (as anteriores ficam); o estilo recompõe o livro
+ * inteiro (a mesma composição da exportação, para o PDF da tela e o da exportação saírem iguais).
  */
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -25,6 +28,7 @@ const PROBLEMAS = { aberta: 'Espaçamento aberto', apertada: 'Espaçamento apert
 const TIPOS = {
   paragrafo: 'Tracking/espaço do parágrafo', palavra: 'Hifenização de palavra', juntar: 'Palavras juntas',
   fimPagina: 'Fim de página', naoTerminar: 'Página não termina aqui', entrelinha: 'Entrelinha da página',
+  estilo: 'Estilo do parágrafo',
 }
 
 // peso e itálico de um estilo do InDesign ("Bold Italic", "Light", "Black")
@@ -92,7 +96,7 @@ function Linha({ linha, estilo, estilosChar, x, y, largura, altura, escala, marc
   )
 }
 
-function Pagina({ pagina, estilos, escala, selecionado, onSelecionar, tecnico, palavraSel, onPalavra, ajustesPorPar }) {
+function Pagina({ pagina, estilos, escala, selecionado, onSelecionar, onMenu, tecnico, palavraSel, onPalavra, ajustesPorPar }) {
   if (pagina.branca) return <div className="pg-pagina pg-branca" style={{ width: PAGINA.w * escala, height: PAGINA.h * escala }}><span>página em branco</span></div>
   const x0 = pagina.par === 1 ? MARGEM.interna : MARGEM.externa
   const elementos = []
@@ -137,6 +141,7 @@ function Pagina({ pagina, estilos, escala, selecionado, onSelecionar, tecnico, p
       <div key={`s${nb}`} className={`pg-par${sel ? ' pg-par-sel' : ''}${b.manual || ajustesPorPar.has(b.i) ? ' pg-par-manual' : ''}`}
         style={{ left: -4 * escala, top: y0 * escala, width: (MANCHA.w + 8) * escala, height: Math.max(1, y - y0) * escala }}
         onClick={() => onSelecionar({ i: b.i, pagina: pagina.n })}
+        onContextMenu={e => { e.preventDefault(); onMenu?.({ i: b.i, pagina: pagina.n }) }}
         title={b.fimPedido === false ? 'Fim de página pedido não coube' : undefined} />,
     )
   })
@@ -188,6 +193,9 @@ export default function PaginacaoPage({ usuarioAtual }) {
   const [semAjustes, setSemAjustes] = useState(false)
   const [filtro, setFiltro] = useState(() => new Set(Object.keys(PROBLEMAS)))
   const [atual, setAtual] = useState(-1)
+  // botão direito num parágrafo: leva ao seletor de estilo do painel
+  const [focoEstilo, setFocoEstilo] = useState(0)
+  const seletorEstilo = useRef(null)
   const autor = usuarioAtual?.nome || null
   const api = window.legislator
 
@@ -202,6 +210,7 @@ export default function PaginacaoPage({ usuarioAtual }) {
         if (vivo) setAjustes(lista || [])
         const r = await api.publicacoes.paginacao.abrir(Number(id))
         ch = r.chave
+        chaveAberta.current = r.chave
         if (!vivo) return
         setChave(r.chave)
         setModelo(r.modelo)
@@ -210,8 +219,28 @@ export default function PaginacaoPage({ usuarioAtual }) {
         if (vivo) setEstado({ carregando: false, erro: e.message || String(e) })
       }
     })()
-    return () => { vivo = false; if (ch) api.publicacoes.paginacao.fechar(ch) }
+    return () => { vivo = false; const c = chaveAberta.current || ch; if (c) api.publicacoes.paginacao.fechar(c) }
   }, [id])
+  const chaveAberta = useRef(null)
+
+  // estilo do parágrafo: muda o texto que entra na composição — recompõe o livro inteiro, pelo mesmo
+  // caminho da exportação (a tela e o PDF exportado saem iguais)
+  const [recompondo, setRecompondo] = useState(false)
+  const recomporTudo = async () => {
+    setRecompondo(true)
+    setOcupado(true)
+    try {
+      const r = await api.publicacoes.paginacao.abrir(Number(id))
+      chaveAberta.current = r.chave
+      setChave(r.chave)
+      setModelo(r.modelo)
+    } catch (e) { alert(`Não foi possível recompor: ${e.message || e}`) } finally { setRecompondo(false); setOcupado(false) }
+  }
+  useEffect(() => {
+    if (!focoEstilo || !seletorEstilo.current) return
+    seletorEstilo.current.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    seletorEstilo.current.focus()
+  }, [focoEstilo, sel?.i])
 
   // espelhos: página par à esquerda, ímpar à direita
   const espelhos = useMemo(() => {
@@ -329,13 +358,25 @@ export default function PaginacaoPage({ usuarioAtual }) {
       : await api.publicacoes.ajustes.criar(Number(id), { ...ajuste, data: new Date().toISOString() }, autor)
     const lista = existente ? ajustes.map(a => (a.id === existente.id ? salvo : a)) : [...ajustes, salvo]
     setAjustes(lista)
-    await aplicar(lista)
+    if (ajuste.tipo === 'estilo') await recomporTudo()
+    else await aplicar(lista)
   }
   const removerAjuste = async aid => {
+    const removido = ajustes.find(a => a.id === aid)
     await api.publicacoes.ajustes.excluir(Number(id), aid)
     const lista = ajustes.filter(a => a.id !== aid)
     setAjustes(lista)
-    await aplicar(lista)
+    if (removido?.tipo === 'estilo') await recomporTudo()
+    else await aplicar(lista)
+  }
+  // troca o estilo do parágrafo selecionado; o padrão (o das regras) tira o ajuste
+  const trocarEstilo = async estilo => {
+    if (!blocoSel || semAjustes) return semAjustes && alert(AVISO_SEM_AJUSTES)
+    const padrao = blocoSel.estiloPadrao || blocoSel.estilo
+    const existente = ajustes.find(a => a.tipo === 'estilo' && JSON.stringify(a.ancora) === JSON.stringify(blocoSel.ancora))
+    if (!confirm(`Trocar o estilo deste parágrafo para "${estilo}"?\n\nO livro inteiro é recomposto (leva o mesmo tempo de abrir a tela).`)) return
+    if (estilo === padrao) { if (existente) await removerAjuste(existente.id); return }
+    await salvarAjuste({ tipo: 'estilo', ancora: blocoSel.ancora, estilo })
   }
 
   // ── ações ──
@@ -434,6 +475,7 @@ export default function PaginacaoPage({ usuarioAtual }) {
         <button className="btn-ghost" onClick={gerarIdml} disabled={!modelo || ocupado} title="IDML com os ajustes desta paginação (tracking, espaço, entrelinha, quebras de página), para o InDesign paginar igual">Gerar IDML ajustado</button>
       </div>
 
+      {recompondo && <div className="pg-aviso">Recompondo o livro com o estilo novo… A tela atualiza quando a composição terminar.</div>}
       {estado.carregando && <div className="pg-aviso">Compondo o livro (cerca de 1 minuto)… As páginas aparecem quando a composição terminar.</div>}
       {estado.erro && <div className="pg-aviso pg-erro">Não foi possível abrir a paginação: {estado.erro}</div>}
       {semAjustes && <div className="pg-aviso pg-erro">{AVISO_SEM_AJUSTES}</div>}
@@ -453,6 +495,7 @@ export default function PaginacaoPage({ usuarioAtual }) {
                 {par.map((pg, lado) => pg
                   ? <Pagina key={lado} pagina={pg} estilos={modelo.estilos} escala={escala} selecionado={sel?.pagina === pg.idx ? sel : null}
                       onSelecionar={s => setSel({ i: s.i, pagina: pg.idx })} tecnico={tecnico} palavraSel={palavraSel}
+                      onMenu={s => { setSel({ i: s.i, pagina: pg.idx }); setFocoEstilo(n => n + 1) }}
                       onPalavra={escolherPalavra} ajustesPorPar={ajustesPorPar} />
                   : <div key={lado} className="pg-vazia" style={{ width: PAGINA.w * escala, height: PAGINA.h * escala }} />)}
               </Espelho>
@@ -493,6 +536,15 @@ export default function PaginacaoPage({ usuarioAtual }) {
                 <h3>Parágrafo</h3>
                 <p className="pg-dica">p. {paginaSel?.folio} · {blocoSel.estilo} · {blocoSel.total} linha(s)
                   {blocoSel.deLinha > 0 || (blocoSel.linhas && blocoSel.deLinha + blocoSel.linhas.length < blocoSel.total) ? ' (dividido entre páginas)' : ''}</p>
+                <label className="pg-estilo">Estilo do parágrafo
+                  <select ref={seletorEstilo} value={blocoSel.estilo} disabled={ocupado || !modelo.estilosParagrafo?.length}
+                    onChange={e => trocarEstilo(e.target.value)}>
+                    {[...new Set([blocoSel.estilo, ...(modelo.estilosParagrafo || [])])].sort((a, b) => a.localeCompare(b, 'pt-BR')).map(n => (
+                      <option key={n} value={n}>{n}{n === (blocoSel.estiloPadrao || blocoSel.estilo) ? ' (padrão)' : ''}</option>
+                    ))}
+                  </select>
+                </label>
+                {blocoSel.estiloPadrao && <p className="pg-dica">Estilo trocado na tela; o padrão das regras é {blocoSel.estiloPadrao}.</p>}
                 <div className="pg-botoes">
                   <button className="btn-ghost" disabled={ocupado || !blocoSel.linhas} onClick={() => ajustarParagrafo(-1)}>Apertar (−1 linha)</button>
                   <button className="btn-ghost" disabled={ocupado || !blocoSel.linhas} onClick={() => ajustarParagrafo(+1)}>Soltar (+1 linha)</button>
@@ -572,6 +624,7 @@ function ListaAjustes({ itens, naoEncontrados, onRemover, ocupado }) {
             {a.tipo === 'juntar' && ` "${a.palavra}" + seguinte`}
             {a.tipo === 'fimPagina' && (a.linha ? ` depois da linha ${a.linha}` : ' antes do parágrafo')}
             {a.tipo === 'entrelinha' && ` ${Math.round(a.fator * 1000) / 10}%`}
+            {a.tipo === 'estilo' && ` ${a.estilo}`}
           </div>
           <div className="pg-dica">{(a.ancora?.texto || '').slice(0, 50)}…</div>
           <div className="pg-dica">{a.autor || '—'} · {a.atualizado_em ? new Date(a.atualizado_em).toLocaleString('pt-BR') : ''}{naoEncontrados.has(a.id) ? ' · não encontrado no texto atual' : ''}</div>

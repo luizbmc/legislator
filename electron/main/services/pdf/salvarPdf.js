@@ -48,9 +48,12 @@ export async function exportarPdfComDialogo(publicacao, opcoes = {}) {
   const doLivro = opcoes.sessao ? null : await opcoesDoLivro(publicacao, pastaModeloNormando())
   // formato que solta espaço sem quebra: a composição passa pela sessão, que decide isso
   let sessao = opcoes.sessao
+  // estilos de parágrafo escolhidos na tela (ajustes 'estilo'): valem em todo formato, como na tela
+  const { ajustesDeEstilo } = await import('./ajustesLocais.js')
+  const estilosParagrafo = ajustesDeEstilo(opcoes.ajustes?.itens)
   if (doLivro?.opcoes.formato?.soltarNbsp) {
     const { abrirSessao, fecharSessao } = await import('./sessaoPaginacao.js')
-    sessao = await abrirSessao('revisao', doLivro.publicacaoPlano, { ...opcoes, ...doLivro.opcoes, ajustes: null, typst: executavelTypst(), progresso: faixa(0, 0.6, 'Paginação: ') })
+    sessao = await abrirSessao('revisao', doLivro.publicacaoPlano, { ...opcoes, ...doLivro.opcoes, ajustes: null, estilosParagrafo, typst: executavelTypst(), progresso: faixa(0, 0.6, 'Paginação: ') })
     fecharSessao('revisao')
   }
   const { pdf, relatorio, hifenizacoes } = await gerarPdfPublicacao(doLivro?.publicacaoPlano ?? publicacao, {
@@ -61,6 +64,7 @@ export async function exportarPdfComDialogo(publicacao, opcoes = {}) {
     ...doLivro?.opcoes,
     // ajustes salvos valem para o formato normal: fora dele, as páginas são outras
     ...(doLivro?.opcoes.formato?.cabeco ? { ajustes: null } : {}),
+    estilosParagrafo,
     progresso: sessao && sessao !== opcoes.sessao ? faixa(0.6, 1) : faixa(0, 1),
     ...(grafica ? { conferencia: false, grafica: { nome: basename(r.filePath) } } : {}),
   })
