@@ -113,7 +113,7 @@ const nomeEstilo = (abre, tipo) => decodeURIComponent(abre.match(new RegExp(`App
 // não cabe no quadro: entrelinha apertada)
 // sumario: história do sumário (tabulação com pontilhado até o número, sem hifenização); devolve
 // também os parágrafos em separado (`itens`), para correr pelos quadros (sumarioNosQuadros)
-function typstDaHistoria(xml, estilos, largura, { bandas = [], faixa = null, livre = false, sumario = false } = {}) {
+function typstDaHistoria(xml, estilos, largura, { bandas = [], posicoes = [], faixa = null, livre = false, sumario = false } = {}) {
   const h = lerHistoria(xml)
   if (!h) return ''
   const extraPar = new Map(), extraChar = new Map()
@@ -178,6 +178,9 @@ function typstDaHistoria(xml, estilos, largura, { bandas = [], faixa = null, liv
     const entre = anterior == null ? 0 : anterior.f.estilo === f.estilo && anterior.f.mesmoEstilo != null ? anterior.f.mesmoEstilo : anterior.f.depois + f.antes
     const gap = anterior == null ? 0
       : b && anterior.b && b.velho === anterior.b.velho + 1 ? (b.b - f.asc) - anterior.b.e
+      // depois da faixa de um objeto ancorado (brasão): a linha dele no InDesign já inclui o espaço até o
+      // parágrafo seguinte; se este não mudou, a distância é a do livro (o espaço antes não conta duas vezes)
+      : !livre && anterior.b && posicoes[k] && posicoes[k].velho === anterior.b.velho + 1 ? (posicoes[k].b - f.asc) - anterior.b.e
       : entre + (f.leading - f.asc)
     if (anterior) blocos.push(livre ? `#v(${pt(entre)} + ${pt(f.leading)} * lf - ${pt(f.asc)})` : `#v(${pt(gap)})`)
     const fs = fios(E.par(estilo), f)
@@ -193,9 +196,11 @@ function typstDaHistoria(xml, estilos, largura, { bandas = [], faixa = null, liv
     const pagina = Number(p.runs.map(r => r.bruto || '').join('').match(/<\?ACE 8\?>\s*(\d+)\s*$/)?.[1]) || null
     const pe = E.par(estilo)
     itens.push({ bloco, gap: anterior ? gap : 0, pagina, comSeguinte: num(pe.KeepWithNext) > 0, comAnterior: pe.KeepWithPrevious === 'true' })
-    if (k === 0) primeiro = { b, f }
+    // posição do parágrafo no livro (faixa, ou o mesmo parágrafo recomposto): alinha o quadro como no InDesign
+    const pos = livre ? null : b || posicoes[k] || null
+    if (k === 0) primeiro = { b: pos, f }
     anterior = { f, b }
-    ultimo = { b, f }
+    ultimo = { b: pos, f }
   })
   // fonte que falta (ex.: "Roboto (TT)" do colofão do bolso): a Source Sans 3 no lugar da serifada do Typst
   const reserva = t => t.replace(/font: ("[^"]+")/g, (m, f) => (f === '"Source Sans 3"' ? m : `font: (${f}, "Source Sans 3")`))
@@ -289,6 +294,22 @@ async function faixasDoLivro(pdf, q, velhos) {
     const ls = els[b].linhas, corpo = Math.max(...ls.map(l => l.corpo))
     out.set(comTexto[a].i, { b: Math.min(...ls.map(l => l.y)), e: Math.max(...ls.map(l => l.y)), asc: corpo * 0.95, desc: corpo * 0.24, x0: q.x0 - 2, x1: q.x1 + 20, velho: comTexto[a].i })
   }
+  // entrelinha apertada (créditos da folha técnica): o recorte não pode pegar as letras das linhas
+  // vizinhas do PDF do livro — se elas foram apagadas no Normando, sobravam acentos e topos de
+  // letras embaixo da faixa. Onde as faixas se sobrepõem, o limite fica na proporção desc/asc
+  const linhas = [...pos.values()].flat().filter(dentro)
+  for (const f of out.values()) {
+    const abaixo = linhas.filter(l => l.y > f.e + 0.5)
+    if (abaixo.length) {
+      const y = Math.min(...abaixo.map(l => l.y)), asc = Math.max(...abaixo.filter(l => l.y - y < 0.5).map(l => l.corpo)) * 0.95
+      if (f.e + f.desc > y - asc) f.desc = Math.max(0, (y - f.e) * f.desc / (f.desc + asc))
+    }
+    const acima = linhas.filter(l => l.y < f.b - 0.5)
+    if (acima.length) {
+      const y = Math.max(...acima.map(l => l.y)), desc = Math.max(...acima.filter(l => y - l.y < 0.5).map(l => l.corpo)) * 0.24
+      if (f.b - f.asc < y + desc) f.asc = Math.max(0, (f.b - y) * f.asc / (f.asc + desc))
+    }
+  }
   // parágrafo só com elemento ancorado (brasão do rosto do Regimento, com "Câmara dos Deputados"
   // dentro): a faixa vai do fim do parágrafo anterior (ou do topo do quadro) até o começo do
   // seguinte — sem ela o elemento sumia e o texto de baixo subia
@@ -349,20 +370,27 @@ export async function pretextuaisNasPaginas(zip, historias, filtro = () => true,
     const [it, il, ib, ir] = q.inset
     const x1 = q.x1Largo ?? q.x1
     const w = x1 - q.x0, hgt = q.y1 - q.y0
-    let bandas = [], faixa = null
+    let bandas = [], posicoes = [], faixa = null
     const velhoXml = base.zip && base.pdf && quadros.filter(x => x.story === q.story).length === 1 ? await base.zip.file(`Stories/Story_${q.story}.xml`)?.async('string') : null
     if (velhoXml) {
       try {
         const velhos = lerHistoria(velhoXml)?.pars || [], novos = lerHistoria(xml)?.pars || []
         const fx = await faixasDoLivro(base.pdf, q, velhos)
-        for (const [i, j] of lcs(velhos, novos, (a, b) => chave(a) === chave(b))) if (fx.has(i)) bandas[j] = fx.get(i)
+        // a história trocada é recomposta inteira pelo Typst (o texto muda a cada versão; colar faixas do
+        // PDF antigo deixava remendos); do livro só fica o parágrafo com objeto ancorado (brasão, logotipo),
+        // que o Typst não compõe
+        for (const [i, j] of lcs(velhos, novos, (a, b) => chave(a) === chave(b))) {
+          if (!fx.has(i)) continue
+          posicoes[j] = fx.get(i)
+          if (novos[j].runs.some(r => r.elemento)) bandas[j] = fx.get(i)
+        }
         const pg = base.pdf.getPages()[q.pagina - 1]
         faixa = { arquivo: base.arquivo, pagina: q.pagina, largura: pg.getWidth(), altura: pg.getHeight(), x0: q.x0 + il }
       } catch (e) {
-        bandas = []; faixa = null
+        bandas = []; posicoes = []; faixa = null
       }
     }
-    const t = typstDaHistoria(xml, estilos, w - il - ir, { bandas, faixa })
+    const t = typstDaHistoria(xml, estilos, w - il - ir, { bandas, posicoes, faixa })
     if (!t) continue
     const corpo = q.colunas > 1 ? `#columns(${q.colunas}, gutter: ${pt(q.medianiz)})[\n${t.corpo}\n]` : t.corpo
     // alinhamento vertical: com a 1ª (ou a última) faixa do livro, onde ela estava; senão, pela
