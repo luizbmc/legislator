@@ -4,7 +4,8 @@
  * Educação e Regimento Interno: ~85% das quebras idênticas, ~99% dos parágrafos com o mesmo nº de
  * linhas). O Typst só desenha as linhas onde o compositor manda (linebreak(justify: true)).
  *
- * - Pontos de hifenização: os do dicionário do InDesign (lido da instalação do usuário, nunca copiado),
+ * - Pontos de hifenização: os do dicionário do InDesign (lido da instalação do usuário, nunca copiado;
+ *   sem InDesign, os padrões livres do LibreOffice que vão no instalador, sem quebra entre vogais),
  *   com os mínimos do estilo, filtrados pelas regras do Normando (translineacao.js: vogais, fragmentos
  *   proibidos, prefixos, siglas, 7 letras, divisão única), como no IDML — regras nos dois.
  * - Larguras: cada pedaço de palavra medido uma vez no Typst, texto puro (sem os trechos de proteção,
@@ -15,7 +16,8 @@
  */
 import { formato } from './mancha.js'
 import { existsSync, readdirSync } from 'fs'
-import { join } from 'path'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
 import { quebrarLinhas } from './compositor.js'
 import { ESPACO_MINIMO } from './typstLivro.js'
 import { lerPadroes, pontosDaPalavra } from './hifenizacaoIndesign.js'
@@ -55,17 +57,38 @@ const ABRIR_CURTA = [[0.012, 108], [0.015, 112], [0.018, 116], [0.02, 120]]
 // aperto de linha aberta aliviado para a última linha não ficar curta: o espaço fica em 97%, as letras soltam
 const ALIVIO = [[-0.003, 97], [0, 97], [0.003, 97], [0.005, 97], [0.008, 97], [0.01, 97], [0.012, 97]]
 
-/** Dicionário de hifenização do InDesign instalado (o mais novo), ou null. */
+/**
+ * Padrões livres (LibreOffice/DivSilab, LGPLv3/MPL) que vão no instalador (resources/hifenizacao); em
+ * desenvolvimento, build/hifenizacao. Comparados com os do InDesign nas normas do banco: a diferença
+ * é quase toda a quebra entre vogais ("na-ci-o-nal" × "na-cio-nal"); sem ela, 0,4% das ocorrências.
+ */
+export function dicionarioLivre() {
+  const aqui = (() => { try { return dirname(fileURLToPath(import.meta.url)) } catch { return '' } })()
+  const candidatos = [
+    process.resourcesPath && join(process.resourcesPath, 'hifenizacao', 'hyph_pt_BR.dic'),
+    join(process.cwd(), 'build', 'hifenizacao', 'hyph_pt_BR.dic'),
+    // código no projeto (electron/main/services/pdf) ou empacotado em out/main/chunks
+    aqui && join(aqui, '..', '..', '..', '..', 'build', 'hifenizacao', 'hyph_pt_BR.dic'),
+    aqui && join(aqui, '..', '..', '..', 'build', 'hifenizacao', 'hyph_pt_BR.dic'),
+  ].filter(Boolean)
+  return candidatos.find(c => existsSync(c)) || null
+}
+
+/**
+ * Dicionário de hifenização do InDesign instalado (o mais novo); sem InDesign, o livre do instalador
+ * (dicionarioLivre); null se nenhum.
+ */
 export function acharDicionarioIndesign(caminho = null) {
   if (caminho) return existsSync(caminho) ? caminho : null
   const adobe = 'C:/Program Files/Adobe'
-  if (!existsSync(adobe)) return null
-  const versoes = readdirSync(adobe).filter(d => /^Adobe InDesign/.test(d)).sort().reverse()
-  for (const v of versoes) {
-    const arq = join(adobe, v, 'Resources/Dictionaries/LILO/Linguistics/Providers/Plugins2/AdobeHunspellPlugin/Dictionaries/pt_BR/ORTH/hyph_pt_BR.dic')
-    if (existsSync(arq)) return arq
+  if (existsSync(adobe)) {
+    const versoes = readdirSync(adobe).filter(d => /^Adobe InDesign/.test(d)).sort().reverse()
+    for (const v of versoes) {
+      const arq = join(adobe, v, 'Resources/Dictionaries/LILO/Linguistics/Providers/Plugins2/AdobeHunspellPlugin/Dictionaries/pt_BR/ORTH/hyph_pt_BR.dic')
+      if (existsSync(arq)) return arq
+    }
   }
-  return null
+  return dicionarioLivre()
 }
 
 /**

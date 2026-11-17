@@ -20,6 +20,10 @@ extraResources:
   # compositor do PDF de revisão (Typst, Apache-2.0; LICENSE e NOTICE vão junto)
   - from: build/typst
     to: typst
+  # padrões de hifenização pt-BR livres (LibreOffice/DivSilab, LGPLv3/MPL; o README vai junto):
+  # o compositor usa quando não acha o dicionário do InDesign (composicaoLivro.js)
+  - from: build/hifenizacao
+    to: hifenizacao
 
 publish:
   provider: github

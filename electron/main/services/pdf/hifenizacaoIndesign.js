@@ -15,7 +15,11 @@ const HIFEN_DISCRICIONARIO = String.fromCharCode(0xad)
 export function lerPadroes(arquivo) {
   const padroes = new Map()
   let maior = 0
-  for (const bruta of readFileSync(arquivo, 'utf8').split(/\r?\n/)) {
+  const texto = readFileSync(arquivo, 'utf8')
+  // padrões que não são os do InDesign (os livres do LibreOffice, sem o cabeçalho da Adobe): sem quebra
+  // entre duas vogais, como o InDesign ("na-cio-nal", não "na-ci-o-nal")
+  const semHiato = !/ADOBE/.test(texto.slice(0, 400))
+  for (const bruta of texto.split(/\r?\n/)) {
     const l = bruta.trim()
     // cabeçalho, comentários, palavras-chave e padrões não padronizados ("7-/=-,1,1")
     if (!l || l.startsWith('%') || /^[A-Z]/.test(l) || l.includes('/') || l.includes(',')) continue
@@ -29,14 +33,16 @@ export function lerPadroes(arquivo) {
     padroes.set(letras, niveis)
     maior = Math.max(maior, letras.length)
   }
-  return { padroes, maior }
+  return { padroes, maior, semHiato }
 }
+
+const VOGAL = /[aeiouáéíóúâêôãõàü]/i
 
 /**
  * Pontos de quebra de uma palavra (só letras): posições p (quebra entre p-1 e p).
  * minimos = { palavra: letras mínimas da palavra, antes, depois }
  */
-export function pontosDaPalavra(palavra, { padroes, maior }, minimos) {
+export function pontosDaPalavra(palavra, { padroes, maior, semHiato }, minimos) {
   const n = palavra.length
   if (n < minimos.palavra) return []
   const w = '.' + palavra.toLocaleLowerCase('pt-BR') + '.'
@@ -50,7 +56,11 @@ export function pontosDaPalavra(palavra, { padroes, maior }, minimos) {
   }
   const out = []
   // nível ímpar entre as letras p-1 e p da palavra = niveis[p + 1] (o "." do começo desloca 1)
-  for (let p = minimos.antes; p <= n - minimos.depois; p++) if (niveis[p + 1] % 2 === 1) out.push(p)
+  for (let p = minimos.antes; p <= n - minimos.depois; p++) {
+    if (niveis[p + 1] % 2 !== 1) continue
+    if (semHiato && VOGAL.test(palavra[p - 1]) && VOGAL.test(palavra[p])) continue
+    out.push(p)
+  }
   return out
 }
 
