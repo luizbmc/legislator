@@ -22,6 +22,11 @@ export let ESPACO_MINIMO = 82
 /** Muda o piso (testes e amostras de composição). */
 export function definirEspacoMinimo(v) { ESPACO_MINIMO = v }
 
+/** O estilo hifeniza? Não quando o estilo do livro desliga a hifenização, e nunca nas notas de título. */
+export function estiloHifeniza(estilo, p = {}) {
+  return p.Hyphenation !== 'false' && !/(^|:)nota-titulos/.test(String(estilo || ''))
+}
+
 /** Formato do livro (mancha.js) e o que depende dele aqui: piso do espaço e passos de aperto. */
 export function aplicarFormato(f) {
   definirFormato(f)
@@ -202,7 +207,7 @@ export function funcaoParagrafo(estilo, estilos) {
       `inset: (left: ${pt(Math.max(0, inset))}, right: ${pt(dir)}), {\n` +
       `  set par(justify: ${justify}, ${justify ? limites : ''}${indent}${hanging}leading: if plano { ${pt(leading)} * lf - ${pt(asc)} } else { 0pt }, spacing: 0pt)\n` +
       `  set align(${align})\n` +
-      `  set text(${texto.join(', ')}, tracking: ${trackingBase}em + tr, spacing: sp, top-edge: if plano { ${pt(asc)} } else { ${leading}pt * lf }, bottom-edge: 0pt, hyphenate: if hy == auto { ${p.Hyphenation !== 'false'} } else { hy })\n` +
+      `  set text(${texto.join(', ')}, tracking: ${trackingBase}em + tr, spacing: sp, top-edge: if plano { ${pt(asc)} } else { ${leading}pt * lf }, bottom-edge: 0pt, hyphenate: if hy == auto { ${estiloHifeniza(estilo, p)} } else { hy })\n` +
       `  set text(costs: (hyphenation: hc)) if hc != auto\n` +
       // cp: quebras de linha decididas pelo compositor (composicaoLivro.js), explícitas no texto — o
       // Typst não hifeniza nem quebra por conta própria, só justifica (limites largos: a linha do

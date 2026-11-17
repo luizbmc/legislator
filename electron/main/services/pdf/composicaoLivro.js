@@ -19,7 +19,7 @@ import { existsSync, readdirSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { quebrarLinhas } from './compositor.js'
-import { ESPACO_MINIMO } from './typstLivro.js'
+import { ESPACO_MINIMO, estiloHifeniza } from './typstLivro.js'
 import { lerPadroes, pontosDaPalavra } from './hifenizacaoIndesign.js'
 import { pontosDaExcecao } from './hifenizacaoExcecoes.js'
 import { ocupacaoMinima } from './mancha.js'
@@ -145,7 +145,7 @@ function estruturaDoParagrafo(it, estilos, dic, pedir) {
     }
   }
   if (!atomos.some(a => a.pecas)) return null
-  return { it, atomos, estilo: e }
+  return { it, atomos, estilo: e, semHifen: !estiloHifeniza(e, p) }
 }
 
 // corpo e tracking de um trecho (milésimos de em → em); trFixo: o estilo de caractere fixa o próprio
@@ -323,7 +323,7 @@ class Composicao {
         continue
       }
       for (const peca of at.pecas) {
-        const { hifen, proprio } = this.pontosValidos(peca, rs, semHifen)
+        const { hifen, proprio } = this.pontosValidos(peca, rs, semHifen || est.semHifen)
         peca.segs.forEach((s, j) => {
           if (j > 0 && !s.nbsp && !peca.segs[j - 1].nbsp) {
             const pos = s.ini

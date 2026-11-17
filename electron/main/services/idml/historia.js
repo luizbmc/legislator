@@ -64,6 +64,21 @@ export const ESTILO = {
   listaCorrido: 'artigos:corpo-artigo-rem-rec',
 }
 
+/**
+ * Estilo personalizado (criado nas Configurações): o estilo do modelo com o nome da classe CSS
+ * ("epigrafe-anexo" → tit-subtit:epigrafe-anexo). A classe pode trazer o grupo ("artigos:x");
+ * sem grupo, os títulos ficam em tit-subtit, as tabelas em tabela e o resto em corpo-legis.
+ */
+function estiloDoCustom(attrs = {}) {
+  const nome = String(attrs.cssClass || attrs.label || '').trim()
+    .normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, '-')
+  if (!nome) return null
+  if (nome.includes(':')) return nome
+  if (/^(epigrafe|abertura-cap|parte-livro|secao-subsecao)/.test(nome)) return 'tit-subtit:' + nome
+  if (/^tab-/.test(nome)) return 'tabela:' + nome
+  return 'corpo-legis:' + nome
+}
+
 const TEXTO_LEI = new Set(['corpoTratado', 'paragrafLei', 'inciso', 'alinea', 'item', 'paragraph'])
 
 // blocos que abrem uma norma, antes do texto: ficam presos ao início do 1º artigo
@@ -274,6 +289,7 @@ export function paragrafosDaPublicacao(publicacao, opcoes = {}, rel = novoRelato
             estilo = autores > 1 && autorN === autores ? ESTILO.textoAssinaturaFinal : ESTILO.textoAssinatura
             break
           case 'textoComumAssinaturaCargo': estilo = ESTILO.textoAssinaturaCargo; break
+          case 'estiloParagrafoCustom': estilo = estiloDoCustom(b.attrs); break
           default:
             estilo = TEXTO_LEI.has(b.type) ? ESTILO.textoLei : ESTILO[b.type] || null
         }
