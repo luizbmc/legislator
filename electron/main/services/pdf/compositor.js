@@ -6,7 +6,8 @@
  *   { tipo: 'caixa', w, st, sh, t }       texto (st/sh: o quanto o espaçamento entre letras pode
  *                                         alargar/encolher a caixa; hangIni/hangFim: quanto da pontuação
  *                                         do começo/fim fica fora da coluna, com margem óptica)
- *   { tipo: 'cola', w, st, sh, t }        espaço entre palavras (w: desejado; st/sh: até o máximo/mínimo)
+ *   { tipo: 'cola', w, st, sh, t, pena }  espaço entre palavras (w: desejado; st/sh: até o máximo/mínimo;
+ *                                         pena: custo de quebrar nele, opcional)
  *   { tipo: 'pena', w, p, hifen, t }      ponto de quebra opcional (hifen: quebra com hífen; w: largura
  *                                         do hífen); p = -Infinity força a quebra
  *
@@ -129,7 +130,7 @@ export function avaliarQuebras(itens, larguras, quebras, parametros = {}) {
   const linhas = []
   quebras.forEach((b, k) => {
     const it = itens[b]
-    const pena = it.tipo === 'pena' ? it.p : 0
+    const pena = it.tipo === 'pena' ? it.p : it.pena || 0
     const hifen = it.tipo === 'pena' && !!it.hifen
     const marca = hifen || (it.tipo === 'pena' && !!it.contaHifen)
     const T = larguras(k)
@@ -191,7 +192,8 @@ export function quebrarLinhas(itens, larguras, parametros = {}) {
   for (let b = 0; b < n; b++) {
     const it = itens[b]
     let legal = false, pena = 0, hifen = false
-    if (it.tipo === 'cola') legal = b > 0 && itens[b - 1].tipo === 'caixa'
+    // cola com pena: quebra possível, com custo (linha seguinte começando com número romano)
+    if (it.tipo === 'cola') { legal = b > 0 && itens[b - 1].tipo === 'caixa'; pena = it.pena || 0 }
     else if (it.tipo === 'pena' && it.p < INF) { legal = true; pena = it.p; hifen = !!it.hifen }
     // linha terminada em hífen, para o limite de hífens seguidos: o da hifenização e, com contaHifen,
     // o hífen próprio da palavra ("Salário-|Educação"), que também fica no fim da linha

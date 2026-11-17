@@ -57,9 +57,14 @@ export function linhasDoTitulo(titulo) {
   return out.map(l => l.join(' ')).filter(Boolean)
 }
 
-/** "Linha Legislativo; Série Legislação, n. 9" → { linha, serie, numero } */
+/**
+ * "Linha Legislativo; Série Legislação, n. 9" → { linha, serie, numero }. Descrição que não começa
+ * por "Linha"/"Série" (a ementa do rosto no Regimento: "Aprovado pela Resolução nº 17…") não é a
+ * linha e série.
+ */
 function lerDescricao(descricao) {
-  const d = String(descricao || '')
+  const d = String(descricao || '').trim()
+  if (!/^(Linha|S[ée]rie)\b/i.test(d)) return { serie: '', numero: '', linha: '' }
   const serie = d.match(/S[ée]rie\s+[^,;.]+/i)?.[0]?.trim() || ''
   const numero = d.match(/\bn\.\s*\d+/i)?.[0] || ''
   const linha = d.replace(/,\s*n\.\s*\d+/i, '').trim()
@@ -116,7 +121,7 @@ export function valoresDosCampos(publicacao, pre = {}, inst = {}, hoje = new Dat
       ? { xml: [isbnPapel && `ISBN ${escXml(isbnPapel)} (papel)`, isbnEbook && `ISBN ${escXml(isbnEbook)} (e-book)`].filter(Boolean).join('<?ACE 8?>') }
       : faltando('ISBN'),
     // colofão
-    mes_impressao: pre.mesImpressao || `${MESES[hoje.getMonth()]} de ${ano}`,
+    mes_impressao: String(ft.impresso || '').trim().replace(/^impresso em\s*/i, '') || pre.mesImpressao || `${MESES[hoje.getMonth()]} de ${ano}`,
   }
 }
 

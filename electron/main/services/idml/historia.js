@@ -277,6 +277,11 @@ export function paragrafosDaPublicacao(publicacao, opcoes = {}, rel = novoRelato
           default:
             estilo = TEXTO_LEI.has(b.type) ? ESTILO.textoLei : ESTILO[b.type] || null
         }
+        // abertura antes da epígrafe ("Faço saber que o Congresso Nacional aprovou… promulgo a
+        // seguinte" das resoluções do CN): estilo "Faço saber", com espaço antes (separa da assinatura
+        // da norma anterior), como no livro
+        if (b.type === 'paragrafAbertura' && !blocos.slice(0, iBloco).some(x => x.type === 'epigrafe')
+          && blocos.slice(iBloco + 1).some(x => x.type === 'epigrafe')) estilo = ESTILO.paragrafFacoSaber
         // texto vindo de um IDML (textosDeIdml.js): o estilo de parágrafo de lá
         if (b.attrs?.estiloIdml) estilo = b.attrs.estiloIdml
         if (ehConstituicao) {

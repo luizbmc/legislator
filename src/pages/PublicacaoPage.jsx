@@ -1341,11 +1341,11 @@ export default function PublicacaoPage({ usuarioAtual }) {
         const result = await window.legislator.publicacoes.escolherLivro(parseInt(id))
         if (result?.ok) alert(`Pasta do modelo definida:\n${result.pasta}\n\nO PDF de revisão, a tela de paginação e o IDML ajustado agora saem com o livro completo.`)
       }
-      if (tipo === 'pdf' || tipo === 'pdf-grafica') {
+      if (tipo === 'pdf' || tipo === 'pdf-grafica' || tipo === 'pdf-folhas') {
         const grafica = tipo === 'pdf-grafica'
-        setGerandoPdf(grafica ? 'grafica' : true)
+        setGerandoPdf(grafica ? 'grafica' : tipo === 'pdf-folhas' ? 'folhas' : true)
         try {
-          const result = await window.legislator.publicacoes.exportarPdf(parseInt(id), grafica ? { grafica: true } : {})
+          const result = await window.legislator.publicacoes.exportarPdf(parseInt(id), grafica ? { grafica: true } : tipo === 'pdf-folhas' ? { somentePretextuais: true } : {})
           const puladas = result?.relatorio?.puladas || []
           // PDF para a gráfica: aviso de pasta do livro sem o livro-sangria.pdf
           const avisos = grafica ? (result?.relatorio?.avisos || []).filter(a => /sangria/i.test(a)) : []
@@ -1435,6 +1435,7 @@ export default function PublicacaoPage({ usuarioAtual }) {
               <button onClick={() => exportar('idml-atualizar')} title="Parte do IDML da edição anterior: mantém as partes marcadas como Ignorar, gera de novo as Completas e acrescenta as de Atualização">IDML — atualizar edição anterior…</button>
               <button onClick={() => exportar('pdf')} disabled={!!gerandoPdf}>{gerandoPdf ? 'Gerando PDF…' : 'PDF de revisão'}</button>
               <button onClick={() => exportar('pdf-grafica')} disabled={!!gerandoPdf} title="PDF de impressão: sangria de 5 mm, marcas de corte e informação da página, sem os comentários da conferência">PDF para a gráfica</button>
+              <button onClick={() => exportar('pdf-folhas')} disabled={!!gerandoPdf} title="Só as páginas 1 a 4 (Mesa, folha de rosto e folha técnica), com os dados da publicação: sai em segundos, sem compor as normas">PDF das folhas técnicas</button>
             </div>
           </div>
           <button
@@ -1556,7 +1557,7 @@ export default function PublicacaoPage({ usuarioAtual }) {
             {pastaLivro && <button type="button" className="btn-ghost" onClick={removerPastaLivro}>Remover</button>}
           </div>
         </section>
-        <ProgressoPdf ativo={!!gerandoPdf} titulo={gerandoPdf === 'grafica' ? 'Gerando o PDF para a gráfica' : 'Gerando o PDF de revisão'} />
+        <ProgressoPdf ativo={!!gerandoPdf} titulo={gerandoPdf === 'grafica' ? 'Gerando o PDF para a gráfica' : gerandoPdf === 'folhas' ? 'Gerando o PDF das folhas técnicas' : 'Gerando o PDF de revisão'} />
         {modalFolha && (
           <FolhaTecnica
             publicacaoId={parseInt(id)}

@@ -91,7 +91,7 @@ export function palavrasParaTestar(ultima, restricoes) {
 }
 
 /**
- * Itens da conferência: [{ tipo: 'aberta'|'pilha'|'hifen', pagina, y, marcas: [{ pagina, x0, x1, y0, y1 }], texto }].
+ * Itens da conferência: [{ tipo: 'aberta'|'pilha'|'hifen'|'minimo'|'romano', pagina, y, marcas: [{ pagina, x0, x1, y0, y1 }], texto }].
  * @param ultima dados da última rodada (exportPdf): linhasPorPar, hif, linhas (info), plano, folio, abert, pilhas
  * @param div ponto da divisão de cada linha hifenizada (pilhas.js, divisoes)
  * @param italico run → true se o estilo de caractere é itálico
@@ -244,14 +244,32 @@ export function itensConferencia({ ultima, restricoes, div, numerar, italico, ba
     }
   }
 
+  // 5. linha começando com número romano fora do começo do parágrafo ("do inciso | VIII do § 4º"):
+  // parece um inciso novo; ficou porque nenhum passo de ajuste a evitava dentro dos limites
+  if (linhasDe) {
+    for (const [i, { linhas }] of linhasPorPar) {
+      if (semConferenciaDe(info.get(i))) continue
+      const ls = linhasDe(i)
+      if (!ls || ls.length !== linhas.length) continue
+      ls.forEach((l, n) => {
+        if (!n || !l.comecaRomano) return
+        const palavra = (l.partes || []).map(q => q.t).join('').trim().split(/\s+/)[0]
+        const pl = plano[i] || {}
+        const tr = Math.round((pl.tr ?? 0) * 1000), sp = pl.sp ?? 100
+        novo('romano', i, [n], `Linha começando com número romano: “${palavra}”`,
+          `Pode ser confundida com um inciso novo. Nenhum ajuste do parágrafo (tracking e espaço entre palavras) a evitava sem deixar linha aberta além do limite, última linha curta ou espaço abaixo do mínimo visível; ficou com tracking ${tr} e espaço ${sp}%. Para resolver à mão: ajuste local do parágrafo ou espaço sem quebra antes do número.`)
+      })
+    }
+  }
+
   itens.sort((a, b) => a.pagina - b.pagina || a.y - b.y)
   itens.forEach((it, n) => { it.n = n + 1 })
   return itens
 }
 
 // cores das anotações (RGB 0–1): amarelo = espaçamento aberto, laranja = palavras empilhadas,
-// azul = hifenização, verde = espaço mínimo
-const CORES = { aberta: [1, 0.84, 0], pilha: [1, 0.54, 0], hifen: [0.31, 0.64, 1], minimo: [0.35, 0.85, 0.45] }
+// azul = hifenização, verde = espaço mínimo, lilás = linha começando com número romano
+const CORES = { aberta: [1, 0.84, 0], pilha: [1, 0.54, 0], hifen: [0.31, 0.64, 1], minimo: [0.35, 0.85, 0.45], romano: [0.85, 0.45, 0.95] }
 
 /**
  * Grava a conferência no PDF como comentários: uma anotação de realce por item (todas as linhas

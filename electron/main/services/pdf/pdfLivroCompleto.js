@@ -207,3 +207,42 @@ export async function montarPdfLivro(pdfMiolo, { livro, sessao, opcoes, rel, com
     rmSync(pasta, { recursive: true, force: true })
   }
 }
+
+/**
+ * Só as primeiras páginas do livro (Mesa, rosto, folha técnica), com os textos da publicação: as
+ * páginas do PDF do livro com os quadros trocados recompostos por cima, como no PDF completo, sem
+ * compor o miolo.
+ * @param livro  opcoes.livro de opcoesDoLivro (livroBase.js): { pasta, base, publicacao }
+ * @returns PDF (Buffer)
+ */
+export async function pdfPretextuaisDoLivro(livro, { institucional, compilar, paginas = [1, 2, 3, 4] } = {}) {
+  const { PDFDocument } = await import('pdf-lib')
+  const { default: JSZip } = await import('jszip')
+  const { aplicarPretextuaisDoLivro } = await import('../idml/pretextuaisLivro.js')
+  const { pretextuaisNasPaginas } = await import('./pretextuaisPdf.js')
+  const { apagarTextoNasPaginas } = await import('./apagarTexto.js')
+  const zip = await JSZip.loadAsync(livro.base)
+  const r = await aplicarPretextuaisDoLivro(zip, { publicacao: livro.publicacao, institucional })
+  const bytes = readFileSync(join(livro.pasta, 'livro.pdf'))
+  const original = await PDFDocument.load(bytes, { updateMetadata: false })
+  const ns = paginas.filter(n => n >= 1 && n <= original.getPageCount())
+  const pre = await pretextuaisNasPaginas(zip, r.historias, n => ns.includes(n),
+    { zip: await JSZip.loadAsync(livro.base), pdf: original, arquivo: 'livro-original.pdf', alargar: r.alargar })
+  const pasta = mkdtempSync(join(tmpdir(), 'normando-pretextuais-'))
+  try {
+    const doc = await PDFDocument.load(bytes, { updateMetadata: false })
+    if (pre.size) await apagarTextoNasPaginas(doc, new Map([...pre].map(([n, p]) => [n, p.regioes])))
+    writeFileSync(join(pasta, 'livro.pdf'), await doc.save())
+    // faixas dos parágrafos que não mudaram: do PDF original, com o texto
+    writeFileSync(join(pasta, 'livro-original.pdf'), bytes)
+    const pags = ns.map(n => {
+      const { width, height } = original.getPage(n - 1).getSize()
+      return `#page(width: ${width}pt, height: ${height}pt, margin: 0pt)[\n#place(top + left, image("livro.pdf", page: ${n}, width: ${width}pt, height: ${height}pt))\n${(pre.get(n)?.typst || []).join('\n')}\n]`
+    })
+    writeFileSync(join(pasta, 'pretextuais.typ'), pags.join('\n'), 'utf8')
+    await compilar(join(pasta, 'pretextuais.typ'), join(pasta, 'pretextuais.pdf'), pasta)
+    return readFileSync(join(pasta, 'pretextuais.pdf'))
+  } finally {
+    rmSync(pasta, { recursive: true, force: true })
+  }
+}

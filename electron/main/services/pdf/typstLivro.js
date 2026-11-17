@@ -447,6 +447,9 @@ export function itensDoMiolo(pars, estilos, f, { ajustes = true } = {}) {
       trechoArtigo: p.estilo === 'corpo-legis:texto-lei' || p.estilo === 'corpo-legis:texto-lei-citacao',
       // apertar/soltar o parágrafo inteiro para ganhar/perder uma linha (paginação)
       ajustavel: ajustes && fn.justify && !p.runs.some(r => r.nota),
+      // correção da última linha curta (mesmo nº de linhas): também com nota de rodapé — a linha da
+      // chamada vem da composição escolhida (composicaoLivro.js, notasLinha)
+      ultimaAjustavel: ajustes && fn.justify,
       parte1: textoPuro(p.runs.filter(r => r.char === 'parte1')),
       cabModo: p.cabModo || null,
       // cabeço da página ímpar da CF: 1º artigo da página (variável "Artigo-CF" do livro)
@@ -825,28 +828,47 @@ function cabecoDoFormato(partes) {
     `    let ${nome} = if ${nome}Aqui.len() > 0 { ${nome}Aqui.first().value } else if ${nome}Antes.len() > 0 { ${nome}Antes.last().value } else { ${padrao} }`,
   ]
   if (partes.cabecoPorNorma) {
-    // livro dividido pelas epígrafes (Regimento): par = título corrido da norma; ímpar = artigo ou
-    // título, conforme a mestra da norma no livro (cab-modo)
+    // livro dividido pelas epígrafes (Regimento): par = título corrido da norma (se a mestra tiver o
+    // quadro); ímpar = artigo ou título, conforme a mestra da norma no livro (cab-modo). Duas normas
+    // começando na mesma página: vale a última (usuário, 2026-11-16)
+    const ultimo = (rotulo, nome, padrao) => corrente(rotulo, nome, padrao).map(l => l.replace(`${nome}Aqui.first()`, `${nome}Aqui.last()`))
+    // quadro do artigo com a epígrafe junto ("REGIMENTO INTERNO…   Art. 20-A"): cada trecho com a
+    // formatação local do modelo; sem artigo na página, só a epígrafe
+    const trechos = c.artigo.quadro?.trechos
+    const trecho = (r, conteudo) => {
+      const e = c.artigo
+      const peso = r.estilo ? (/bold|black/i.test(r.estilo) ? 700 : /semi/i.test(r.estilo) ? 600 : 400) : 700
+      const caixa = r.caixa ?? 'SmallCaps'
+      const corpo = caixa === 'SmallCaps' ? `smallcaps(${conteudo})` : conteudo
+      return `text(font: "Montserrat", size: ${e.corpo || 7}pt, tracking: ${(r.tracking ?? e.tracking ?? 0) / 1000}em, weight: ${peso}, fill: cmyk(0%, 0%, 0%, ${r.tinta ?? e.tinta ?? 60}%), top-edge: "ascender", bottom-edge: "baseline", ${corpo})`
+    }
+    const montar = comArt => trechos
+      .filter(r => comArt || /^Epígrafe/.test(r.variavel || ''))
+      .map(r => trecho(r, /^Epígrafe/.test(r.variavel || '') ? 'upper(t)' : r.variavel === 'Artigo-CF' ? 'art' : str(r.texto.replace(/ /g, NBSP))))
+      .join(' + ')
     return [
-      ...corrente('parte1', 't', str(partes.cabecalhoImpar || partes.cabecalhoPar || '')),
+      ...ultimo('parte1', 't', str(partes.cabecalhoImpar || partes.cabecalhoPar || '')),
       '  if calc.even(pg) {',
       `    ${num(c.folio.par, 'left')}`,
-      `    ${em(c.esquerda.quadro, 'left', `text(${fonte(c.esquerda, `, fill: ${tinta(c.esquerda, 50)}`)}, upper(t))`)}`,
+      c.esquerda.quadro ? `    ${em(c.esquerda.quadro, 'left', `text(${fonte(c.esquerda, `, fill: ${tinta(c.esquerda, 50)}`)}, upper(t))`)}` : '',
       '  } else {',
       `    ${num(c.folio.impar, 'right')}`,
-      // a mestra da página: a da norma que começa nela, ou a da norma que vem de antes
+      // a mestra da página: a da última norma que começa nela, ou a da norma que vem de antes
       '    let modos = query(<cab-modo>)',
       '    let modoAntes = modos.filter(m => m.location().page() < pg)',
       '    let modoAqui = modos.filter(m => m.location().page() == pg)',
-      '    let modo = if modoAqui.len() > 0 { modoAqui.first().value } else if modoAntes.len() > 0 { modoAntes.last().value } else { "artigo" }',
+      '    let modo = if modoAqui.len() > 0 { modoAqui.last().value } else if modoAntes.len() > 0 { modoAntes.last().value } else { "artigo" }',
       ...corrente('artigo-cab', 'art', 'none'),
       '    if soAssinaturas(pg) { art = none }',
-      `    if modo == "artigo" and art != none { ${em(c.artigo.quadro, 'right', `text(${fonte(c.artigo, ', weight: 700, fill: cmyk(0%, 0%, 0%, 60%)')}, smallcaps(art))`)} }`,
+      trechos
+        ? `    if modo == "artigo" { if art != none { ${em(c.artigo.quadro, 'right', montar(true))} } else { ${em(c.artigo.quadro, 'right', montar(false))} } }`
+        : `    if modo == "artigo" and art != none { ${em(c.artigo.quadro, 'right', `text(${fonte(c.artigo, ', weight: 700, fill: cmyk(0%, 0%, 0%, 60%)')}, smallcaps(art))`)} }`,
       // (norma com cabeço de título: o quadro da mestra dela, quando o livro tem — c.titulo)
       // (mestra dessas normas sem quadro de cabeço na ímpar — c.tituloVazio: a ímpar fica sem cabeço)
       c.tituloVazio ? '    else if modo != "artigo" { }' :
       `    else if modo != "artigo" { ${em((c.titulo || c.direita).quadro, 'right', `text(${fonte(c.titulo || c.direita, `, fill: ${tinta(c.titulo || c.direita, 60)}`)}, upper(t))`)} }`,
-      `    else { ${em(c.direita.quadro, 'right', `text(${fonte(c.direita, `, fill: ${tinta(c.direita, 60)}`)}, upper(t))`)} }`,
+      // (artigo sem número na página, no modelo antigo: o título no cab-dir da 1ª mestra, se houver)
+      trechos || !c.direita.quadro ? '' : `    else { ${em(c.direita.quadro, 'right', `text(${fonte(c.direita, `, fill: ${tinta(c.direita, 60)}`)}, upper(t))`)} }`,
       '  }',
       '  return',
     ]

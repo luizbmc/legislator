@@ -24,7 +24,7 @@ import { ocupacaoMinima } from './mancha.js'
 
 // linha aberta demais: o limite da correção (ABERTA em linhas.js; LIMITE_ABERTO no script do InDesign)
 const LIMITE_ABERTA = 1.7
-import { trechosProtegidos, prefixoDe } from '../idml/translineacao.js'
+import { trechosProtegidos, prefixoDe, hifensDeNumero } from '../idml/translineacao.js'
 
 // parâmetros calibrados contra o InDesign (validados em 3 livros)
 export const PARAMETROS_INDESIGN = {
@@ -35,9 +35,14 @@ export const PARAMETROS_INDESIGN = {
   // palavras empilhadas (mesmo trecho no fim ou no começo de linhas seguidas): com mais de 2 letras
   // só em último caso (usuário); de até 2 letras ("de", "a"), evitada quando sai barato
   pilha: 5e6, pilhaCurta: 50000,
+  // linha começando com número romano fora do começo do parágrafo ("…nos incisos | IV e V do art.
+  // 55"): confunde-se com um inciso novo; evitada como a palavra empilhada (custo = penaRomano²)
+  penaRomano: 2000,
 }
 
 const NBSP = String.fromCharCode(0xa0), LSEP = String.fromCharCode(0x2028)
+// palavra que é número romano (com letra e pontuação: "IV", "V,", "XII-A;")
+const ROMANO = /^[IVXLCDM]+(?:[-‐]\p{Lu})?[,;.:)]*$/u
 const num = (v, d) => { const x = parseFloat(v); return Number.isFinite(x) ? x : d }
 const LETRA = /\p{L}/u
 // pontuação que a margem óptica pendura para fora da coluna
@@ -149,7 +154,9 @@ function pecaDePalavra(t, run, k, e, estilos, dic, minimos, hifenizaMaiuscula, p
     if ([...m[0]].length === 6 && minimos.palavra > 6) for (const q of pontosDaPalavra(m[0], dic, { ...minimos, palavra: 6 })) seisPts.add(m.index + q)
   }
   if (excecao) for (const p of excecao) dicio.add(p)
-  for (let i = 1; i < t.length - 1; i++) if ((t[i] === '-' || t[i] === '‐') && LETRA.test(t[i - 1]) && LETRA.test(t[i + 1])) proprios.add(i + 1)
+  // (não no número com letra: "6º-A", "IV-A" — o "º" é letra para o Unicode)
+  const deNumero = hifensDeNumero(t)
+  for (let i = 1; i < t.length - 1; i++) if ((t[i] === '-' || t[i] === '‐') && LETRA.test(t[i - 1]) && LETRA.test(t[i + 1]) && !deNumero.has(i)) proprios.add(i + 1)
   const pref = prefixoDe(t)
   const inicioLetras = t.search(LETRA)
   const posPrefixo = pref && inicioLetras >= 0 && !excecao ? inicioLetras + pref.length : null
@@ -266,7 +273,7 @@ class Composicao {
     // espaço natural (o do glifo) e tracking efetivo, por trecho
     const trDe = peca => (peca.trBase + (peca.trFixo ? 0 : tr)) * peca.corpo
     let ultimaPeca = null, espacoRef = null
-    const cola = (kEspaco, kSem, peca, inseparavel, ref, c = null) => {
+    const cola = (kEspaco, kSem, peca, inseparavel, ref, c = null, pena = 0) => {
       // largura medida "a a" − "aa" = espaço + tracking do trecho (Typst, texto puro)
       const espacoGlifo = L(kEspaco) - L(kSem) - peca.trBase * peca.corpo
       espacoRef = espacoRef ?? espacoGlifo
@@ -275,7 +282,7 @@ class Composicao {
       // ESPACO_MINIMO do espaço normal: com o aperto do compositor limitado a ele, nenhuma linha passa
       const w = espacoGlifo * des / 100 + trDe(peca), wn = espacoGlifo + trDe(peca)
       const sh = Math.max(0, Math.min(espacoGlifo * (des - min) / 100, w - wn * ESPACO_MINIMO / 100))
-      itens.push({ tipo: 'cola', w, st: espacoGlifo * (max - des) / 100, sh, t: ' ', ref, c, wn, g: espacoGlifo })
+      itens.push({ tipo: 'cola', w, st: espacoGlifo * (max - des) / 100, sh, t: ' ', ref, c, wn, g: espacoGlifo, ...(pena ? { pena } : {}) })
     }
     for (let a = 0; a < est.atomos.length; a++) {
       const at = est.atomos[a]
@@ -287,7 +294,9 @@ class Composicao {
         const junta = (nbsp && ((nbsp.lado === 'depois' && ultimaPeca?.k === nbsp.k) || (nbsp.lado === 'antes' && prox?.k === nbsp.k))) ||
           // espaço sem quebra pedido pelo usuário depois da palavra
           (ultimaPeca && (rs.manual?.juntar || []).includes(ultimaPeca.k))
-        cola(at.kSep.espaco, at.kSep.sem, at.props, junta, { aposK: ultimaPeca?.k ?? -1 }, at.run.char || null)
+        // linha que começaria com número romano ("incisos | IV e V"): parece um inciso novo
+        const romano = prox && ROMANO.test(prox.t) ? P.penaRomano : 0
+        cola(at.kSep.espaco, at.kSep.sem, at.props, junta, { aposK: ultimaPeca?.k ?? -1 }, at.run.char || null, romano)
         continue
       }
       for (const peca of at.pecas) {
@@ -331,6 +340,8 @@ class Composicao {
     const linhas = quebrarLinhas(itens, larguraLinha, this.P) || quebrarLinhas(itens, larguraLinha, { ...this.P, razaoMax: 1e6 })
     const espaco = new Set(), dentro = new Map()
     let ultima = 0, fimApertado = false, ocupa = 1, ultimaNota = false
+    // alguma linha começa com número romano (quebra numa cola com pena: "incisos | IV e V")
+    const romano = !!linhas?.some(l => itens[l.fim]?.tipo === 'cola' && itens[l.fim].pena)
     if (linhas) {
       linhas.forEach((l, n) => {
         const q = itens[l.fim]
@@ -361,14 +372,14 @@ class Composicao {
     // linha de cada chamada de nota de rodapé (a nota vai para a página dessa linha)
     const notas = []
     if (linhas) linhas.forEach((l, n) => { for (let k = l.ini; k < l.fim; k++) if (itens[k].nota) notas.push(n) })
-    const r = { n: linhas ? linhas.length : 1, quebras: { espaco, dentro, fimApertado }, ultima, ocupa, ultimaNota, notas }
+    const r = { n: linhas ? linhas.length : 1, quebras: { espaco, dentro, fimApertado }, ultima, ocupa, ultimaNota, notas, romano }
     this.cache.set(chave, r)
     return r
   }
 
   /**
    * Texto das linhas do parágrafo i numa variante, para a tela de paginação: [{ partes: [{ t, c }],
-   * hifen, razao, justificada, repeteHifen }] — partes com o estilo de caractere (c), razão de ajuste
+   * hifen, razao, justificada, repeteHifen, comecaRomano }] — partes com o estilo de caractere (c), razão de ajuste
    * do espaçamento (folga > 0, aperto < 0), linha justificada (todas menos a última e as de quebra
    * forçada, salvo a última apertada) e o hífen repetido no começo (quebra no hífen próprio).
    */
@@ -379,7 +390,7 @@ class Composicao {
     const itens = this.itens(i, opcoes)
     const larguraLinha = n => f.geo.largura + this.P.extra - (n === 0 ? f.geo.primeira : f.geo.pendente)
     const linhas = quebrarLinhas(itens, larguraLinha, this.P) || quebrarLinhas(itens, larguraLinha, { ...this.P, razaoMax: 1e6 }) || []
-    let repete = false
+    let repete = false, romanoAntes = false
     const out = linhas.map((l, n) => {
       const partes = []
       for (let k = l.ini; k < l.fim; k++) {
@@ -420,8 +431,10 @@ class Composicao {
       const espacoPt = nG > 0 ? Math.round((G + sobra) / nG * 1000) / 1000 : null
       // espaço visível, como o script do InDesign mede: o vão (com o tracking) sobre o espaço do glifo
       const visivel = Gg > 0 ? (G + sobra) / Gg : 1
-      const r = { partes, hifen: !!l.hifen, razao: Math.round(l.razao * 100) / 100, espaco: Math.round(espaco * 100) / 100, visivel: Math.round(visivel * 1000) / 1000, justificada, repeteHifen: repete, tracking, espacoPt }
+      const r = { partes, hifen: !!l.hifen, razao: Math.round(l.razao * 100) / 100, espaco: Math.round(espaco * 100) / 100, visivel: Math.round(visivel * 1000) / 1000, justificada, repeteHifen: repete, tracking, espacoPt, comecaRomano: romanoAntes }
       repete = q?.tipo === 'pena' && q.contaHifen && !q.hifen
+      // a linha seguinte começa com número romano ("incisos | IV e V"): quebra numa cola com pena
+      romanoAntes = q?.tipo === 'cola' && !!q.pena
       return r
     })
     this.cacheTextos.set(chave, out)
@@ -433,6 +446,16 @@ class Composicao {
    * linha curta, altura com e sem hifenização e as variantes de uma linha a menos/a mais.
    * @param passos { aj, ab } passos de ajuste permitidos (sem os proibidos); fixo [tr, sp] ou null
    */
+  /**
+   * Última linha de uma composição (compor) dentro das regras do formato: mínimo de caracteres e,
+   * no bolso, ocupação mínima da largura.
+   */
+  ultimaBoa(x) {
+    if (x.n < 2) return true
+    if (x.ultima < formato.ultimaLinha + (formato.notaMaisUm && x.ultimaNota ? 1 : 0)) return false
+    return !formato.ultimaOcupacao || x.ocupa >= ocupacaoMinima(x.n)
+  }
+
   medidas(i, { rs = {}, fixo = null, aj, ab, base }) {
     const est = this.pars.get(i)
     const it = est.it
@@ -449,6 +472,8 @@ class Composicao {
     // ele, o InDesign precisa de mais tracking e fica abaixo do limite (usuário, 2026-11-07: melhor a
     // linha a mais, aberta dentro do limite, que a linha apertada demais)
     const visivelOk = (t, s) => !formato.visivelMinimo || this.textos(i, { tr: t, sp: s, rs, base }).every(l => !l.justificada || l.visivel >= formato.visivelMinimo - 1e-9)
+    // nenhuma linha justificada além do limite (170%, como o script do InDesign)
+    const abertaOk = (t, s) => this.textos(i, { tr: t, sp: s, rs, base }).every(l => !l.justificada || l.espaco <= LIMITE_ABERTA)
     let tr = 0, sp = 100
     if (fixo) {
       [tr, sp] = fixo
@@ -457,19 +482,23 @@ class Composicao {
       // verificação sobe o aperto ou desiste dele
       if (rs.aperto != null && rs.manual?.tr == null && !rs.fixo) {
         const f = c(tr, sp)
+        const passos = [...ALIVIO, ...aj, ...ab, ...ABRIR_CURTA]
         if (!semCurta(f)) {
-          const outro = [...ALIVIO, ...aj, ...ab, ...ABRIR_CURTA].find(([t, s]) => { const x = c(t, s); return x.n === f.n && semCurta(x) })
+          const outro = passos.find(([t, s]) => { const x = c(t, s); return x.n === f.n && semCurta(x) && semVazia(x) && abertaOk(t, s) }) ||
+            passos.find(([t, s]) => { const x = c(t, s); return x.n === f.n && semCurta(x) })
+          if (outro) [tr, sp] = outro
+        } else if (!semVazia(f)) {
+          // ocupação mínima da última linha (bolso): o passo que a resolve sem abrir linha além do limite
+          const outro = passos.find(([t, s]) => { const x = c(t, s); return x.n === f.n && semCurta(x) && semVazia(x) && abertaOk(t, s) })
           if (outro) [tr, sp] = outro
         }
       }
-    } else if (it.ajustavel) {
+    } else if (it.ajustavel || it.ultimaAjustavel) {
       // última linha curta: aperta até ela subir; senão abre até ela ter o mínimo (ou 7, se não der)
       const c0 = c(0, 100)
       // 1º a ocupação: apertar até a linha subir ou soltar até ela crescer, dentro dos limites
       if (c0.n > 1 && !semVazia(c0)) {
         const aperto = aj.find(([t, s]) => { const x = c(t, s); return x.n < c0.n && semCurta(x) && semVazia(x) && visivelOk(t, s) })
-        // soltar não pode abrir linha além do limite (170%, como o script do InDesign)
-        const abertaOk = (t, s) => this.textos(i, { tr: t, sp: s, rs, base }).every(l => !l.justificada || l.espaco <= LIMITE_ABERTA)
         const abre = !aperto && ab.length && [...ab, ...ABRIR_CURTA].find(([t, s]) => { const x = c(t, s); return x.n === c0.n && semCurta(x) && semVazia(x) && abertaOk(t, s) })
         if (aperto) [tr, sp] = aperto
         else if (abre) [tr, sp] = abre
@@ -483,6 +512,18 @@ class Composicao {
         else if (abre) [tr, sp] = abre
       }
     }
+    // linha começando com número romano ("…nos incisos | IV e V do art. 55"): outro passo com o mesmo
+    // nº de linhas que evite, sem última linha curta, sem linha aberta além do limite e com o espaço
+    // visível dentro do limite (o ajuste manual do usuário prevalece)
+    if (c(tr, sp).romano && rs.manual?.tr == null && !rs.fixo) {
+      const n0 = c(tr, sp).n
+      const outro = [...ALIVIO, ...(aj || []), ...(ab || [])].find(([t, s]) => {
+        const x = c(t, s)
+        return x.n === n0 && !x.romano && semCurta(x) && visivelOk(t, s) &&
+          this.textos(i, { tr: t, sp: s, rs, base }).every(l => !l.justificada || l.espaco <= LIMITE_ABERTA)
+      })
+      if (outro) [tr, sp] = outro
+    }
     const n = c(tr, sp).n
     const variante = (passos, menos) => {
       if (!passos.length) return null
@@ -491,10 +532,10 @@ class Composicao {
       if (!ok(c(tl, sl).n)) return null
       for (let k = 0; k < passos.length; k++) {
         const [t, s] = passos[k]
-        // a variante não pode criar última linha curta
+        // a variante não pode criar última linha curta nem, no bolso, abaixo da ocupação mínima
         const x = c(t, s)
         // apertar: espaço visível dentro do limite; soltar: nenhuma linha além de 170%
-        if (ok(x.n) && semCurta(x) && (menos ? visivelOk(t, s) : this.textos(i, { tr: t, sp: s, rs, base }).every(l => !l.justificada || l.espaco <= LIMITE_ABERTA))) return { tr: t, sp: s / 100, h: x.n * L, passo: k }
+        if (ok(x.n) && semCurta(x) && semVazia(x) && (menos ? visivelOk(t, s) : this.textos(i, { tr: t, sp: s, rs, base }).every(l => !l.justificada || l.espaco <= LIMITE_ABERTA))) return { tr: t, sp: s / 100, h: x.n * L, passo: k }
       }
       return null
     }

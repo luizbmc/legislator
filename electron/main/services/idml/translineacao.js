@@ -85,6 +85,16 @@ function normalizar(s) {
 }
 
 /**
+ * Hífens de número com letra ("§ 6º-A", "art. 5º-B", "inciso IV-A", "12-A"): posições dos hífens,
+ * onde não se quebra a linha (o "-A" não vai sozinho para a linha seguinte).
+ */
+export function hifensDeNumero(texto) {
+  const out = new Set()
+  for (const m of String(texto || '').matchAll(/(?:\d[ºª°]?|(?<![\p{L}\d])[IVXLCDM]+)([-‐])\p{Lu}(?![\p{L}\d])/gu)) out.add(m.index + m[0].length - 2)
+  return out
+}
+
+/**
  * Pontos protegidos de um texto: lista de [início, fim) de trechos de 2 letras que não podem ser
  * separados (o ponto proibido fica entre elas). Um trecho pode ter um 3º elemento: as posições
  * (no texto) onde a quebra é permitida com hífen discricionário (DIVISAO_UNICA).
@@ -131,6 +141,8 @@ export function trechosProtegidos(texto, { vogais = false, regras = false, prefi
     }
     i = j
   }
+  // número com letra: o hífen e as letras em volta juntos ("6º-A")
+  for (const h of hifensDeNumero(s)) out.push([h - 1, h + 2])
   // o ponto da divisão única não vale se outra regra o proíbe (sigla, palavra em maiúsculas…)
   const fechados = out.filter(t => !t[2])
   for (const t of out) if (t[2]) t[2] = t[2].filter(x => !fechados.some(([a, b]) => a < x && x < b))

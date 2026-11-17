@@ -308,7 +308,12 @@ export async function gerarPdfPublicacao(publicacao, opcoes = {}) {
           porPar.set(i, vs.map(v => {
             const t = { id: ++id, ...comum, ...v }
             // com o compositor, a tentativa também tem as quebras decididas por ele
-            if (composicao?.tem(i)) t.quebras = composicao.compor(i, { tr: t.tr, sp: t.sp, rs: { ...rs, pilha: t.nbsp ? { nbsp: t.nbsp } : rs.pilha }, base: baseHifen }).quebras
+            if (composicao?.tem(i)) {
+              const x = composicao.compor(i, { tr: t.tr, sp: t.sp, rs: { ...rs, pilha: t.nbsp ? { nbsp: t.nbsp } : rs.pilha }, base: baseHifen })
+              t.quebras = x.quebras
+              // última linha nas regras do formato (mínimo de caracteres, ocupação no bolso)
+              t.ultimaBoa = composicao.ultimaBoa(x)
+            }
             tentativas.push(t)
             return t
           }))
@@ -339,7 +344,7 @@ export async function gerarPdfPublicacao(publicacao, opcoes = {}) {
             continue
           }
           const abertasBase = ab2.get(base.id)?.abertas || 0
-          const recusas = { linhas: 0, abertas: 0, escada: 0, pilha: 0 }
+          const recusas = { linhas: 0, abertas: 0, escada: 0, pilha: 0, ultima: 0 }
           const boa = ts.slice(1).find(t => {
             const h = hif2.get(t.id)
             if (!h) return false
@@ -347,6 +352,9 @@ export async function gerarPdfPublicacao(publicacao, opcoes = {}) {
             if (pil2.has(t.id)) { recusas.pilha++; return false }
             if (h.escada > 2) { recusas.escada++; return false }
             if ((ab2.get(t.id)?.abertas || 0) > abertasBase) { recusas.abertas++; return false }
+            // não troca uma última linha boa por uma curta ("…sem parecer da | Mesa.", Art. 263 do
+            // Regimento de bolso: a pilha desfeita trazia de volta a última linha com 8% da largura)
+            if (t.ultimaBoa === false && base.ultimaBoa !== false) { recusas.ultima++; return false }
             return true
           })
           solucoes.set(i, boa ? (boa.nbsp ? { nbsp: boa.nbsp } : { tr: boa.tr, sp: boa.sp }) : null)
@@ -356,6 +364,7 @@ export async function gerarPdfPublicacao(publicacao, opcoes = {}) {
               recusas.linhas && `${recusas.linhas} mudavam o número de linhas do parágrafo (mexeria na paginação)`,
               recusas.abertas && `${recusas.abertas} deixavam linha com espaçamento aberto demais`,
               recusas.escada && `${recusas.escada} criavam 3 hífens seguidos`,
+              recusas.ultima && `${recusas.ultima} deixavam a última linha curta`,
             ].filter(Boolean)
             solucoes.motivos.set(i, `${ts.length - 1} tentativas (apertar/abrir dentro dos limites e espaço sem quebra) recusadas: ${partes.join('; ')}`)
           }
@@ -598,7 +607,7 @@ export async function gerarPdfPublicacao(publicacao, opcoes = {}) {
             },
           })
           conferencia = conf
-          rel.conferencia = { total: conf.length, aberta: conf.filter(c => c.tipo === 'aberta').length, pilha: conf.filter(c => c.tipo === 'pilha').length, hifen: conf.filter(c => c.tipo === 'hifen').length, minimo: conf.filter(c => c.tipo === 'minimo').length }
+          rel.conferencia = { total: conf.length, aberta: conf.filter(c => c.tipo === 'aberta').length, pilha: conf.filter(c => c.tipo === 'pilha').length, hifen: conf.filter(c => c.tipo === 'hifen').length, minimo: conf.filter(c => c.tipo === 'minimo').length, romano: conf.filter(c => c.tipo === 'romano').length }
         }
         // em seções: maiúsculas, compostas e as demais (cada uma na ordem do documento)
         const SECOES = ['PALAVRAS MAIÚSCULAS', 'PALAVRAS COMPOSTAS', 'DEMAIS PALAVRAS']
@@ -644,7 +653,7 @@ export async function gerarPdfPublicacao(publicacao, opcoes = {}) {
   }
 }
 
-function typst(exe, args) {
+export function typst(exe, args) {
   return new Promise((resolve, reject) => {
     execFile(exe, args,
       { maxBuffer: 256 * 1024 * 1024, timeout: 10 * 60 * 1000, windowsHide: true },

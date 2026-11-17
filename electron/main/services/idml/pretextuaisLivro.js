@@ -32,6 +32,8 @@ export const CARGOS_MESA = [
   ['dg', 'Diretor-Geral', /^diretor[a]?-geral/i],
   ['pce', 'Presidente do Conselho Editorial', /conselho editorial/i],
 ]
+// Presidente do Conselho Editorial padrão (o mesmo de MesaDiretora.jsx)
+const PCE_PADRAO = 'Lafayette de Andrada'
 const chaveDoCargo = t => CARGOS_MESA.find(([, , re]) => re.test(t.trim()))?.[0] || null
 
 // ── estilos ──────────────────────────────────────────────────────
@@ -253,6 +255,122 @@ function localizar(historias) {
   return L
 }
 
+// ── ficha catalográfica ──────────────────────────────────────────
+//
+// Partes e estilos (grupo ficha-cat):
+//   1. cabeçalho: série [fcat-centro-separa], número [fcat-centro], CIP [fcat-centro-separa],
+//      local [fcat-centro], bibliotecário(a) [fcat-centro]
+//   2. dados da publicação: autor [fcat-1linha], título [fcat-texto], páginas [fcat-texto]
+//   3. informações (quantas houver; a 1ª em fcat-texto-separa, as outras em fcat-texto) e o ISBN,
+//      sempre por último [fcat-texto]
+//   4. assuntos [fcat-texto-separa]   5. CDU [fcat-cdu]   6. lista de ISBNs [fcat-centro]
+// Campo vazio: o parágrafo sai da ficha.
+
+export const CAMPOS_FICHA = ['serie', 'numero', 'cip', 'local', 'bibliotecario', 'autor', 'titulo', 'paginas', 'infos', 'isbn', 'assuntos', 'cdu', 'isbns']
+
+const limpo = v => String(v ?? '').replace(/\s+/g, ' ').trim()
+// tabulação de recuo à direita (<?ACE 8?>: ISBN do papel à esquerda, do e-book à direita): "⇥" no campo
+export const TAB_DIREITA = '⇥'
+const ACE8 = '<?ACE 8?>'
+const textoComTab = p => textoDoParagrafo({ ...p, runs: p.runs.map(r => (r.bruto ? { ...r, bruto: r.bruto.split(ACE8).join(` ${TAB_DIREITA} `) } : r)) })
+
+/** Parágrafos da ficha no livro → { serie, numero, …, infos: [], isbn, assuntos, cdu, isbns } (null se a ficha não tem autor e CDU). */
+function fichaEstruturada(lista) {
+  const ps = lista.map(x => ({ e: x.p.estilo.split(':').pop(), t: limpo(textoComTab(x.p)) }))
+  const iAutor = ps.findIndex(p => p.e === 'fcat-1linha')
+  const iCdu = ps.findIndex(p => p.e === 'fcat-cdu')
+  if (iAutor < 0 || iCdu < iAutor) return null
+  const f = Object.fromEntries(CAMPOS_FICHA.map(k => [k, k === 'infos' ? [] : '']))
+  for (const { t } of ps.slice(0, iAutor)) {
+    if (!t) continue
+    if (!f.serie && /^S[ée]rie\b/i.test(t)) f.serie = t
+    else if (!f.numero && /^n\.\s*\d/i.test(t)) f.numero = t
+    else if (!f.cip && /cataloga[çc][ãa]o.na.publica/i.test(t)) f.cip = t
+    else if (!f.bibliotecario && /bibliotec[áa]ri/i.test(t)) f.bibliotecario = t
+    else f.local = f.local ? `${f.local} ${t}` : t
+  }
+  f.autor = ps[iAutor].t
+  const meio = ps.slice(iAutor + 1, iCdu).filter(p => p.t)
+  // dados da publicação: os parágrafos até o 1º "-separa"
+  let k = 0
+  const dados = []
+  while (k < meio.length && !/separa/.test(meio[k].e)) dados.push(meio[k++].t)
+  const iPag = dados.findIndex((t, i) => i > 0 && /^(\d+|\[[^\]]*\])\s*p\.|^\[a preencher/i.test(t))
+  // título em mais de um parágrafo (título uniforme "[Constituição (1988)]." na CF): uma linha cada
+  f.titulo = (iPag < 0 ? dados : dados.slice(0, iPag)).join('\n')
+  f.paginas = iPag < 0 ? '' : dados.slice(iPag).join(' ')
+  // depois: informações, ISBN e, por último, os assuntos
+  const resto = meio.slice(k).map(p => p.t)
+  if (resto.length) f.assuntos = resto.pop()
+  const iIsbn = resto.findLastIndex(t => /^ISBN\b/i.test(t))
+  if (iIsbn >= 0) f.isbn = resto.splice(iIsbn, 1)[0]
+  f.infos = resto
+  f.cdu = ps[iCdu].t
+  f.isbns = ps.slice(iCdu + 1).map(p => p.t).filter(Boolean).join(' ')
+  return f
+}
+
+/** [estilo, texto] de cada parágrafo da ficha, na ordem (campos vazios ficam de fora). */
+function paragrafosDaFicha(f) {
+  const infos = (Array.isArray(f.infos) ? f.infos : []).map(limpo).filter(Boolean)
+  const parte3 = [...infos, limpo(f.isbn)].filter(Boolean)
+  return [
+    ['fcat-centro-separa', f.serie], ['fcat-centro', f.numero], ['fcat-centro-separa', f.cip],
+    ['fcat-centro', f.local], ['fcat-centro', f.bibliotecario],
+    ['fcat-1linha', f.autor], ...String(f.titulo ?? '').split(/\r?\n/).map(x => ['fcat-texto', x]), ['fcat-texto', f.paginas],
+    ...parte3.map((x, i) => [i === 0 ? 'fcat-texto-separa' : 'fcat-texto', x]),
+    ['fcat-texto-separa', f.assuntos], ['fcat-cdu', f.cdu], ['fcat-centro', f.isbns],
+  ].map(([e, x]) => [e, limpo(x)]).filter(([, x]) => x)
+}
+
+// estilo que serve de modelo quando o livro não tem parágrafo no estilo pedido
+const PARECIDO = {
+  'fcat-centro-separa': ['fcat-centro', 'fcat-quebra'], 'fcat-centro': ['fcat-centro-separa', 'fcat-quebra'],
+  'fcat-texto-separa': ['fcat-texto'], 'fcat-texto': ['fcat-texto-separa'],
+  'fcat-1linha': ['fcat-texto'], 'fcat-cdu': ['fcat-texto'],
+}
+
+/**
+ * Remonta a ficha com os campos. Cada parágrafo copia um parágrafo do livro no mesmo estilo (estilo
+ * de caractere e formatação local ficam); sem nenhum, um do estilo parecido, com o estilo trocado
+ * quando o livro tem o estilo (Styles.xml).
+ */
+function trocarFicha(lista, f, estilosXml, mudou) {
+  if (!lista.length || !f || typeof f !== 'object') return false
+  const h = lista[0].h
+  const doLivro = lista.filter(x => x.h === h)
+  const novos = paragrafosDaFicha(f)
+  if (!novos.length) return false
+  const assinatura = pares => pares.map(([e, t]) => `${e}|${t}`).join('\n')
+  const atual = doLivro.map(x => [x.p.estilo.split(':').pop(), limpo(textoComTab(x.p))]).filter(([, t]) => t)
+  if (assinatura(novos) === assinatura(atual)) return true
+  const porEstilo = new Map()
+  for (const x of doLivro) {
+    const e = x.p.estilo.split(':').pop()
+    // o modelo do estilo: o 1º parágrafo com texto
+    if (!porEstilo.has(e) || (!textoDoParagrafo(porEstilo.get(e)).trim() && textoDoParagrafo(x.p).trim())) porEstilo.set(e, x.p)
+  }
+  const selfDe = e => String(estilosXml || '').match(new RegExp(`<ParagraphStyle Self="(ParagraphStyle/(?:[^"]*%3a)?${e})"`))?.[1]
+  const pars = novos.map(([e, t]) => {
+    let modelo = porEstilo.get(e)
+    if (!modelo) {
+      const base = [...(PARECIDO[e] || []), ...porEstilo.keys()].map(k => porEstilo.get(k)).find(Boolean)
+      modelo = { ...base, runs: base.runs.filter(r => !r.elemento) }
+      const self = selfDe(e)
+      if (self) modelo = { ...modelo, abre: `<ParagraphStyleRange AppliedParagraphStyle="${self}">`, props: '', estilo: nomeDoEstilo(self) }
+    }
+    const p = copiaDe(modelo, t)
+    if (t.includes(TAB_DIREITA)) for (const r of p.runs) if (r.bruto) r.bruto = r.bruto.replace(/\s*⇥\s*/g, ACE8)
+    return p
+  })
+  const primeiro = doLivro[0].p, ultimo = doLivro.at(-1).p
+  pars.at(-1).br = ultimo.br
+  const ini = h.h.pars.indexOf(primeiro), fim = h.h.pars.indexOf(ultimo)
+  h.h.pars.splice(ini, fim - ini + 1, ...pars)
+  mudou.add(h)
+  return true
+}
+
 const rotuloNome = t => { const i = t.indexOf(':'); return i < 0 ? { rotulo: '', nome: t.trim() } : { rotulo: t.slice(0, i).trim(), nome: t.slice(i + 1).trim() } }
 const juntar = ({ rotulo, nome }) => rotulo ? `${rotulo}: ${nome || ''}`.trim() : String(nome || '').trim()
 
@@ -285,6 +403,7 @@ export async function lerPretextuaisDoLivro(zip) {
       creditosPublicacao: L.publicacao.map(x => rotuloNome(tx(x))),
       informacoes: L.informacoes.map(tx),
       ficha: L.ficha.map(tx),
+      fichaCat: fichaEstruturada(L.ficha),
       copyright: L.copyright.map(tx),
       endereco: L.endereco.map(tx),
     },
@@ -338,7 +457,7 @@ function trocarUm(x, t, mudou) {
  * precisa de mais largura no PDF] }.
  * institucional: { legislatura, cargos: [{ chave, cargo, nome }] }
  * publicacao: descricao (ementa do rosto), edicao, lancado_em (ano do rosto e colofão), pretextuais
- *   ({ atualizadoAte, mesaConselhoEditorial (põe o Presidente do Conselho Editorial na Mesa), folhaTecnica: { creditosInstitucionais, creditosPublicacao, informacoes, ficha, copyright, endereco } })
+ *   ({ atualizadoAte, mesaConselhoEditorial (põe o Presidente do Conselho Editorial na Mesa), folhaTecnica: { creditosInstitucionais, creditosPublicacao, informacoes, fichaCat (campos da ficha, CAMPOS_FICHA; ou ficha: um texto por parágrafo, formato antigo), copyright, endereco } })
  */
 export async function aplicarPretextuaisDoLivro(zip, { publicacao = {}, institucional = {} } = {}) {
   const historias = await historiasDoLivro(zip)
@@ -358,7 +477,9 @@ export async function aplicarPretextuaisDoLivro(zip, { publicacao = {}, instituc
   }
   // Presidente do Conselho Editorial (opção da publicação): o livro que não tem ganha o par cargo/nome
   // no fim da Mesa, separado como o Secretário-Geral (cargo-separa, com o espaço antes)
-  const pce = cargos.get('pce')
+  // Mesa salva em Configurações antes de o cargo existir (ou nunca salva): o nome padrão que a tela
+  // da Mesa mostra (MesaDiretora.jsx); nome apagado na tela (cargo salvo sem nome) não entra
+  const pce = cargos.get('pce') || (cargos.has('pce') ? null : { chave: 'pce', cargo: 'Presidente do Conselho Editorial', nome: PCE_PADRAO })
   const alargar = []
   if (pre.mesaConselhoEditorial && pce?.nome?.trim() && L.mesa.length && !L.mesa.some(m => m.chave === 'pce')) {
     const ult = L.mesa.at(-1)
@@ -388,20 +509,29 @@ export async function aplicarPretextuaisDoLivro(zip, { publicacao = {}, instituc
   }
   const lancado = String(publicacao.lancado_em || '').match(/^(\d{4})-(\d{2})/)
   if (lancado) trocarUm(L.ano, lancado[1], mudou)
-  // colofão: mês e ano do lançamento
-  if (L.impresso && lancado) trocarUm(L.impresso, `Impresso em ${MESES[Number(lancado[2]) - 1]} de ${lancado[1]}`, mudou)
+  // colofão: "Impresso em" da folha técnica; sem ele, mês e ano do lançamento
+  const impresso = String(pre.folhaTecnica?.impresso || '').trim().replace(/^impresso em\s*/i, '')
+  if (L.impresso && impresso) trocarUm(L.impresso, `Impresso em ${impresso}`, mudou)
+  else if (L.impresso && lancado) trocarUm(L.impresso, `Impresso em ${MESES[Number(lancado[2]) - 1]} de ${lancado[1]}`, mudou)
 
   // folha técnica
   const ft = pre.folhaTecnica || {}
   trocarLista(L.institucionais, ft.creditosInstitucionais, mudou)
   trocarLista(L.publicacao, ft.creditosPublicacao, mudou)
   trocarCada(L.informacoes, ft.informacoes, mudou)
-  trocarCada(L.ficha, ft.ficha, mudou)
+  // ficha: pelos campos (fichaCat); o formato antigo (um texto por parágrafo do livro) ainda vale
+  const comData = t => pre.atualizadoAte ? String(t ?? '').replace(/(atualizad[ao] até\s*)\d{1,2}\/\d{1,2}\/\d{4}/i, `$1${dataCurta(pre.atualizadoAte)}`) : t
+  let fichaPorCampos = false
+  if (ft.fichaCat && typeof ft.fichaCat === 'object') {
+    const estilos = await zip.file('Resources/Styles.xml')?.async('string')
+    const f = { ...ft.fichaCat, infos: (ft.fichaCat.infos || []).map(comData) }
+    fichaPorCampos = trocarFicha(L.ficha, f, estilos, mudou)
+  } else trocarCada(L.ficha, ft.ficha, mudou)
   trocarCada(L.copyright, ft.copyright, mudou)
   trocarCada(L.endereco, ft.endereco, mudou)
 
   // "Atualizado até": no rosto e na ficha, onde o livro já mostra a data
-  if (pre.atualizadoAte) for (const x of [L.atualizado, L.atualizadoFicha]) {
+  if (pre.atualizadoAte) for (const x of [L.atualizado, fichaPorCampos ? null : L.atualizadoFicha]) {
     if (!x) continue
     const t = textoDoParagrafo(x.p).trim()
     trocarUm(x, t.replace(/(atualizad[ao] até\s*)\d{1,2}\/\d{1,2}\/\d{4}/i, `$1${dataCurta(pre.atualizadoAte)}`), mudou)

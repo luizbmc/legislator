@@ -45,8 +45,12 @@ export function lerEstiloSumario(stylesXml, story = '') {
     const formato = nomeDeSelf(m[2].match(/<FormatStyle[^>]*>([^<]*)</)?.[1], 'ParagraphStyle')
     const charNumero = m[2].match(/<PageNumberStyle[^>]*>([^<]*)</)?.[1] || ''
     const sep = a.Separator || '$ID/^y'
+    // estilo de formatação em negrito (sum-epigrafe do Regimento): o número herda o negrito
+    const iPs = stylesXml.indexOf(`<ParagraphStyle Self="${selfPar(formato)}"`)
+    const psXml = iPs < 0 ? '' : stylesXml.slice(iPs, stylesXml.indexOf('>', iPs) + 1)
     entradas.set(a.Name, {
       formato,
+      negrito: /FontStyle="[^"]*(Bold|Black|Semi)/i.test(psXml),
       nivel: Number(a.Level) || 1,
       numero: a.PageNumberPosition !== 'None',
       // ^y = tabulação de recuo à direita; ^t = tabulação
@@ -79,6 +83,9 @@ export function caixaDoSumario(texto, formato) {
     t = tituloCase(t)
     // número da parte, título, capítulo… em maiúsculas ("Título VI", "Capítulo IV-A")
     for (const r of ROTULOS) t = t.replace(new RegExp(`(?<=${r} ).+(?= –)`, 'g'), maiusc)
+    // rótulo sem descrição ("Capítulo VI", "Título IV-A") e seção ("Seção II – …"): o número romano
+    // em maiúsculas também
+    for (const r of [...ROTULOS, 'Seção', 'Subseção']) t = t.replace(new RegExp(`(?<=${r} )[ivxlcdm]+(?:-\\p{L})?(?=[ ${NBSP}]–|$)`, 'giu'), maiusc)
     t = t.replace(RE_MINUSCULAS, minusc)
   }
   if (nome === 'sum-epigrafe') t = maiusc(t)
@@ -195,10 +202,11 @@ function grupos(entradas, toc, texto) {
  * @param storyXml  história do sumário do livro
  * @param normando  entradasDoNormando(...)
  * @param faixa     { primeira, primeiraMantida, paginaNova }: páginas geradas pelo Normando e o
- *                  deslocamento das mantidas depois delas
+ *                  deslocamento das mantidas depois delas; numeroRegular: estilo de caractere do
+ *                  número quando ele sairia em negrito (Regimento: "regular")
  * @returns { xml, entradas: [{ titulo, estilo, numerada, pagina }], avisos }
  */
-export function montarSumario(storyXml, toc, normando, { primeira, primeiraMantida, paginaNova }) {
+export function montarSumario(storyXml, toc, normando, { primeira, primeiraMantida, paginaNova, numeroRegular = null }) {
   const h = lerHistoria(storyXml)
   if (!h) return null
   const formatos = new Set([...toc.entradas.values()].map(e => e.formato))
@@ -238,7 +246,9 @@ export function montarSumario(storyXml, toc, normando, { primeira, primeiraManti
   const parDaEntrada = e => {
     const runs = colarFinal(e.trechos).map(r => ({ abre: `<CharacterStyleRange AppliedCharacterStyle="${selfChar(r.char)}">`, props: '', char: r.char || '', bruto: codificar(r.texto) }))
     if (e.numero && e.pagina != null) {
-      const charNum = e.charNumero == null ? e.trechos.at(-1)?.char || null : e.charNumero || null
+      let charNum = e.charNumero == null ? e.trechos.at(-1)?.char || null : e.charNumero || null
+      // Regimento: o número nunca em negrito, mesmo com a entrada em negrito
+      if (numeroRegular && (/bold|black|semi|negrito/i.test(charNum || '') || (!charNum && e.negrito))) charNum = numeroRegular
       runs.push({ abre: `<CharacterStyleRange AppliedCharacterStyle="${selfChar(charNum)}">`, props: '', char: charNum || '', bruto: `${e.separador === TAB_DIREITA ? TAB_DIREITA : codificar(e.separador)}${e.pagina}` })
     }
     // sumário sem hifenização

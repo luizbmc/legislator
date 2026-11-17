@@ -196,7 +196,12 @@ export async function publicacaoDoLivro(baseBytes, publicacao, { paginasPartes =
           for (let p = ini; p < Math.min(prox, ini + 2000); p++) { if (!comArtigo.has(p)) break; if (comArtigo.get(p)) sim++; else nao++ }
           cabModo = sim === nao ? (comArtigo.get(ini) ? 'artigo' : 'titulo') : sim > nao ? 'artigo' : 'titulo'
         }
-        doc.content[i] = { ...doc.content[i], attrs: { ...doc.content[i].attrs, estiloIdml: parte.estilo, ...(cabModo ? { cabModo } : {}) } }
+        // norma com o ato que aprova e o texto aprovado (Resolução nº 17 de 1989 + "REGIMENTO INTERNO…"):
+        // o artigo no cabeço só a partir da epígrafe de dentro; antes, o cabeço só com o título, como
+        // nas outras normas (usuário, 2026-11-16: a página 11 do Regimento, só com a resolução)
+        const k = cabModo === 'artigo' ? doc.content.findIndex((b, j) => j > i && b.type === 'epigrafe') : -1
+        if (k > 0) doc.content[k] = { ...doc.content[k], attrs: { ...doc.content[k].attrs, cabModo: 'artigo' } }
+        doc.content[i] = { ...doc.content[i], attrs: { ...doc.content[i].attrs, estiloIdml: parte.estilo, ...(cabModo ? { cabModo: k > 0 ? 'titulo' : cabModo } : {}) } }
         marcarParte1(doc, parte1DoLivro(principal.xml.slice(parte.inicio, parte.fim)))
       } else if (i >= 0) {
         // cabeço corrido: só o trecho do título em `parte1` no livro ("TRATADO DE MARRAQUECHE", sem o
@@ -374,9 +379,12 @@ export async function formatoDoLivro(baseBytes) {
     if (lista.length) f.grep[decodeURIComponent(m[1])] = lista
   }
   // quadros de fólio e cabeço de uma mestra, em coordenadas da página (origem no canto superior esquerdo)
+  // camadas ocultas: os quadros delas não aparecem (no Regimento de bolso, um cab-dir antigo na "Camada 2")
+  const ocultas = new Set([...designmap.matchAll(/<Layer Self="([^"]+)"[^>]*Visible="false"/g)].map(m => m[1]))
   const quadrosDe = async xmlMestra => {
     const quadros = {}
     for (const t of xmlMestra.matchAll(/<TextFrame Self="[^"]+" ParentStory="([^"]+)"[^>]*>[\s\S]*?<\/TextFrame>/g)) {
+      if (ocultas.has(attr(t[0].slice(0, t[0].indexOf('>')), 'ItemLayer'))) continue
       const historia = await ler(`Stories/Story_${t[1]}.xml`).catch(() => '')
       const nome = historia.match(/AppliedParagraphStyle="ParagraphStyle\/pg-mestra%3a([^"]+)"/)?.[1]
       if (!nome) continue
@@ -387,6 +395,17 @@ export async function formatoDoLivro(baseBytes) {
       const vj = t[0].match(/<TextFramePreference [^>]*VerticalJustification="([^"]+)"/)?.[1]
       const vertical = vj === 'CenterAlign' ? 'centro' : vj === 'BottomAlign' ? 'baixo' : 'topo'
       quadros[nome] = { x: x0 < 0 ? x0 + largura : x0, y: y0 + altura / 2, w: x1 - x0, h: y1 - y0, vertical }
+      // cabeço do artigo com a epígrafe no mesmo quadro ("REGIMENTO INTERNO…   Art. 20-A", Regimento
+      // de bolso a partir de 2026-11-16): os trechos, cada um com a formatação local dele
+      if (nome === 'cab-art' && /TextVariableInstance [^>]*Name="Epígrafe parte 1"/.test(historia)) {
+        quadros[nome].trechos = [...historia.matchAll(/<CharacterStyleRange ([^>]*)>([\s\S]*?)<\/CharacterStyleRange>/g)].map(r => {
+          const a = r[1], dentro = r[2]
+          const variavel = dentro.match(/<TextVariableInstance [^>]*Name="([^"]+)"/)?.[1] || null
+          const texto = variavel ? '' : [...dentro.matchAll(/<Content>([^<]*)<\/Content>/g)].map(x => x[1]).join('')
+          const num = n => { const v = attr(a, n); return v === '' || v == null ? null : Number(v) }
+          return { variavel, texto, estilo: attr(a, 'FontStyle') || null, tracking: num('Tracking'), tinta: num('FillTint'), caixa: attr(a, 'Capitalization') || null }
+        }).filter(r => r.variavel || r.texto)
+      }
     }
     return quadros
   }
@@ -707,6 +726,11 @@ export async function gerarLivroCompleto(baseBytes, publicacao, opcoes) {
         .replace(/<Properties>\s*<AlternativeDestination [^>]*\/>\s*<\/Properties>/g, ''))
     }
   }
+  // livro dividido pelas epígrafes (Regimento): duas normas começando na mesma página — o cabeço é o
+  // da última (usuário, 2026-11-16): variáveis da epígrafe em "Última na página", como no PDF
+  if (base.modo === 'epigrafe') {
+    designmap = designmap.replace(/(<TextVariable [^>]*Name="Epígrafe parte [12]"[^>]*>\s*<MatchCharacterStylePreference [^>]*SearchStrategy=")FirstOnPage"/g, '$1LastOnPage"')
+  }
   // exceções de hifenização do usuário no dicionário do documento (o InDesign divide igual ao Normando)
   zip.file('designmap.xml', excecoesNoDesignmap(designmap))
   const pref = (await ler('Resources/Preferences.xml'))
@@ -730,7 +754,9 @@ export async function gerarLivroCompleto(baseBytes, publicacao, opcoes) {
     const chars = new Set([...estilosXml.matchAll(/<CharacterStyle Self="CharacterStyle\/([^"]+)"/g)].map(x => decodeURIComponent(x[1])))
     const paginaDoPar = k => { const p = d.esperado.find(e => e.par === k)?.pagina; return p == null ? null : p + primeira }
     const normando = entradasDoNormando(d.pars, toc, paginaDoPar, c => chars.has(c))
-    const s = montarSumario(xml, toc, normando, { primeira, primeiraMantida, paginaNova })
+    // Regimento (livro dividido pelas epígrafes): número da página sem negrito
+    const numeroRegular = base.modo === 'epigrafe' && chars.has('regular') ? 'regular' : null
+    const s = montarSumario(xml, toc, normando, { primeira, primeiraMantida, paginaNova, numeroRegular })
     if (!s) { rel.avisos.push('Sumário: a história do sumário do livro não pôde ser lida; o sumário ficou como no livro.'); break }
     zip.file(m[1], s.xml)
     entradasSumario = s.entradas
