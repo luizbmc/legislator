@@ -455,7 +455,8 @@ export function itensDoMiolo(pars, estilos, f, { ajustes = true } = {}) {
       // correção da última linha curta (mesmo nº de linhas): também com nota de rodapé — a linha da
       // chamada vem da composição escolhida (composicaoLivro.js, notasLinha)
       ultimaAjustavel: ajustes && fn.justify,
-      parte1: textoPuro(p.runs.filter(r => r.char === 'parte1')),
+      // cabeço: o texto em `parte1`, ou o nome da norma que o usuário definiu na publicação
+      parte1: p.cabecalho || textoPuro(p.runs.filter(r => r.char === 'parte1')),
       cabModo: p.cabModo || null,
       // cabeço da página ímpar da CF: 1º artigo da página (variável "Artigo-CF" do livro)
       cabArtigo: textoPuro(p.runs.filter(r => r.char === 'bold-artigo' && !r.grep).slice(0, 1)).replace(/[.\s]+$/, ''),

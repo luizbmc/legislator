@@ -44,7 +44,7 @@ export async function exportarIdmlComDialogo(publicacao, opcoes = {}) {
     writeFileSync(r.filePath, idml)
     const conferencia = r.filePath.replace(/\.idml$/i, '') + '.paginacao.json'
     writeFileSync(conferencia, JSON.stringify(paginacao))
-    return { ok: true, filePath: r.filePath, conferencia, relatorio }
+    return { ok: true, filePath: r.filePath, conferencia, relatorio: comPerdidosDaSessao(relatorio, opcoes.sessao) }
   }
 
   const pastaModelo = pastaModeloNormando()
@@ -62,7 +62,13 @@ export async function exportarIdmlComDialogo(publicacao, opcoes = {}) {
     writeFileSync(conferencia, JSON.stringify({ primeiraPagina: relatorio.paginasPreTextuais + 1, paginas: relatorio.ajustado.paginas, paragrafos: relatorio.ajustado.esperado }))
     delete relatorio.ajustado.esperado
   }
-  return { ok: true, filePath: r.filePath, conferencia, relatorio: { ...relatorio, falhasApoio } }
+  return { ok: true, filePath: r.filePath, conferencia, relatorio: comPerdidosDaSessao({ ...relatorio, falhasApoio }, opcoes.sessao) }
+}
+
+/** O IDML da tela de paginação usa o miolo da sessão: os trechos perdidos são os da conferência dela. */
+function comPerdidosDaSessao(relatorio, sessao) {
+  if (relatorio.perdidos?.length || !sessao?.perdidos?.length) return relatorio
+  return { ...relatorio, perdidos: sessao.perdidos }
 }
 
 /**

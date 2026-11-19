@@ -605,6 +605,11 @@ export function registerPublicacoesHandlers() {
     const { pretextuaisDoModelo } = await import('../services/idml/exportIdml.js')
     return pretextuaisDoModelo(publicacao || {}, institucional || {}, pastaModeloNormando())
   })
+  // cabeço automático de cada norma no PDF (valor inicial do campo "Cabeçalho" da publicação)
+  ipcMain.handle('publicacoes:cabecalhos', async (_, id) => {
+    const { cabecalhosPadrao } = await import('../services/idml/livroBase.js')
+    try { return await cabecalhosPadrao(publicacaoParaLivro(id).publicacao) } catch { return {} }
+  })
   ipcMain.handle('livros:mesa', async () => {
     const { mesaDosLivros } = await import('../services/idml/livroBase.js')
     return mesaDosLivros()

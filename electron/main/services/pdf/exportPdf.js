@@ -35,6 +35,12 @@ function lerJson(v) {
 }
 
 /**
+ * Cabeço corrido do PDF: com a pasta do modelo, o do livro (abertura ou trecho marcado); sem ela, o
+ * nome de cada norma (apelido ou epígrafe, ou o que o usuário definiu na publicação).
+ */
+export const modoCabecalhoPdf = (opcoes = {}) => opcoes.cabecalho || (opcoes.livro ? 'secao' : 'norma')
+
+/**
  * @param opcoes { pastaModelo, typst (caminho do executável), pretextuais, institucional,
  *                 cabecalho, manterFonte (guarda o .typ ao lado, para depuração),
  *                 sessao (SessaoPaginacao: o PDF exatamente com a paginação da tela, sem as rodadas
@@ -57,7 +63,7 @@ export async function gerarPdfPublicacao(publicacao, opcoes = {}) {
   aplicarFormato, definirCalibracao(opcoes.calibracao || null)
   const rel = novoRelatorio()
   const pub = prepararPublicacao(publicacao)
-  rel.puladas = pub.puladas
+  rel.puladas = [...(publicacao.foraDoLivro || []), ...pub.puladas]
   rel.pendentes = pub.pendentes
   // texto de algumas normas tirado de um IDML diagramado (opcoes.textosIdml = { arquivo, tipos })
   if (opcoes.textosIdml?.arquivo) rel.textosIdml = await aplicarTextosDoIdml(pub, opcoes.textosIdml)
@@ -90,7 +96,8 @@ export async function gerarPdfPublicacao(publicacao, opcoes = {}) {
     rel.estilosParagrafo = aplicarEstilos(opcoes.estilosParagrafo ?? ajustesDeEstilo(opcoes.ajustes?.itens), pars, nome => estilos.temPar(nome))
     return pars
   }
-  const miolo = sessao ? sessao.miolo : soltarNbsp(aplicarGrep(comEstilos(paragrafosDaPublicacao(pub, { cabecalho: opcoes.cabecalho || 'secao' }, rel)), opcoes.formato?.grep), opcoes.semNbsp, { numeroParentese: !!opcoes.formato?.soltarNbsp })
+  if (sessao) rel.perdidos = sessao.perdidos || sessao.relatorioInicial?.perdidos || []
+  const miolo = sessao ? sessao.miolo : soltarNbsp(aplicarGrep(comEstilos(paragrafosDaPublicacao(pub, { cabecalho: modoCabecalhoPdf(opcoes) }, rel)), opcoes.formato?.grep), opcoes.semNbsp, { numeroParentese: !!opcoes.formato?.soltarNbsp })
   const primeiraPaginaMiolo = opcoes.primeiraPaginaMiolo ?? cfg.paginasPreTextuais + 1
   // livro completo (pdfLivroCompleto.js): aqui só o miolo; o resto vem das páginas do livro
   const soMiolo = !!(opcoes.livro || opcoes.somenteMiolo)

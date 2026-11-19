@@ -181,6 +181,10 @@ contextBridge.exposeInMainWorld('legislator', {
     pretextuaisDoLivro: id => ipcRenderer.invoke('publicacoes:livro:pretextuais', id),
     mesaDosLivros: () => ipcRenderer.invoke('livros:mesa'),
     pretextuaisDoModelo: (publicacao, institucional) => ipcRenderer.invoke('publicacoes:pretextuais:modelo', publicacao, institucional),
+    // cabeço automático de cada norma no PDF: { [norma_id]: texto }
+    cabecalhosPadrao: async id => (await usarRailway()
+      ? ipcRenderer.invoke('railway:publicacoes:cabecalhos', id)
+      : ipcRenderer.invoke('publicacoes:cabecalhos', id)),
     exportarPdf: async (id, opcoes = {}) => (
       await usarRailway()
         ? ipcRenderer.invoke('railway:exportar:publicacao:pdf', id, opcoes)

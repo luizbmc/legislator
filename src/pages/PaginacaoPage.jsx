@@ -17,6 +17,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import './PaginacaoPage.css'
 import ProgressoPdf from '../components/ProgressoPdf.jsx'
+import { linhasDeAviso } from '../services/avisosExportacao.js'
 
 const MM = 72 / 25.4
 const PAGINA = { w: 170 * MM, h: 255 * MM }
@@ -441,9 +442,9 @@ export default function PaginacaoPage({ usuarioAtual }) {
     // o PDF sai com a paginação que está na tela (sem refazer a composição)
     try {
       const r = await api.publicacoes.paginacao.pdf(chave, grafica ? { grafica: true } : {})
-      // PDF para a gráfica: aviso de pasta do livro sem o livro-sangria.pdf
-      const avisos = grafica ? (r?.relatorio?.avisos || []).filter(a => /sangria/i.test(a)) : []
-      if (avisos.length) alert(avisos.join('\n'))
+      // o que ficou de fora (normas, parágrafos) e os avisos da geração
+      const avisos = r?.ok ? linhasDeAviso(r.relatorio) : []
+      if (avisos.length) alert(`${grafica ? 'PDF para a gráfica' : 'PDF'} salvo em:\n${r.filePath}\n` + avisos.join('\n'))
     } catch (e) { alert(e.message || e) } finally { setOcupado(false); setGerandoPdf(false) }
   }
   const gerarIdml = async () => {
@@ -451,7 +452,7 @@ export default function PaginacaoPage({ usuarioAtual }) {
     // IDML ajustado: as decisões desta tela como ajustes locais, para o InDesign paginar igual
     try {
       const r = await api.publicacoes.paginacao.idml(chave)
-      if (r?.ok) alert(`IDML ajustado salvo em:\n${r.filePath}\n\nPara conferir no InDesign se as páginas bateram, rode o script conferir_paginacao_normando.jsx com o documento aberto (ele lê ${r.conferencia?.split(/[\\/]/).pop()}, ao lado do IDML).`)
+      if (r?.ok) alert(`IDML ajustado salvo em:\n${r.filePath}\n\nPara conferir no InDesign se as páginas bateram, rode o script conferir_paginacao_normando.jsx com o documento aberto (ele lê ${r.conferencia?.split(/[\\/]/).pop()}, ao lado do IDML).` + ['', ...linhasDeAviso(r.relatorio)].join('\n'))
     } catch (e) { alert(e.message || e) } finally { setOcupado(false) }
   }
 

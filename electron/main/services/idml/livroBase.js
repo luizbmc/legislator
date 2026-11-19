@@ -72,6 +72,36 @@ export async function opcoesDoLivro(publicacao, pastaModelo) {
   }
 }
 
+/**
+ * Cabeço automático de cada norma no PDF ({ [norma_id]: texto }), sem os definidos pelo usuário: o
+ * valor inicial do campo "Cabeçalho" da publicação. Mesmo caminho da exportação (com a pasta do
+ * modelo, o plano do livro), sem gravar o modelo do livro.
+ */
+export async function cabecalhosPadrao(publicacao) {
+  const { prepararPublicacao } = await import('./exportIdml.js')
+  const { paragrafosDaPublicacao } = await import('./historia.js')
+  const { modoCabecalhoPdf } = await import('../pdf/exportPdf.js')
+  let plano = null
+  const pasta = pastaDoLivro(publicacao.id)
+  if (pasta) {
+    try {
+      const base = readFileSync(join(pasta, 'livro.idml'))
+      const dados = JSON.parse(readFileSync(join(pasta, 'livro.json'), 'utf8').replace(/^﻿/, ''))
+      const { modo, ids } = await normasDoLivro(base, publicacao)
+      plano = await publicacaoDoLivro(base, comAcoes(publicacao, modo === 'epigrafe' ? ids : null), { paginasPartes: dados.partes })
+    } catch { plano = null }   // norma fora do livro, pasta inacessível: a exportação é que avisa
+  }
+  const pars = paragrafosDaPublicacao(prepararPublicacao(plano ?? publicacao), { cabecalho: modoCabecalhoPdf({ livro: !!plano }), semCabecalhos: true })
+  const out = {}
+  for (const p of pars) {
+    const id = p.origem?.norma
+    if (id == null || out[id] != null) continue
+    const t = (p.runs || []).filter(r => r.char === 'parte1').map(r => r.texto || '').join('').replace(/\s+/g, ' ').trim()
+    if (t) out[id] = t
+  }
+  return out
+}
+
 /** Páginas pré-textuais como estão no livro da publicação (null sem pasta do livro). */
 export async function pretextuaisDaPasta(id) {
   const pasta = pastaDoLivro(id)

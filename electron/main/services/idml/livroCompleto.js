@@ -219,7 +219,16 @@ export async function publicacaoDoLivro(baseBytes, publicacao, { paginasPartes =
       return [{ ...norma, conteudo_doc: JSON.stringify(doc) }]
     }),
   }))
-  return { ...publicacao, secoes }
+  // normas da publicação que o livro não tem: a exportação avisa. Seção inteira fora (o Regimento de
+  // bolso não tem a legislação correlata) vira uma linha só; norma avulsa fora pode ser engano e vai
+  // uma a uma
+  const foraDoLivro = (publicacao.secoes || []).flatMap(s => {
+    const fora = (s.normas || []).filter(n => n.exportacao !== 'completa')
+    if (!fora.length) return []
+    if (fora.length === s.normas.length) return [{ secao: s.titulo, epigrafe: `Seção "${s.titulo || 'sem título'}" (${fora.length} norma${fora.length > 1 ? 's' : ''})`, motivo: 'não está no livro da pasta do modelo', secaoInteira: true, quantas: fora.length }]
+    return fora.map(n => ({ secao: s.titulo, epigrafe: n.epigrafe, motivo: 'não está no livro da pasta do modelo' }))
+  })
+  return { ...publicacao, secoes, foraDoLivro }
 }
 
 /** Primeiro texto em `parte1` (o que a variável do cabeço lê) num trecho da história do livro. */

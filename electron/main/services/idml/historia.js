@@ -192,6 +192,9 @@ const textoDe = no =>(no?.content || []).map(c => c.type === 'text' ? c.text : c
  */
 export function paragrafosDaPublicacao(publicacao, opcoes = {}, rel = novoRelatorio()) {
   const cabecalhoPorNorma = opcoes.cabecalho === 'norma'
+  // nome de cada norma no cabeço do PDF, como o usuário definiu na publicação (opcoes.semCabecalhos:
+  // o cabeço automático, para mostrar no formulário)
+  const cabecalhos = opcoes.semCabecalhos ? {} : cabecalhosDaPublicacao(publicacao)
   const pars = []
   let primeiraAbertura = true
   const secoes = publicacao.secoes || []
@@ -226,8 +229,10 @@ export function paragrafosDaPublicacao(publicacao, opcoes = {}, rel = novoRelato
       const nAssinaturas = blocos.filter(b => b.type === 'textoComumAssinatura').length
       const autores = comCargo ? nAssinaturas : Math.ceil(nAssinaturas / 2)
       let assinaturaN = 0, autorN = 0
-      // cabeço por norma: parte1 no apelido; sem apelido, na epígrafe
-      const temApelido = blocos.some(b => b.type === 'epigrafeApelido')
+      // cabeço por norma: parte1 na epígrafe (usuário, 2026-11-18: o padrão é o nome da epígrafe; o
+      // apelido ou outro nome, pelo campo "Cabeçalho" da publicação); texto sem epígrafe (Texto
+      // comum): o 1º título
+      let tituloNoCabeco = cabecalhoPorNorma && !blocos.some(b => b.type === 'epigrafe')
 
       // abertura da norma (epígrafe, apelido, nota, ementa, preâmbulo, títulos): fica na mesma página
       // de pelo menos 2 linhas do 1º artigo — os parágrafos da abertura levam `cola` e o 1º
@@ -243,10 +248,13 @@ export function paragrafosDaPublicacao(publicacao, opcoes = {}, rel = novoRelato
 
       rel.normas++
       const inicioNorma = pars.length
-      blocos.forEach((b, iBloco) => {
+      const processarBloco = (b, iBloco) => {
         // título do texto introdutório → abertura da seção
         if (iNorma === 0 && iBloco === 0 && introComTitulo && iSecao > 0) {
-          pars.push(abertura(runsInline(b.content, rel), primeiraAbertura, !cabecalhoPorNorma))
+          const ab = abertura(runsInline(b.content, rel), primeiraAbertura, !cabecalhoPorNorma || tituloNoCabeco)
+          ab.origem = { norma: norma.norma_id ?? norma.id ?? null, bloco: iBloco }
+          tituloNoCabeco = false
+          pars.push(ab)
           primeiraAbertura = false
           rel.aberturas++
           return
@@ -258,10 +266,10 @@ export function paragrafosDaPublicacao(publicacao, opcoes = {}, rel = novoRelato
         switch (b.type) {
           case 'epigrafe':
             estilo = ehEmenda ? ESTILO.epigrafeEmenda : ESTILO.epigrafe
-            parte1 = cabecalhoPorNorma && !temApelido
+            parte1 = cabecalhoPorNorma
             aposData = false
             break
-          case 'epigrafeApelido': estilo = ESTILO.epigrafeApelido; parte1 = cabecalhoPorNorma; break
+          case 'epigrafeApelido': estilo = ESTILO.epigrafeApelido; break
           case 'ementa': estilo = ehEmenda ? ESTILO.ementaEmenda : ESTILO.ementa; break
           case 'data': estilo = ESTILO.data; aposData = true; break
           case 'assinatura':
@@ -273,7 +281,7 @@ export function paragrafosDaPublicacao(publicacao, opcoes = {}, rel = novoRelato
             aposData = false
             break
           case 'assinaturaData': estilo = ESTILO.data; aposData = true; break
-          case 'textoComumTitulo': estilo = ESTILO.textoTitulo; break
+          case 'textoComumTitulo': estilo = ESTILO.textoTitulo; parte1 = tituloNoCabeco; tituloNoCabeco = false; break
           case 'textoComumSubtitulo': estilo = lista ? ESTILO.listaTopico : ESTILO.textoSubtitulo; break
           case 'textoComumCorrido':
             // 1º parágrafo depois do título de um texto (ex.: Nota das organizadoras) tem espaço antes
@@ -345,10 +353,19 @@ export function paragrafosDaPublicacao(publicacao, opcoes = {}, rel = novoRelato
         // termina com ":" (caput que abre incisos/alíneas): não fica sozinho no pé da página
         if (terminaComDoisPontos(runs)) par.doisPontos = true
         pars.push(par)
+      }
+      // conferência: todo o texto do bloco tem de estar nos parágrafos gerados a partir dele
+      blocos.forEach((b, iBloco) => {
+        const antes = pars.length
+        processarBloco(b, iBloco)
+        conferirBloco(rel, norma, b, pars.slice(antes))
       })
       marcarFecho(pars.slice(inicioNorma))
       // início de norma: buraco e espelho desequilibrado antes dele são aceitáveis (paginação do PDF)
       if (pars[inicioNorma]) pars[inicioNorma].inicioNorma = true
+      // cabeço definido pelo usuário: vale nos parágrafos da norma que alimentam o cabeço (`parte1`)
+      const cab = cabecalhos[String(norma.norma_id ?? norma.id)]
+      if (cab) for (const p of pars.slice(inicioNorma)) if (p.runs?.some(r => r.char === 'parte1')) p.cabecalho = cab
     })
   })
   rel.paragrafos = pars.length
@@ -431,8 +448,77 @@ export function soltarNbsp(pars, grupos, { numeroParentese = false } = {}) {
   return pars
 }
 
+/**
+ * Cabeços definidos pelo usuário na publicação: { [norma_id]: texto }, em pretextuais.cabecalhos
+ * (JSON da publicação). Só as normas cujo cabeço foi mudado; as outras ficam com o automático.
+ */
+export function cabecalhosDaPublicacao(publicacao) {
+  let pre = publicacao?.pretextuais
+  if (typeof pre === 'string') { try { pre = JSON.parse(pre) } catch { pre = null } }
+  const out = {}
+  for (const [id, texto] of Object.entries(pre?.cabecalhos || {})) {
+    const t = String(texto ?? '').replace(/\s+/g, ' ').trim()
+    if (t) out[String(id)] = t
+  }
+  return out
+}
+
 export function novoRelatorio() {
-  return { normas: 0, paragrafos: 0, aberturas: 0, tabelas: 0, notasRodape: 0, subscritos: 0, ignorados: {}, estilosAusentes: {}, puladas: [] }
+  return { normas: 0, paragrafos: 0, aberturas: 0, tabelas: 0, notasRodape: 0, subscritos: 0, ignorados: {}, estilosAusentes: {}, puladas: [], perdidos: [] }
+}
+
+// ── conferência do texto ─────────────────────────────────────────
+const ENTIDADES = { nbsp: ' ', lt: '<', gt: '>', quot: '"', amp: '&', apos: "'" }
+const semHtml = s => String(s || '').replace(/<br\b[^>]*>/gi, ' ').replace(/<[^>]+>/g, '').replace(/&(\w+);/g, (m, e) => ENTIDADES[e] ?? ' ')
+
+/** Palavras (letras e números) de um texto: o que a conferência compara, sem pontuação e espaços. */
+const palavras = s => String(s || '').normalize('NFC').toLocaleLowerCase('pt-BR').match(/[\p{L}\p{N}]+/gu) || []
+
+/** Todo o texto de um nó do documento, em qualquer profundidade (a nota de rodapé pelo texto dela). */
+function textoDoNo(no) {
+  if (!no) return ''
+  if (no.type === 'text') {
+    const nota = no.marks?.find(m => m.type === 'notaRodape')
+    return nota ? ' ' + semHtml(nota.attrs?.texto) + ' ' : no.text || ''
+  }
+  if (no.type === 'hardBreak') return ' '
+  // trechos do mesmo parágrafo juntos ("1" + "º" sobrescrito = "1º"); blocos separados por espaço
+  const filhos = no.content || []
+  const inline = filhos.length && filhos.every(f => f.type === 'text' || f.type === 'hardBreak')
+  return filhos.map(textoDoNo).join(inline ? '' : ' ')
+}
+
+const textoDosRuns = runs => (runs || []).map(r => r.nota ? ' ' + textoDosRuns(r.nota) + ' ' : r.texto || '').join('')
+
+function textoDoParagrafo(p) {
+  if (p.tabela) return p.tabela.celulas.map(c => c.pars.map(textoDosRuns).join(' ')).join(' ')
+  return textoDosRuns(p.runs)
+}
+
+/**
+ * Confere se as palavras do bloco da norma estão todas nos parágrafos gerados a partir dele. As que
+ * faltarem vão para rel.perdidos (a exportação avisa): bloco de um tipo que a exportação não conhece,
+ * conteúdo aninhado que ela não lê etc.
+ */
+function conferirBloco(rel, norma, bloco, gerados) {
+  const fonte = palavras(textoDoNo(bloco))
+  if (!fonte.length) return
+  const saida = new Map()
+  for (const w of palavras(gerados.map(textoDoParagrafo).join(' '))) saida.set(w, (saida.get(w) || 0) + 1)
+  const faltam = []
+  for (const w of fonte) {
+    const n = saida.get(w) || 0
+    if (n) saida.set(w, n - 1)
+    else faltam.push(w)
+  }
+  if (!faltam.length) return
+  const texto = textoDoNo(bloco).replace(/\s+/g, ' ').trim()
+  rel.perdidos?.push({
+    epigrafe: norma.epigrafe || norma.titulo || '',
+    tipo: bloco.type,
+    texto: texto.length > 120 ? texto.slice(0, 117) + '…' : texto,
+    inteiro: faltam.length === fonte.length,
+  })
 }
 
 const runsTexto = t => [{ texto: String(t || ''), char: null }]

@@ -304,6 +304,12 @@ export function registerRailwayExportarHandlers() {
     return s.aplicar(doLivro?.opcoes.formato?.cabeco ? [] : itens)
   })
 
+  // cabeço automático de cada norma no PDF (valor inicial do campo "Cabeçalho" da publicação)
+  ipcMain.handle('railway:publicacoes:cabecalhos', async (_, id) => {
+    const { cabecalhosPadrao } = await import('../services/idml/livroBase.js')
+    try { return await cabecalhosPadrao(await buscarPublicacao(id)) } catch { return {} }
+  })
+
   ipcMain.handle('railway:exportar:publicacao:pdf', async (evento, id, opcoes = {}) => {
     await carregarExcecoes()
     const publicacao = await buscarPublicacao(id)

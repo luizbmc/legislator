@@ -45,6 +45,8 @@ export async function abrirSessao(chave, publicacao, opcoes) {
   const s = estado.sessao || new SessaoPaginacao(estado, relatorio, publicacao)
   // opções da exportação, para o "Gerar PDF" da tela (institucional, modelo, Typst)
   s.opcoes = opcoes
+  // texto das normas que não entrou no miolo (conferência de historia.js): o PDF da tela também avisa
+  s.perdidos = relatorio?.perdidos || []
   // estilos de parágrafo da tela (ajustes 'estilo'), já aplicados na composição: resultado para o modelo
   s.estilosParagrafo = relatorio?.estilosParagrafo || { aplicados: 0, naoEncontrados: [] }
   sessoes.set(chave, s)

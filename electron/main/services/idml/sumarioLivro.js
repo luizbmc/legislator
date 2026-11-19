@@ -280,6 +280,8 @@ export function montarSumario(storyXml, toc, normando, { primeira, primeiraManti
     ...filtradas.map(e => ({ titulo: titulo(e.trechos.map(r => r.texto).join('')), estilo: e.formato, numerada: !!e.numero && e.pagina != null, pagina: e.pagina })),
     ...depois.map(e => ({ titulo: e.texto, estilo: e.formato, numerada: e.numero != null, pagina: e.numero != null ? paginaNova(e.numero) : null })),
   ]
-  for (const g of gruposLivro.slice(1)) if (!usados.has(g)) avisos.push(`Sumário: "${g.entradas[0].texto}" está no sumário do livro e não no texto do Normando.`)
+  // entrada de parte mantida do livro (índice remissivo) já entrou acima, com a página nova: sem aviso
+  const mantidas = new Set([...antes, ...depois])
+  for (const g of gruposLivro.slice(1)) if (!usados.has(g) && !g.entradas.every(e => mantidas.has(e))) avisos.push(`Sumário: "${g.entradas[0].texto}" está no sumário do livro e não no texto do Normando.`)
   return { xml: escreverHistoria(h), entradas, avisos }
 }

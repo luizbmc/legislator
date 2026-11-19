@@ -5823,6 +5823,63 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
   flex: 1;
 }
 
+.pub-norma-coluna {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.pub-norma-coluna .pub-norma-epigrafe {
+  font-size: 14px;
+  font-weight: 600;
+}
+/* nome da norma no cabeçalho do PDF: detalhe discreto embaixo do nome; a caixa só aparece ao
+   passar o mouse ou editar */
+.pub-norma-cabecalho {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 560px;
+  font-size: 10.5px;
+  line-height: 1.2;
+  color: var(--text-muted);
+}
+.pub-norma-cabecalho > span {
+  flex-shrink: 0;
+  font-size: 10px;
+  letter-spacing: .02em;
+  opacity: .8;
+}
+.pub-norma-cabecalho input {
+  flex: 1;
+  min-width: 0;
+  height: 18px;
+  padding: 0 4px;
+  font-size: 10.5px;
+  font-family: inherit;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  transition: border-color .12s, background .12s;
+}
+.pub-norma-cabecalho input:hover {
+  border-color: var(--border-soft);
+}
+.pub-norma-cabecalho input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface);
+  color: var(--text);
+}
+.pub-norma-cabecalho .btn-sm {
+  height: 18px;
+  padding: 0 4px;
+  font-size: 11px;
+  line-height: 1;
+}
+
 .pub-norma-info-link {
   cursor: pointer;
   border-radius: var(--radius);

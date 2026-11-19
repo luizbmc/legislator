@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { lerPretextuais } from '../components/PretextuaisPublicacao.jsx'
 import FolhaTecnica from '../components/FolhaTecnica.jsx'
 import ProgressoPdf from '../components/ProgressoPdf.jsx'
+import { linhasDeAviso } from '../services/avisosExportacao.js'
 import { useParams, useNavigate } from 'react-router-dom'
 import { isTipoTextoComum, isTipoTratado, TIPOS_NORMA } from '../constants/normas.js'
 import { FORMATOS_PUBLICACAO } from '../constants/formatoPublicacao.js'
@@ -117,7 +118,7 @@ function resumoAtualizacaoIdml({ filePath, base, relatorio: r = {} }) {
       (p.paginasAntes != null ? ` (${p.paginasAntes} → ${p.paginas} p.)` : '')),
   ]
   if (r.pretextuais?.length) linhas.push('', `Pré-textuais: ${r.pretextuais.join('; ')}`)
-  if (r.avisos?.length) linhas.push('', ...r.avisos.map(a => `⚠ ${a}`))
+  linhas.push(...linhasDeAviso(r))
   linhas.push('', 'No InDesign: confira as partes geradas de novo, apague páginas que sobrarem no fim de cada uma e atualize o sumário (Layout › Atualizar sumário).')
   return linhas.join('\n')
 }
@@ -131,11 +132,7 @@ function resumoExportacaoIdml({ filePath, relatorio: r = {} }) {
       `${r.tabelas ? `, ${r.tabelas} tabela(s)` : ''}${r.notasRodape ? `, ${r.notasRodape} nota(s) de rodapé` : ''}.`,
     `${r.paginas} páginas (o miolo foi estimado; o InDesign acrescenta ou remove páginas ao compor).`,
   ]
-  if (r.puladas?.length) {
-    linhas.push('', `Ficaram de fora ${r.puladas.length} norma(s):`)
-    for (const p of r.puladas.slice(0, 12)) linhas.push(`• ${p.epigrafe} — ${p.motivo}`)
-    if (r.puladas.length > 12) linhas.push(`• … e mais ${r.puladas.length - 12}`)
-  }
+  linhas.push(...linhasDeAviso(r))
   const ausentes = Object.keys(r.estilosAusentes || {})
   if (ausentes.length) linhas.push('', `Estilos que não existem no modelo (usado texto-lei): ${ausentes.join(', ')}`)
   linhas.push('', 'No InDesign: abra o .idml e atualize o sumário (Layout › Atualizar sumário).')
@@ -943,6 +940,29 @@ export default function PublicacaoPage({ usuarioAtual }) {
 
   useEffect(() => { carregar() }, [id])
 
+  // cabeço automático de cada norma no PDF (o do livro, o apelido ou a epígrafe): valor inicial do
+  // campo "Cabeçalho"; recalculado ao salvar e ao trocar a pasta do modelo
+  const [cabecalhosPadrao, setCabecalhosPadrao] = useState({})
+  useEffect(() => {
+    let vivo = true
+    window.legislator.publicacoes.cabecalhosPadrao?.(parseInt(id))
+      .then(c => { if (vivo) setCabecalhosPadrao(c || {}) })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [id, pub?.revisao, pastaLivro])
+
+  function alterarCabecalhoNorma(normaId, valor) {
+    setForm(f => {
+      const cabecalhos = { ...(f.pretextuais?.cabecalhos || {}) }
+      const padrao = cabecalhosPadrao[normaId] ?? ''
+      // igual ao automático (ou vazio): não guarda, e o cabeço segue o automático
+      if (!valor.trim() || valor.trim() === padrao) delete cabecalhos[normaId]
+      else cabecalhos[normaId] = valor
+      return { ...f, pretextuais: { ...(f.pretextuais || {}), cabecalhos } }
+    })
+    marcarModificado()
+  }
+
   async function carregar() {
     const data = await window.legislator.publicacoes.buscar(parseInt(id))
     if (!data) { nav('/publicacoes'); return }
@@ -1346,13 +1366,10 @@ export default function PublicacaoPage({ usuarioAtual }) {
         setGerandoPdf(grafica ? 'grafica' : tipo === 'pdf-folhas' ? 'folhas' : true)
         try {
           const result = await window.legislator.publicacoes.exportarPdf(parseInt(id), grafica ? { grafica: true } : tipo === 'pdf-folhas' ? { somentePretextuais: true } : {})
-          const puladas = result?.relatorio?.puladas || []
-          // PDF para a gráfica: aviso de pasta do livro sem o livro-sangria.pdf
-          const avisos = grafica ? (result?.relatorio?.avisos || []).filter(a => /sangria/i.test(a)) : []
-          if (result?.ok && (puladas.length || avisos.length)) {
-            alert(`${grafica ? 'PDF para a gráfica' : 'PDF de revisão'} salvo em:\n${result.filePath}` +
-              (puladas.length ? `\n\nFicaram de fora ${puladas.length} norma(s):\n` + puladas.slice(0, 12).map(p => `• ${p.epigrafe} — ${p.motivo}`).join('\n') : '') +
-              (avisos.length ? '\n\n' + avisos.join('\n') : ''))
+          // o que ficou de fora (normas, parágrafos) e os avisos da geração
+          const avisos = result?.ok ? linhasDeAviso(result.relatorio) : []
+          if (avisos.length) {
+            alert(`${grafica ? 'PDF para a gráfica' : tipo === 'pdf-folhas' ? 'PDF das folhas técnicas' : 'PDF de revisão'} salvo em:\n${result.filePath}\n` + avisos.join('\n'))
           }
         } finally {
           setGerandoPdf(false)
@@ -1677,14 +1694,35 @@ export default function PublicacaoPage({ usuarioAtual }) {
                         onDragStart={e => iniciarDragNorma(e, si, ni)}
                         onDragEnd={encerrarDragNorma}
                       >⋮⋮</span>
-                      <div
-                        className="pub-norma-info pub-norma-info-link"
-                        title="Abrir no editor"
-                        onClick={() => abrirNormaDaPublicacao(n)}
-                      >
-                        <span className="pub-norma-epigrafe"><AvisoAtualizacaoPendente norma={n} />{n.epigrafe}</span>
-                        {n.apelido && <span className="pub-norma-apelido">{n.apelido}</span>}
-                        <span className={`pub-norma-status pub-norma-status-${st.cls}`}>{st.label}</span>
+                      <div className="pub-norma-coluna">
+                        <div
+                          className="pub-norma-info pub-norma-info-link"
+                          title="Abrir no editor"
+                          onClick={() => abrirNormaDaPublicacao(n)}
+                        >
+                          <span className="pub-norma-epigrafe"><AvisoAtualizacaoPendente norma={n} />{n.epigrafe}</span>
+                          {n.apelido && <span className="pub-norma-apelido">{n.apelido}</span>}
+                          <span className={`pub-norma-status pub-norma-status-${st.cls}`}>{st.label}</span>
+                        </div>
+                        {(() => {
+                          const normaId = String(n.norma_id ?? n.id)
+                          const proprio = form.pretextuais?.cabecalhos?.[normaId]
+                          const padrao = cabecalhosPadrao[normaId]
+                          return (
+                            <label className="pub-norma-cabecalho" title="Como o nome desta norma sai no cabeçalho do PDF">
+                              <span>Cabeçalho no PDF:</span>
+                              <input
+                                type="text"
+                                value={proprio ?? padrao ?? ''}
+                                placeholder={n.apelido || n.epigrafe || ''}
+                                onChange={e => alterarCabecalhoNorma(normaId, e.target.value)}
+                              />
+                              {proprio != null && (
+                                <button type="button" className="btn-ghost btn-sm" title="Voltar ao cabeçalho automático" onClick={() => alterarCabecalhoNorma(normaId, '')}>↺</button>
+                              )}
+                            </label>
+                          )
+                        })()}
                       </div>
                       <div className="pub-norma-exportacao">
                         <select
