@@ -229,8 +229,17 @@ export function montarSumario(storyXml, toc, normando, { primeira, primeiraManti
   const usados = new Set()
   let tiposAnteriores = null
   const filtradas = []
+  // título que mudou no Normando (o livro diz "ANTÍGUA, 2013", o Normando "GUATEMALA, 2013"): a
+  // norma fica com o grupo do livro seguinte ao último usado, se nenhuma outra norma tem o título dele
+  const chavesNovas = new Set(gruposNovos.map(g => g.chave))
+  const mantidasLivro = new Set([...antes, ...depois])
+  const seguinteLivre = () => {
+    const ult = Math.max(0, ...[...usados].map(x => gruposLivro.indexOf(x)))
+    const x = gruposLivro[ult + 1]
+    return x && !usados.has(x) && !chavesNovas.has(x.chave) && !x.entradas.every(e => mantidasLivro.has(e)) ? x : null
+  }
   for (const g of gruposNovos) {
-    const par = g.chave == null ? gruposLivro[0] : gruposLivro.find(x => !usados.has(x) && x.chave === g.chave)
+    const par = g.chave == null ? gruposLivro[0] : gruposLivro.find(x => !usados.has(x) && x.chave === g.chave) || seguinteLivre()
     if (par) usados.add(par)
     // norma que o livro não tem: como a anterior (sem anterior, todos os tipos)
     const tipos = par ? par.tipos : tiposAnteriores

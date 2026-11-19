@@ -5,7 +5,7 @@
  * plano do IDML ajustado), e as novas emendas entram no fim da parte das emendas.
  *
  * A ação de cada parte vem da "exportação" da norma correspondente, como em atualizarEdicao.js:
- *   • completa    → parte gerada pelo Normando (a abertura do livro fica no lugar da epígrafe);
+ *   • completa    → parte gerada pelo Normando (a epígrafe do Normando no estilo da abertura do livro);
  *   • atualizacao → o que ainda não está na parte é acrescentado no fim dela;
  *   • ignorar     → parte mantida (também as partes sem norma, como o índice).
  * As partes geradas têm de ser as primeiras do texto principal, em sequência.
@@ -155,8 +155,8 @@ const parteMaisParecida = (partes, titulo) => {
 const normasDe = publicacao => (publicacao.secoes || []).flatMap(s => s.normas || [])
 
 /**
- * Publicação só com o que o Normando gera: as normas "completa", com a abertura do livro no lugar
- * da epígrafe, para o plano compor o mesmo título, no mesmo estilo. `parte` fica na norma.
+ * Publicação só com o que o Normando gera: as normas "completa", com o estilo da abertura do livro na
+ * epígrafe, para o plano compor o título no mesmo estilo do livro.
  */
 export async function publicacaoDoLivro(baseBytes, publicacao, { paginasPartes = null } = {}) {
   const titulos = normasDe(publicacao).filter(n => n.exportacao === 'completa').map(n => n.epigrafe).filter(Boolean)
@@ -204,16 +204,31 @@ export async function publicacaoDoLivro(baseBytes, publicacao, { paginasPartes =
         doc.content[i] = { ...doc.content[i], attrs: { ...doc.content[i].attrs, estiloIdml: parte.estilo, ...(cabModo ? { cabModo: k > 0 ? 'titulo' : cabModo } : {}) } }
         marcarParte1(doc, parte1DoLivro(principal.xml.slice(parte.inicio, parte.fim)))
       } else if (i >= 0) {
-        // cabeço corrido: só o trecho do título em `parte1` no livro ("TRATADO DE MARRAQUECHE", sem o
-        // resto do título), como a variável "Epígrafe parte 1" do InDesign
-        let content = [{ type: 'text', text: parte.titulo, char: parte.char }]
-        const alvo = parte.char && parte1DoLivro(principal.xml.slice(parte.inicio, parte.fim))
-        const j = alvo ? parte.titulo.toLocaleLowerCase('pt-BR').indexOf(alvo.toLocaleLowerCase('pt-BR')) : -1
-        if (j >= 0) {
-          content = [parte.titulo.slice(0, j), parte.titulo.slice(j, j + alvo.length), parte.titulo.slice(j + alvo.length)]
-            .map((t, q) => t ? { type: 'text', text: t, ...(q === 1 ? { char: 'parte1' } : {}) } : null).filter(Boolean)
+        // o título é sempre a epígrafe do Normando (usuário, 2026-11-19); do livro vêm o estilo da
+        // abertura e o trecho do cabeço corrido em `parte1` ("TRATADO DE MARRAQUECHE", sem o resto
+        // do título), como a variável "Epígrafe parte 1" do InDesign. Sem o trecho na epígrafe do
+        // Normando, ela vai inteira para o cabeço; livro sem `parte1` na abertura (a CF), nada
+        let content = (doc.content[i].content || []).map(n => {
+          const { char, ...resto } = n
+          return char === 'parte1' ? resto : n
+        })
+        if (parte.char) {
+          const texto = content.map(n => n.type === 'text' ? n.text || '' : '').join('')
+          const alvo = parte1DoLivro(principal.xml.slice(parte.inicio, parte.fim))
+          const j = alvo ? texto.toLocaleLowerCase('pt-BR').indexOf(alvo.toLocaleLowerCase('pt-BR')) : -1
+          const [ini, fim] = j >= 0 ? [j, j + alvo.length] : [0, texto.length]
+          let pos = 0
+          content = content.flatMap(n => {
+            if (n.type !== 'text' || !n.text) return [n]
+            const a = pos, b = pos + n.text.length
+            pos = b
+            const cortes = [a, Math.min(Math.max(ini, a), b), Math.min(Math.max(fim, a), b), b]
+            return [0, 1, 2].map(q => {
+              const t = n.text.slice(cortes[q] - a, cortes[q + 1] - a)
+              return t ? { ...n, text: t, ...(q === 1 && t.trim() ? { char: 'parte1' } : {}) } : null
+            }).filter(Boolean)
+          })
         }
-        if (parte.tracking != null) content = content.map(n => ({ ...n, tracking: parte.tracking }))
         doc.content[i] = { ...doc.content[i], attrs: { ...doc.content[i].attrs, estiloIdml: parte.estilo }, content }
       }
       return [{ ...norma, conteudo_doc: JSON.stringify(doc) }]
@@ -531,7 +546,12 @@ export async function gerarLivroCompleto(baseBytes, publicacao, opcoes) {
   zip.file(`Stories/Story_${STORY}.xml`, storyXml(STORY, d.pars, { versao, estilosExistentes: existentes, rel }))
   // página do plano em que muda a mestra: a 2ª parte gerada em diante segue a mestra dela
   const inicioParte = geradas.slice(1).map(p => {
-    const k = d.pars.findIndex(x => x.estilo === p.estilo && normalizar(x.runs?.map(r => r.texto ?? '').join('')) === normalizar(p.titulo))
+    // a abertura da parte no plano: o parágrafo no estilo dela vindo da norma da parte (o título é o
+    // do Normando, não o do livro)
+    const idNorma = p.norma ? String(p.norma.norma_id ?? p.norma.id) : null
+    const k = d.pars.findIndex(x => x.estilo === p.estilo && (idNorma && x.origem
+      ? String(x.origem.norma) === idNorma
+      : normalizar(x.runs?.map(r => r.texto ?? '').join('')) === normalizar(p.titulo)))
     return d.esperado.find(e => e.par === k)?.pagina ?? null
   })
   // as páginas mantidas não trocam de lado: se preciso, uma página em branco no fim do plano
