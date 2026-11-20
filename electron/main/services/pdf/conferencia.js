@@ -96,7 +96,33 @@ export function palavrasParaTestar(ultima, restricoes) {
  * @param div ponto da divisão de cada linha hifenizada (pilhas.js, divisoes)
  * @param italico run → true se o estilo de caractere é itálico
  */
-export function itensConferencia({ ultima, restricoes, div, numerar, italico, base, grave, ajustes, divisivel, pedacoMinimo, relatar = RELATAR_ABERTA, espacoMinimo = null, linhasDe = null }) {
+// por que o parágrafo chegou ao espaço mínimo (motivo de composicaoLivro.medidas, ou da paginação)
+function justificativaAperto(motivo, tr, sp) {
+  const aberto = tr > 0 || sp > 100
+  // parágrafo aberto (tracking/espaço acima do normal) com uma linha apertada: a abertura mudou as
+  // quebras e esta linha recebeu mais texto
+  const mudou = 'com isso as quebras mudaram e esta linha ficou com mais texto'
+  switch (motivo) {
+    case 'aberta': return 'Motivo: correção de linha aberta — com menos aperto, alguma linha do parágrafo passava do limite de abertura, e o aperto subiu passo a passo até resolver.'
+    case 'tiraLinhaAberta': return 'Motivo: sem ajuste, uma linha do parágrafo passava de 190% de abertura; apertado, o parágrafo cabe em uma linha a menos.'
+    case 'ocupacao': return aberto
+      ? `Motivo: a última linha ficava curta demais (abaixo da ocupação mínima da largura); o parágrafo foi aberto para ela crescer, e ${mudou}.`
+      : 'Motivo: a última linha ficava curta demais (abaixo da ocupação mínima da largura); apertado, o parágrafo perde essa linha.'
+    case 'curta': return aberto
+      ? `Motivo: a última linha ficava com poucos caracteres; o parágrafo foi aberto para ela crescer, e ${mudou}.`
+      : 'Motivo: a última linha ficava com poucos caracteres; apertado, o parágrafo perde essa linha.'
+    case 'romano': return 'Motivo: sem esse ajuste, uma linha começava com número romano (parecia um inciso novo).'
+    case 'paginacao': return 'Motivo: paginação — o parágrafo foi apertado para ganhar uma linha e fechar a página sem buraco nem linha órfã/viúva.'
+    case 'composta': return 'Motivo: ajuste fixado para a palavra composta quebrar no hífen próprio sem deixar linha aberta.'
+    case 'manual': return 'Motivo: ajuste manual feito na tela de paginação.'
+    default:
+      if (aberto) return `Motivo: paginação — o plano abriu o parágrafo para ele ocupar uma linha a mais e fechar a página; ${mudou}.`
+      if (tr || sp !== 100) return 'Motivo: paginação — o plano apertou o parágrafo (tracking e espaço) para acertar o fim da página.'
+      return 'Motivo: parágrafo sem ajuste — a própria composição pôs esta linha no limite, porque as quebras alternativas deixavam linha mais aberta ou hifenização pior.'
+  }
+}
+
+export function itensConferencia({ ultima, restricoes, div, numerar, italico, base, grave, ajustes, divisivel, pedacoMinimo, relatar = RELATAR_ABERTA, espacoMinimo = null, linhasDe = null, motivoAjuste = null, visivelMinimo = null }) {
   const { linhasPorPar, hif, linhas: info, plano, folio, abert, pilhas } = ultima
   const itens = []
   const reais = (marcas, l) => l.ks.filter(k => marcas[k] && !marcas[k].fim)
@@ -233,14 +259,22 @@ export function itensConferencia({ ultima, restricoes, div, numerar, italico, ba
       if (!ls || ls.length !== linhas.length || semConferenciaDe(info.get(i))) continue
       // o piso do parágrafo: o mínimo do estilo, nunca abaixo do absoluto (ESPACO_MINIMO)
       const piso = Math.max(espacoMinimo, (info.get(i)?.fn?.geo?.espMin ?? 0) / 100)
-      const ns = []
-      ls.forEach((l, n) => { if (l.justificada && l.espaco <= piso + 0.005) ns.push(n) })
-      if (!ns.length) continue
       const pl = plano[i] || {}
       const tr = Math.round((pl.tr ?? 0) * 1000), sp = pl.sp ?? 100
-      const desc = ns.map(n => `linha ${n + 1}: ${pct(ls[n].espaco)}`).join('; ')
-      novo('minimo', i, ns, `Espaço mínimo (${pct(piso)})`,
-        `${ns.length === 1 ? 'Linha' : 'Linhas'} no espaço mínimo entre palavras — ${desc}. Parágrafo com tracking ${tr} e espaço ${sp}%.`)
+      // com espaço visível mínimo (bolso): as linhas abaixo dele — o espaço entre palavras chega ao piso
+      // em muitas linhas comuns (dali em diante aperta o tracking), o visível só nas apertadas de fato.
+      // Sem ele: o piso do espaço, só nos parágrafos no último passo de aperto
+      const noUltimo = ajustes?.length && (pl.tr ?? 0) <= ajustes[ajustes.length - 1][0] + 1e-9
+      const ns = []
+      ls.forEach((l, n) => {
+        if (!l.justificada) return
+        // (usuário, 2026-11-20: só as do aperto máximo — as 75 abaixo do visível eram marcações demais)
+        if (noUltimo && (visivelMinimo ? l.visivel < visivelMinimo - 1e-9 : l.espaco <= piso + 0.005)) ns.push(n)
+      })
+      if (!ns.length) continue
+      const desc = ns.map(n => `linha ${n + 1}: ${visivelMinimo ? `espaço visível ${pct(ls[n].visivel)}` : pct(ls[n].espaco)}`).join('; ')
+      novo('minimo', i, ns, `Aperto máximo (tracking ${Math.round(ajustes[ajustes.length - 1][0] * 1000)}, espaço ${ajustes[ajustes.length - 1][1]}%)`,
+        `${ns.length === 1 ? 'Linha' : 'Linhas'} no limite do aperto — ${desc}. Parágrafo com tracking ${tr} e espaço ${sp}%. ${justificativaAperto(motivoAjuste?.(i), tr, sp)}`)
     }
   }
 

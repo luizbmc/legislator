@@ -238,10 +238,11 @@ export function paragrafosDaPublicacao(publicacao, opcoes = {}, rel = novoRelato
       // de pelo menos 2 linhas do 1º artigo — os parágrafos da abertura levam `cola` e o 1º
       // parágrafo de texto, `manter2`
       let naAbertura = blocos.some(b => CABECA_DA_NORMA.has(b.type) && /^(epigrafe|textoComumTitulo|paragrafFacoSaber)$/.test(b.type))
-      const marcarAbertura = (b, par) => {
+      let aberturaComEmenta = false
+      const marcarAbertura = (b, par, ementa = false) => {
         if (!naAbertura) return
-        // recortes: "[...]" antes do 1º artigo também é abertura
-        if (CABECA_DA_NORMA.has(b.type) || /^\[\s*\.\.\.\s*\]$/.test(textoDe(b))) { par.cola = true; return }
+        // recortes: "[...]" antes do 1º artigo também é abertura; a ementa de uma emenda também
+        if (ementa || CABECA_DA_NORMA.has(b.type) || /^\[\s*\.\.\.\s*\]$/.test(textoDe(b))) { par.cola = true; return }
         par.manter2 = true
         naAbertura = false
       }
@@ -349,7 +350,23 @@ export function paragrafosDaPublicacao(publicacao, opcoes = {}, rel = novoRelato
         if (b.attrs?.cabModo) par.cabModo = b.attrs.cabModo
         // origem (norma e bloco): âncora dos ajustes locais de paginação (pdf/ajustesLocais.js)
         par.origem = { norma: norma.norma_id ?? norma.id ?? null, bloco: iBloco }
-        marcarAbertura(b, par)
+        // epígrafe no meio da norma (cada emenda em "EMENDAS CONSTITUCIONAIS", o Regimento dentro da
+        // resolução que o aprova): abertura nova, presa ao 1º artigo dela (usuário, 2026-11-20: a
+        // epígrafe da EC nº 42 no pé da página, separada do texto)
+        // (nas emendas de revisão o título é seção/subseção, seguido da nota de publicação)
+        if (iBloco > 0 && (b.type === 'epigrafe' || (b.type === 'secaoSubsecao' && blocos[iBloco + 1]?.type === 'notaTitulo'))) {
+          // a emenda anterior acabou na ementa, sem texto (EC nº 34, ECR nº 6): a abertura dela termina
+          // aqui, solta da seguinte — senão as aberturas sem texto se emendam numa cadeia maior que o
+          // resto da página e deixam um buraco (usuário, 2026-11-20: depois da EC nº 33)
+          if (naAbertura && aberturaComEmenta && pars.length > inicioNorma) pars[pars.length - 1].cola = false
+          naAbertura = true
+          aberturaComEmenta = false
+        }
+        // ementa da emenda: parágrafo comum logo depois da nota de publicação
+        const ementa = ementaDeEmenda(iBloco) || (b.type === 'paragrafLei' && blocos[iBloco - 1]?.type === 'notaTitulo'
+          && /^(epigrafe|epigrafeApelido|secaoSubsecao)$/.test(blocos[iBloco - 2]?.type || ''))
+        if (ementa) aberturaComEmenta = true
+        marcarAbertura(b, par, ementa)
         // termina com ":" (caput que abre incisos/alíneas): não fica sozinho no pé da página
         if (terminaComDoisPontos(runs)) par.doisPontos = true
         pars.push(par)
@@ -400,11 +417,25 @@ export function aplicarGrep(pars, regras) {
       return [{ re: new RegExp(expressao.replace(/\\u/g, '\\p{Lu}').replace(/\\l/g, '\\p{Ll}').replace(/~=/g, '–'), 'gu'), char }]
     } catch { return [] }
   })]))
-  for (const p of pars) {
+  // enumeração em romanos minúsculos ("i)", "ii)", "iii)", Tratado de Marraqueche): o GREP das
+  // alíneas (^\l\) em itálico) pegaria "i)", "v)" e "x)", que no Normando são regulares (usuário,
+  // 2026-11-20). É romano quando um parágrafo vizinho continua a sequência ("i)" → "ii)")
+  const inicio = p => (p?.runs || []).map(r => r.nota ? '' : r.texto ?? '').join('').trimStart()
+  const romano = (i, letra) => {
+    const vizinhos = { i: [null, 'ii'], v: ['iv', 'vi'], x: ['ix', 'xi'] }[letra]
+    if (!vizinhos) return false
+    const comeca = (q, r) => q && r && inicio(q).startsWith(r + ')')
+    for (let k = 1; k <= 8; k++) if (comeca(pars[i + k], vizinhos[1]) || comeca(pars[i - k], vizinhos[0])) return true
+    return false
+  }
+  for (const [i, p] of pars.entries()) {
     const lista = compiladas[p.estilo]
     if (!lista?.length || !p.runs) continue
     const texto = p.runs.map(r => r.nota ? '' : r.texto ?? '').join('')
+    const letra = texto.match(/^([ivx])\)/)?.[1]
+    const ehRomano = letra ? romano(i, letra) : false
     const marcas = lista.flatMap(({ re, char }) => [...texto.matchAll(re)].filter(m => m[0]).map(m => ({ de: m.index, ate: m.index + m[0].length, char })))
+      .filter(m => !(ehRomano && m.de === 0 && m.ate === 2))
     if (!marcas.length) continue
     const out = []
     let pos = 0
@@ -678,7 +709,8 @@ export function paragrafosXml(pars, { largura = 371.3386, estilosExistentes = nu
     // abertura da norma presa às 2 primeiras linhas do 1º artigo (mesma regra do PDF)
     // e parágrafo que termina com ":" preso a 2 linhas do seguinte
     // e o fecho da norma (último artigo + data + assinaturas)
-    let manter = p.cola || p.doisPontos || p.fecho ? ' KeepWithNext="2"' : p.manter2 ? ' KeepLinesTogether="true" KeepFirstLines="2"' : ''
+    // (a abertura também não se divide entre páginas: ementa longa de emenda)
+    let manter = p.cola ? ' KeepWithNext="2" KeepAllLinesTogether="true"' : p.doisPontos || p.fecho ? ' KeepWithNext="2"' : p.manter2 ? ' KeepLinesTogether="true" KeepFirstLines="2"' : ''
     // IDML ajustado (decisoesIdml.js): overrides da paginação do Normando no lugar dessas regras
     let props = ''
     if (p.idml) {

@@ -604,9 +604,19 @@ export async function gerarPdfPublicacao(publicacao, opcoes = {}) {
             numerar: numeracaoDeLinhas(linhasPorPar, trechos, naoMarcadas),
             italico: r => !!r?.char && /italic|oblique/i.test(estilos.char(r.char).FontStyle || ''),
             base: opcoes.hifenizacao ?? HIFENIZACAO, grave: opcoes.limiteAberta ?? ABERTA, ajustes: AJUSTES,
-            // linhas com o espaço entre palavras no piso (ESPACO_MINIMO), para conferir o limite: marca
-            // desligada (usuário, 2026-11-08: o limite está conferido); opcoes.marcarEspacoMinimo liga de novo
-            espacoMinimo: opcoes.marcarEspacoMinimo ? ESPACO_MINIMO / 100 : null,
+            // linhas com o espaço entre palavras no piso (ESPACO_MINIMO), com o motivo do aperto (usuário,
+            // 2026-11-20: o limite está bom, mas cada parágrafo que chega nele tem de vir justificado);
+            // opcoes.marcarEspacoMinimo === false desliga
+            espacoMinimo: opcoes.marcarEspacoMinimo === false ? null : ESPACO_MINIMO / 100,
+            visivelMinimo: opcoes.formato?.visivelMinimo ?? null,
+            motivoAjuste: i => {
+              const m = medidas[i], pl = ultima.plano[i] || {}
+              if (!m) return null
+              // o plano escolheu a variante de uma linha a menos (paginação), ou ficou no ajuste do parágrafo
+              const igual = v => !!v && Math.abs((pl.tr ?? 0) - v.tr) < 1e-9 && Math.abs((pl.sp ?? 100) / 100 - v.sp) < 1e-9
+              if (igual(m.menos) && !igual(m)) return 'paginacao'
+              return igual(m) ? m.motivo : (m.motivo === 'manual' ? 'manual' : null)
+            },
             linhasDe: i => {
               if (!composicao?.tem(i)) return null
               const pl = ultima.plano[i] || {}

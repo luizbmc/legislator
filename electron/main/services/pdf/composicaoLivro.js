@@ -26,6 +26,14 @@ import { ocupacaoMinima } from './mancha.js'
 
 // linha aberta demais: o limite da correção (ABERTA em linhas.js; LIMITE_ABERTO no script do InDesign)
 const LIMITE_ABERTA = 1.7
+// ocupação mínima da última linha (bolso) × abertura que se aceita para cumpri-la, medida como a
+// conferência do PDF (`abertura`, com o tracking): até 190% vale a ocupação normal; se só abrindo mais,
+// basta 9%; se nem assim sem passar de 200%, basta 8% (usuário, 2026-11-20)
+const NIVEIS_OCUPACAO = [[null, 1.9], [0.09, 2.0], [0.08, Infinity]]
+// linha que, com tudo no padrão, passa desta abertura: antes de tudo, o aperto que tira uma linha do
+// parágrafo (dentro do espaço visível mínimo), como o InDesign ("IV – 10% (dez por cento) do valor que
+// exceder 4 (quatro) salários-mínimos." numa linha só, usuário 2026-11-20)
+const ABERTA_TIRA_LINHA = 1.9
 import { trechosProtegidos, prefixoDe, hifensDeNumero } from '../idml/translineacao.js'
 
 // parâmetros calibrados contra o InDesign (validados em 3 livros)
@@ -337,7 +345,7 @@ class Composicao {
           }
           if (s.nbsp) { cola(s.k1, s.k2, peca, true, null, peca.run.char || null); return }
           const w = L(s.k) + peca.trBase * peca.corpo + s.nc * (peca.trFixo ? 0 : tr) * peca.corpo
-          itens.push({ tipo: 'caixa', w, nc: s.nc, t: s.t, c: peca.run.char || null, trc: (peca.trBase + (peca.trFixo ? 0 : tr)) * peca.corpo, hangFim: s.fim ? L(s.fim.k) * P[s.fim.tipo] : 0, hangIni: s.comeco ? L(s.comeco.k) * P[s.comeco.tipo] : 0 })
+          itens.push({ tipo: 'caixa', w, nc: s.nc, trp: s.nc * (peca.trFixo ? 0 : tr) * peca.corpo, t: s.t, c: peca.run.char || null, trc: (peca.trBase + (peca.trFixo ? 0 : tr)) * peca.corpo, hangFim: s.fim ? L(s.fim.k) * P[s.fim.tipo] : 0, hangIni: s.comeco ? L(s.comeco.k) * P[s.comeco.tipo] : 0 })
         })
         ultimaPeca = peca
       }
@@ -430,13 +438,13 @@ class Composicao {
       // espaço entre palavras em relação ao normal (1 = 100%), com a justificação em etapas do
       // InDesign: os espaços até o máximo do estilo, depois o espaçamento entre letras (até o limite),
       // e o que sobrar volta para os espaços (passando do máximo)
-      let W = 0, G = 0, Gn = 0, Gg = 0, Gst = 0, Lst = 0, Gsh = 0, Lsh = 0, nG = 0, nc = 0, trc = 0
+      let W = 0, G = 0, Gn = 0, Gg = 0, Gst = 0, Lst = 0, Gsh = 0, Lsh = 0, nG = 0, nc = 0, trc = 0, trp = 0
       for (let k = l.ini; k < l.fim; k++) {
         const it = itens[k]
         if (it.tipo === 'pena') continue
         W += it.w
         if (it.tipo === 'cola' && it.wn) { G += it.w; Gn += it.wn; Gg += it.g || it.wn; Gst += it.st || 0; Gsh += it.sh || 0; nG++ }
-        if (it.tipo === 'caixa') { Lst += it.st || 0; Lsh += it.sh || 0; nc += it.nc || 0; trc += (it.nc || 0) * (it.trc || 0) }
+        if (it.tipo === 'caixa') { Lst += it.st || 0; Lsh += it.sh || 0; nc += it.nc || 0; trc += (it.nc || 0) * (it.trc || 0); trp += it.trp || 0 }
       }
       // largura como a do compositor (larguraDaLinha): hífen da quebra e margem óptica
       if (q?.tipo === 'pena') W += q.w || 0
@@ -454,7 +462,10 @@ class Composicao {
       const espacoPt = nG > 0 ? Math.round((G + sobra) / nG * 1000) / 1000 : null
       // espaço visível, como o script do InDesign mede: o vão (com o tracking) sobre o espaço do glifo
       const visivel = Gg > 0 ? (G + sobra) / Gg : 1
-      const r = { partes, hifen: !!l.hifen, razao: Math.round(l.razao * 100) / 100, espaco: Math.round(espaco * 100) / 100, visivel: Math.round(visivel * 1000) / 1000, justificada, repeteHifen: repete, tracking, espacoPt, comecaRomano: romanoAntes }
+      // abertura como a conferência do PDF mede (linhas.js): o tracking do parágrafo e o da justificação
+      // contam como espaço — é o número dos comentários ("O espaço entre palavras ficou em 194%")
+      const abertura = Gn > 0 ? (G + sobra + letras + trp) / Gn : 1
+      const r = { partes, hifen: !!l.hifen, razao: Math.round(l.razao * 100) / 100, espaco: Math.round(espaco * 100) / 100, visivel: Math.round(visivel * 1000) / 1000, abertura: Math.round(abertura * 1000) / 1000, justificada, repeteHifen: repete, tracking, espacoPt, comecaRomano: romanoAntes }
       repete = q?.tipo === 'pena' && q.contaHifen && !q.hifen
       // a linha seguinte começa com número romano ("incisos | IV e V"): quebra numa cola com pena
       romanoAntes = q?.tipo === 'cola' && !!q.pena
@@ -497,9 +508,24 @@ class Composicao {
     const visivelOk = (t, s) => !formato.visivelMinimo || this.textos(i, { tr: t, sp: s, rs, base }).every(l => !l.justificada || l.visivel >= formato.visivelMinimo - 1e-9)
     // nenhuma linha justificada além do limite (170%, como o script do InDesign)
     const abertaOk = (t, s) => this.textos(i, { tr: t, sp: s, rs, base }).every(l => !l.justificada || l.espaco <= LIMITE_ABERTA)
+    const aberturaMax = (t, s) => Math.max(0, ...this.textos(i, { tr: t, sp: s, rs, base }).filter(l => l.justificada).map(l => l.abertura))
+    // o 1º passo (na ordem dada) que cumpre a ocupação da última linha, nível a nível (NIVEIS_OCUPACAO)
+    const resolverOcupacao = (n0, passos) => {
+      for (const [min, teto] of NIVEIS_OCUPACAO) {
+        const p = passos.find(([t, s]) => {
+          const x = c(t, s)
+          return x.n === n0 && semCurta(x) && x.ocupa >= (min ?? ocupacaoMinima(x.n)) - 1e-9 && aberturaMax(t, s) <= teto + 1e-9
+        })
+        if (p) return p
+      }
+      return null
+    }
     let tr = 0, sp = 100
+    // por que o parágrafo ficou com este tracking/espaço (conferência do PDF: parágrafo no aperto máximo)
+    let motivo = null
     if (fixo) {
       [tr, sp] = fixo
+      motivo = rs.manual?.tr != null ? 'manual' : rs.fixoHifen ? 'composta' : rs.aperto != null ? 'aberta' : 'fixo'
       // o aperto da verificação (linha aberta, linhas.js) também respeita a última linha: se ela ficou
       // curta, vale o passo mais próximo com o mesmo nº de linhas. Se a linha abrir de novo, a
       // verificação sobe o aperto ou desiste dele
@@ -511,28 +537,35 @@ class Composicao {
             passos.find(([t, s]) => { const x = c(t, s); return x.n === f.n && semCurta(x) })
           if (outro) [tr, sp] = outro
         } else if (!semVazia(f)) {
-          // ocupação mínima da última linha (bolso): o passo que a resolve sem abrir linha além do limite
-          const outro = passos.find(([t, s]) => { const x = c(t, s); return x.n === f.n && semCurta(x) && semVazia(x) && abertaOk(t, s) })
+          // ocupação mínima da última linha (bolso): o passo que a resolve sem abrir demais; o atual,
+          // se ele já cumpre um nível mais baixo
+          const outro = resolverOcupacao(f.n, [[tr, sp], ...passos])
           if (outro) [tr, sp] = outro
         }
       }
     } else if (it.ajustavel || it.ultimaAjustavel) {
       // última linha curta: aperta até ela subir; senão abre até ela ter o mínimo (ou 7, se não der)
       const c0 = c(0, 100)
-      // 1º a ocupação: apertar até a linha subir ou soltar até ela crescer, dentro dos limites
-      if (c0.n > 1 && !semVazia(c0)) {
+      // linha aberta demais com tudo no padrão: o aperto que tira uma linha, se houver
+      if (c0.n > 1 && aberturaMax(0, 100) > ABERTA_TIRA_LINHA) {
         const aperto = aj.find(([t, s]) => { const x = c(t, s); return x.n < c0.n && semCurta(x) && semVazia(x) && visivelOk(t, s) })
-        const abre = !aperto && ab.length && [...ab, ...ABRIR_CURTA].find(([t, s]) => { const x = c(t, s); return x.n === c0.n && semCurta(x) && semVazia(x) && abertaOk(t, s) })
-        if (aperto) [tr, sp] = aperto
-        else if (abre) [tr, sp] = abre
+        if (aperto) { [tr, sp] = aperto; motivo = 'tiraLinhaAberta' }
+      }
+      // 1º a ocupação: apertar até a linha subir ou soltar até ela crescer, sem abrir demais
+      // (NIVEIS_OCUPACAO: abrindo demais, aceita-se a última linha um pouco mais curta, sem ajuste)
+      if (tr === 0 && sp === 100 && c0.n > 1 && !semVazia(c0)) {
+        const aperto = aj.find(([t, s]) => { const x = c(t, s); return x.n < c0.n && semCurta(x) && semVazia(x) && visivelOk(t, s) })
+        const abre = !aperto && resolverOcupacao(c0.n, [[0, 100], ...(ab.length ? [...ab, ...ABRIR_CURTA] : [])])
+        if (aperto) { [tr, sp] = aperto; motivo = 'ocupacao' }
+        else if (abre) { [tr, sp] = abre; motivo = 'ocupacao' }
       }
       // se não deu: o mínimo de caracteres, como antes
       if (tr === 0 && sp === 100 && c0.n > 1 && !semCurta(c0)) {
         const aperto = aj.find(([t, s]) => { const x = c(t, s); return x.n < c0.n && semCurta(x) && visivelOk(t, s) })
         const abrir = min => [...ab, ...ABRIR_CURTA].find(([t, s]) => { const x = c(t, s); return x.n === c0.n && semCurta(x, min) })
         const abre = !aperto && ab.length && (abrir(formato.ultimaLinha) || (c0.ultima < minimo(c0, formato.ultimaComplexa) && abrir(formato.ultimaComplexa)))
-        if (aperto) [tr, sp] = aperto
-        else if (abre) [tr, sp] = abre
+        if (aperto) { [tr, sp] = aperto; motivo = 'curta' }
+        else if (abre) { [tr, sp] = abre; motivo = 'curta' }
       }
     }
     // linha começando com número romano ("…nos incisos | IV e V do art. 55"): outro passo com o mesmo
@@ -545,7 +578,7 @@ class Composicao {
         return x.n === n0 && !x.romano && semCurta(x) && visivelOk(t, s) &&
           this.textos(i, { tr: t, sp: s, rs, base }).every(l => !l.justificada || l.espaco <= LIMITE_ABERTA)
       })
-      if (outro) [tr, sp] = outro
+      if (outro) { [tr, sp] = outro; motivo = 'romano' }
     }
     const n = c(tr, sp).n
     const variante = (passos, menos) => {
@@ -564,7 +597,7 @@ class Composicao {
     }
     const ajusta = !fixo && it.ajustavel && n >= 2
     return {
-      i, h: n * L, hn: c(tr, sp, true).n * L, tr, sp: sp / 100,
+      i, h: n * L, hn: c(tr, sp, true).n * L, tr, sp: sp / 100, motivo,
       // linha da chamada de cada nota (paginação: parágrafo dividido entre páginas)
       notasLinha: c(tr, sp).notas,
       menos: ajusta ? variante(aj, true) : null,

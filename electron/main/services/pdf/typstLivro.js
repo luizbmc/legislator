@@ -444,7 +444,9 @@ export function itensDoMiolo(pars, estilos, f, { ajustes = true } = {}) {
       sticky: fn.estiloSticky || !!p.cola || !!p.doisPontos || !!p.fecho,
       cola: !!p.cola || !!p.doisPontos || !!p.fecho,
       manter2: !!p.manter2,
-      inteiro: fn.inteiro,
+      // abertura da norma ou da emenda (epígrafe, nota, ementa): não se divide entre páginas — uma
+      // ementa longa dividida deixaria a epígrafe no pé da página, longe do texto (usuário, 2026-11-20)
+      inteiro: fn.inteiro || !!p.cola,
       inicioNorma: !!p.inicioNorma,
       // começo de artigo e trecho de artigo (parágrafo, inciso, alínea, citação): para a paginação
       // não deixar a última linha do artigo sozinha no alto da página (paginacao.js)
